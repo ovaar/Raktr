@@ -1,0 +1,33 @@
+---
+Checks: '
+  -*,
+  bugprone-*,
+  misc-use-internal-linkage,
+  misc-unused-using-decls,
+  misc-use-anonymous-namespace,
+  misc-const-correctness,
+  misc-include-cleaner,
+  misc-header-include-cycle,
+  misc-definitions-in-headers,
+  misc-redundant-expression,
+  misc-uniqueptr-reset-release,
+  misc-unused-parameters,
+  modernize-*,
+  -modernize-use-trailing-return-type,
+  performance-*,
+  -performance-avoid-endl,
+  -performance-no-int-to-ptr,
+  readability-*,
+  -readability-container-size-empty,
+  cppcoreguidelines-*'
+WarningsAsErrors: ''
+HeaderFilterRegex: ''
+FormatStyle:     none
+
+CheckOptions:
+  - key: performance-move-const-arg.CheckTriviallyCopyableMove
+    value: false
+  - key: readability-identifier-length.IgnoredVariableNames
+    value: 'x|y|z'
+  - key: readability-identifier-length.IgnoredParameterNames
+    value: 'x|y|z'
