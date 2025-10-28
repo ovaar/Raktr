@@ -44,6 +44,23 @@ jobs:
           $venvPath = Join-Path (Get-Location) ".venv\Scripts"
           echo $venvPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
 
+      - name: Get Conan home directory
+        id: conan-home
+        shell: pwsh
+        run: |
+          $conanHome = conan config home
+          echo "path=$conanHome" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.conan-home.outputs.path }}/p
+          key: conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-${{ hashFiles('raktr/conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-
+            conan-${{ runner.os }}-
+
       - run: conan --version
       - name: Run Conan install
         run: conan install raktr --output-folder=. -pr:a=profiles/${{ matrix.conan_profile }} -s:a build_type=${{ matrix.build_type }} -o:a='&:with_tests=True' --build=missing
