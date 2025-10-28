@@ -35,3 +35,47 @@ cmake --build --preset conan-release
 # Clean
 cmake --build --preset conan-release --clean
 ```
+
+
+
+
+### Architecture Overview
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    raktr::engine                        │
+│                                                         │
+│  ┌────────────────────────────────────────────────┐   │
+│  │  Uses: raktr::render::RenderContext            │   │
+│  │         raktr::render::Device                  │   │
+│  │         raktr::render::Buffer                  │   │
+│  └────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ depends on (public API)
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│              raktr::render (abstraction layer)          │
+│                                                         │
+│  Public API:                                           │
+│  ├── RenderContext   (main entry point)               │
+│  ├── Device          (GPU device abstraction)         │
+│  ├── Buffer          (GPU buffer handle)              │
+│  ├── Shader          (shader program handle)          │
+│  ├── BackendType     (enum: OpenGL, Vulkan, DX12)    │
+│  └── Error           (error codes via std::errc)      │
+│                                                         │
+│  Internal (src/):                                      │
+│  └── IBackend       (interface for backends)          │
+└─────────────────────────────────────────────────────────┘
+                          │
+                          │ implements
+                          ▼
+┌─────────────────────────────────────────────────────────┐
+│         raktr::render::backend::*                       │
+│                                                         │
+│  ├── OpenGLBackend   (src/backend/opengl/)            │
+│  ├── VulkanBackend   (src/backend/vulkan/)            │
+│  └── DX12Backend     (src/backend/directx12/)         │
+└─────────────────────────────────────────────────────────┘
+```
