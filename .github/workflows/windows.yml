@@ -23,8 +23,10 @@ jobs:
     steps:
       - name: Lowercase variables
         id: lower
+        shell: pwsh
         run: |
-          echo "build_type_lower=${{ matrix.build_type }}" | tr '[:upper:]' '[:lower:]' >> $GITHUB_OUTPUT
+          $buildTypeLower = "${{ matrix.build_type }}".ToLower()
+          echo "build_type_lower=$buildTypeLower" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
       - uses: actions/checkout@v5
       
       - name: "Set up Python"
