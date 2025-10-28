@@ -6,7 +6,16 @@ The next generation modern c++ 3D game engine — Where Worlds Take Shape.
 
 ```sh
 pip install uv
-uv sync
+```
+
+### Activate venv
+
+```sh
+source .venv/bin/activate
+```
+
+```ps1
+.\.venv\Scripts\Activate.ps1
 ```
 
 ## Build
