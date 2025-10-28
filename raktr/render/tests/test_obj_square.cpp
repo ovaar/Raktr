@@ -27,7 +27,7 @@ TEST(OBJSquare, UploadSquareMesh_CreatesBuffersSuccessfully)
 {
     // Arrange
     auto ctx = create_render_context();
-    ASSERT_TRUE(ctx->initialize({.backend = BackendType::Mock}).has_value());
+    ASSERT_TRUE(ctx->initialize({.backend = BackendType::Fake}).has_value());
 
     // Vertices from OBJ (positions only for MVP)
     std::array<float, 12> vertices = {
@@ -63,7 +63,7 @@ TEST(OBJSquare, DrawIndexed_WithSquareMesh_Succeeds)
 {
     // Arrange
     auto ctx = create_render_context();
-    ASSERT_TRUE(ctx->initialize({.backend = BackendType::Mock}).has_value());
+    ASSERT_TRUE(ctx->initialize({.backend = BackendType::Fake}).has_value());
 
     std::array<float, 12> vertices = {
          0.5773502691896258f,  3.5773502691896257f,  0.5773502691896258f,

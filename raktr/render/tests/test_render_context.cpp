@@ -19,12 +19,12 @@ TEST(RenderContext, CreateContext_ReturnsValidContext)
     EXPECT_FALSE(ctx->is_initialized());
 }
 
-TEST(RenderContext, Initialize_WithMockBackend_Succeeds)
+TEST(RenderContext, Initialize_WithFakeBackend_Succeeds)
 {
     // Arrange
     auto ctx = create_render_context();
     RenderConfig config{
-        .backend = BackendType::Mock,
+        .backend = BackendType::Fake,
         .enable_validation = false
     };
 
@@ -69,7 +69,7 @@ TEST(RenderContext, Shutdown_AfterInitialize_ClearsState)
 {
     // Arrange
     auto ctx = create_render_context();
-    auto init_result = ctx->initialize({.backend = BackendType::Mock});
+    auto init_result = ctx->initialize({.backend = BackendType::Fake});
     ASSERT_TRUE(init_result.has_value());
 
     // Act

@@ -5,7 +5,7 @@
 
 #include "render_context.h"
 #include "backend/ibackend.h"
-#include "backend/mock_backend.h"
+#include "backend/fake_backend.h"
 #include <memory>
 
 namespace raktr::render

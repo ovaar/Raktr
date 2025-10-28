@@ -10,7 +10,9 @@ add_executable(raktr_engine_test
 
 target_include_directories(raktr_engine_test
     PRIVATE 
-        ${CMAKE_CURRENT_SOURCE_DIR}/include)
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${CMAKE_CURRENT_SOURCE_DIR}/../include
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src)
 
 target_link_libraries(raktr_engine_test
     PRIVATE 

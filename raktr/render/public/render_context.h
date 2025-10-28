@@ -19,7 +19,7 @@ namespace raktr::render
      */
     enum class BackendType
     {
-        Mock,        // For testing without actual GPU
+        Fake,        // Software renderer for testing
         OpenGL,
         Vulkan,
         DirectX12
@@ -30,7 +30,7 @@ namespace raktr::render
      */
     struct RenderConfig
     {
-        BackendType backend = BackendType::Mock;
+        BackendType backend = BackendType::Fake;
         bool enable_validation = false;  // Debug layers/validation
         bool enable_vsync = true;
     };

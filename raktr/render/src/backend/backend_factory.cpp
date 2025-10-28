@@ -4,7 +4,7 @@
  */
 
 #include "backend/ibackend.h"
-#include "backend/mock_backend.h"
+#include "backend/fake_backend.h"
 
 namespace raktr::render::backend
 {
@@ -13,8 +13,8 @@ std::unique_ptr<IBackend> create_backend(BackendType type)
 {
     switch (type)
     {
-        case BackendType::Mock:
-            return std::make_unique<MockBackend>();
+        case BackendType::Fake:
+            return std::make_unique<FakeBackend>();
         
         case BackendType::OpenGL:
         case BackendType::Vulkan:
