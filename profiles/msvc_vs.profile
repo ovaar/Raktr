@@ -1,3 +1,4 @@
+# msvc_vs.profile for Windows using MSVC
 [settings]
 arch=x86_64
 os=Windows
