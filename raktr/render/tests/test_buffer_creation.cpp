@@ -16,7 +16,7 @@ protected:
     void SetUp() override
     {
         ctx = create_render_context();
-        RenderConfig config{.backend = BackendType::Mock};
+        RenderConfig config{.backend = BackendType::Fake};
         auto result = ctx->initialize(config);
         ASSERT_TRUE(result.has_value()) << "Failed to initialize render context";
     }
