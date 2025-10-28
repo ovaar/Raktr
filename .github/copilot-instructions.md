@@ -136,7 +136,8 @@ raktr/
 | **Namespaces**                           | `raktr::subsystem`                      | `raktr::render`                  |
 | **Classes / Structs / Enums / Concepts** | PascalCase                              | `Renderer`, `TransformComponent` |
 | **Functions / Methods**                  | snake_case                              | `create_mesh()`                  |
-| **Variables**                            | snake_case                              | `frame_index_`                   |
+| **Variables**                            | snake_case                              | `frame_index`                   |
+| **Private members**                      | snake_case                              | `_frame_index`                   |
 | **Constants**                            | `k_constant_name` or `inline constexpr` | `k_max_frames`                   |
 | **CMake targets**                        | snake_case                              | `raktr_core`                     |
 

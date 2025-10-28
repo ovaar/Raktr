@@ -24,7 +24,7 @@ namespace raktr::render
         void shutdown();
 
         struct Impl;
-        std::unique_ptr<Impl> impl_;
+        std::unique_ptr<Impl> _impl;
     };
 
     /*!
@@ -34,20 +34,20 @@ namespace raktr::render
     {
     private:
         friend class Render;
-        std::weak_ptr<Render> render_;
+        std::weak_ptr<Render> _render;
 
     public:
         RenderInitGuard(std::weak_ptr<Render> render)
-            : render_(render)
+            : _render(render)
         {
-            if (auto rend = render_.lock())
+            if (auto rend = _render.lock())
             {
                 rend->init();
             }
         }
         ~RenderInitGuard()
         {
-            if (auto rend = render_.lock())
+            if (auto rend = _render.lock())
             {
                 rend->shutdown();
             }

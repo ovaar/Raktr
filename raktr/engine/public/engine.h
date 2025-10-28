@@ -24,7 +24,7 @@ namespace raktr::engine
         void shutdown();
 
         struct Impl;
-        std::unique_ptr<Impl> impl_;
+        std::unique_ptr<Impl> _impl;
     };
 
     /*!
@@ -34,20 +34,20 @@ namespace raktr::engine
     {
     private:
         friend class Engine;
-        std::weak_ptr<Engine> engine_;
+        std::weak_ptr<Engine> _engine;
 
     public:
         EngineInitGuard(std::weak_ptr<Engine> engine)
-            : engine_(engine)
+            : _engine(engine)
         {
-            if (auto eng = engine_.lock())
+            if (auto eng = _engine.lock())
             {
                 eng->init();
             }
         }
         ~EngineInitGuard()
         {
-            if (auto eng = engine_.lock())
+            if (auto eng = _engine.lock())
             {
                 eng->shutdown();
             }

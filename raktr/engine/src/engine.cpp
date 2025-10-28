@@ -8,7 +8,7 @@ namespace raktr::engine
     };
 
     Engine::Engine()
-        : impl_(std::make_unique<Impl>())
+        : _impl(std::make_unique<Impl>())
     {
     }
 

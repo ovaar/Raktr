@@ -8,7 +8,7 @@ namespace raktr::render
     };
 
     Render::Render()
-        : impl_(std::make_unique<Impl>())
+        : _impl(std::make_unique<Impl>())
     {
     }
 
