@@ -3,7 +3,7 @@
  * @brief Raktr Engine global context class definition.
  */
 
-#ifdef RAKTR_ENGINE_ENGINE_H
+#ifndef RAKTR_ENGINE_ENGINE_H
 #define RAKTR_ENGINE_ENGINE_H
 
 #include <memory>

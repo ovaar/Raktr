@@ -3,7 +3,7 @@
  * @brief Raktr Render global context class definition.
  */
 
-#ifdef RAKTR_RENDER_RENDER_H
+#ifndef RAKTR_RENDER_RENDER_H
 #define RAKTR_RENDER_RENDER_H
 
 #include <memory>
