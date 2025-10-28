@@ -30,3 +30,15 @@
 *.exe
 *.out
 *.app
+
+# Logs
+.logs
+
+# CMake
+CMakeUserPresets.json
+build/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
