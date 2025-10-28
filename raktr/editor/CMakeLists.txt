@@ -1,8 +1,12 @@
-target_include_directories(${PROJECT_NAME}::editor PUBLIC include)
 
 find_package(mimalloc REQUIRED CONFIG)
 
-add_executable(${PROJECT_NAME}::editor src/main.cpp)
+add_executable(${PROJECT_NAME}_editor src/main.cpp)
+
+target_include_directories(${PROJECT_NAME}_editor PUBLIC include)
 target_link_libraries(
-  ${PROJECT_NAME}::editor PRIVATE ${PROJECT_NAME}::render
-                                  ${PROJECT_NAME}::engine mimalloc-static)
+  ${PROJECT_NAME}_editor 
+  PRIVATE 
+    ${PROJECT_NAME}_render
+    ${PROJECT_NAME}_engine 
+    mimalloc-static)

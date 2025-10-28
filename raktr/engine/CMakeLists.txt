@@ -7,25 +7,30 @@ if(BUILD_SHARED_LIBS)
   set(${PROJECT_NAME}_libtype SHARED)
 endif()
 
-add_library(${PROJECT_NAME}::engine ALIAS ${PROJECT_NAME}_engine
-            ${PROJECT_NAME}_libtype)
-
 file(GLOB_RECURSE ${PROJECT_NAME}_engine_sources CONFIGURE_DEPENDS "src/*.cpp")
 
-target_sources(${PROJECT_NAME}::engine PRIVATE "${PROJECT_NAME}_engine_sources")
+add_library(${PROJECT_NAME}_engine 
+            ${${PROJECT_NAME}_libtype} 
+            ${${PROJECT_NAME}_engine_sources})
 
 if(WIN32 AND BUILD_SHARED_LIBS)
-  target_compile_definitions(${PROJECT_NAME}::engine PRIVATE RAKTR_EXPORT)
+  target_compile_definitions(
+    ${PROJECT_NAME}_engine 
+    PRIVATE 
+      RAKTR_EXPORT)
 endif() # Define __declspec() export
 
 target_include_directories(
-  ${PROJECT_NAME}::engine
+  ${PROJECT_NAME}_engine
   PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/include
   PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
 
 target_link_libraries(
-  ${PROJECT_NAME}::engine PUBLIC glm::glm spdlog::spdlog
-                                 fmt::fmt)
+  ${PROJECT_NAME}_engine
+  PUBLIC 
+    glm::glm 
+    spdlog::spdlog
+    fmt::fmt)
 
 if(BUILD_TESTS)
   enable_testing()

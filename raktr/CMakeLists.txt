@@ -37,10 +37,11 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # Include CMake modules
 # ------------------------------------------------------------------------------
 
-list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
-include(cmake/ccache.cmake)
-include(cmake/iwyu.cmake)
-include(cmake/timetrace.cmake)
+list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_LIST_DIR}/../cmake")
+message(STATUS "Including custom CMake modules from: ${CMAKE_MODULE_PATH}")
+include(ccache)
+include(iwyu)
+include(timetrace)
 
 
 # ------------------------------------------------------------------------------
@@ -66,5 +67,6 @@ if(WITH_ASAN)
     add_link_options(-fsanitize=address)
 endif()
 
-add_subdirectory(raktr)
+add_subdirectory(engine)
+add_subdirectory(render)
 add_subdirectory(editor)
