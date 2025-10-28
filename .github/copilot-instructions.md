@@ -89,20 +89,29 @@ raktr/
 ├── conanfile.py / conan.lock
 ├── .clang-format
 ├── .clang-tidy
-├── src/
-│   ├── raktr/
-│   │   ├── core/        # memory, logging, config
-│   │   ├── math/        # GLM wrappers & helpers
-│   │   ├── ecs/         # entity–component system
-│   │   ├── render/      # rendering pipelines
-│   │   ├── scene/       # scene graph, camera
-│   │   ├── io/          # filesystem, resource loading
-│   │   ├── platform/    # platform abstractions
-│   │   ├── physics/
-│   │   ├── scripting/
-│   │   └── CMakeLists.txt
-│   └── main/            # runtime / editor executables
-├── include/raktr/
+├── raktr/
+│   ├── engine/
+│   │   ├── public/      # public API headers
+│   │   └── src/         # implementation
+│   │   │   ├── core/        # memory, logging, config
+│   │   │   ├── math/        # GLM wrappers & helpers
+│   │   │   ├── ecs/         # entity–component system
+│   │   │   ├── scene/       # scene graph, camera
+│   │   │   ├── io/          # filesystem, resource loading
+│   │   │   ├── platform/    # platform abstractions
+│   │   │   ├── physics/
+│   │   │   ├── scripting/
+│   │   │   └── CMakeLists.txt
+│   │   └── tests/       # unit/integration tests for engine
+│   ├── renderer/            # 3d renderer subsystem supporting various graphics backends
+│   │   ├── public/      # public API headers
+│   │   └── src/         # implementation
+│   │   │   ├── opengl/      # OpenGL backend
+│   │   │   ├── vulkan/      # Vulkan backend
+│   │   │   └── directx12/   # DirectX 12 backend
+│   │   │   └── CMakeLists.txt
+│   │   └── tests/       # unit/integration tests for renderer
+│   └── editor/            # editor executables
 ├── tests/
 ├── external/
 ├── tools/
@@ -221,6 +230,10 @@ TEST(Vec3_add, two_zero_vectors_returns_zero_vector) {
 * Platforms: Windows / Linux / macOS
 * Architectures: x86_64 / arm64
 * Jobs: build + test + clang-tidy + clang-format + sanitizers + coverage (`gcovr` / `llvm-cov`)
+
+### Build instructions
+
+* see `README.md` for setup, build, and test commands.
 
 ---
 
