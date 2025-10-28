@@ -23,6 +23,8 @@ namespace raktr::engine
         void init();
         void shutdown();
 
+        friend class EngineInitGuard;
+        
         struct Impl;
         std::unique_ptr<Impl> _impl;
     };
@@ -33,7 +35,6 @@ namespace raktr::engine
     class EngineInitGuard
     {
     private:
-        friend class Engine;
         std::weak_ptr<Engine> _engine;
 
     public:

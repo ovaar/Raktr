@@ -23,6 +23,8 @@ namespace raktr::render
         void init();
         void shutdown();
 
+        friend class RenderInitGuard;
+
         struct Impl;
         std::unique_ptr<Impl> _impl;
     };
@@ -33,7 +35,6 @@ namespace raktr::render
     class RenderInitGuard
     {
     private:
-        friend class Render;
         std::weak_ptr<Render> _render;
 
     public:
