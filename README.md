@@ -1,2 +1,37 @@
 # Raktr
-Next-gen c++ 3d game engine
+
+The next generation modern c++ 3D game engine — Where Worlds Take Shape.
+
+## Setup
+
+```sh
+pip install uv
+```
+
+### Activate venv
+
+```sh
+source .venv/bin/activate
+```
+
+```ps1
+.\.venv\Scripts\Activate.ps1
+```
+
+## Build
+
+### Windows 
+
+```ps1
+# Install
+conan install raktr --output-folder=. -pr:a=profiles/llvm_clang_vs.profile -o:a='&:with_tests=True'
+
+# Configure
+cd raktr/; cmake --preset conan-release 
+
+# Build
+cmake --build --preset conan-release
+
+# Clean
+cmake --build --preset conan-release --clean
+```
