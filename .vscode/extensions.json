@@ -1,0 +1,16 @@
+{
+  "recommendations": [
+    "astral-sh.ty",
+    "charliermarsh.ruff",
+    "editorconfig.editorconfig",
+    "guyutongxue.cpp-reference",
+    "kevinkyang.auto-comment-blocks",
+    "llvm-vs-code-extensions.vscode-clangd",
+    "ms-vscode.cmake-tools",
+    "ms-vscode.cpptools",
+    "redhat.vscode-xml",
+    "redhat.vscode-yaml",
+    "reignofwebber.c-cpp-definition-generator",
+    "streetsidesoftware.code-spell-checker",
+  ]
+}
