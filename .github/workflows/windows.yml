@@ -21,13 +21,97 @@ permissions:
   contents: read
 
 jobs:
-  clang:
+  msvc:
     runs-on: windows-2022
 
     strategy:
       matrix:
         build_type: [Debug, Release]
-        conan_profile: [msvc_vs.profile, llvm_clang_vs.profile]
+        conan_profile: [msvc_vs.profile]
+
+    steps:
+      # Make build_type lowercase for preset naming
+      - name: Lowercase variables
+        id: lower
+        shell: pwsh
+        run: |
+          $buildTypeLower = "${{ matrix.build_type }}".ToLower()
+          echo "build_type_lower=$buildTypeLower" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - uses: actions/checkout@v5
+      
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies with uv
+        shell: pwsh
+        run: |
+          uv sync
+          $venvPath = Join-Path (Get-Location) ".venv\Scripts"
+          echo $venvPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # ---------------------------------------------------------
+      # 🧱 Conan cache
+      # ---------------------------------------------------------
+      - name: Get Conan home directory
+        id: conan-home
+        shell: pwsh
+        run: |
+          $conanHome = conan config home
+          echo "path=$conanHome" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.conan-home.outputs.path }}/p
+          key: conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-${{ hashFiles('raktr/conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-
+            conan-${{ runner.os }}-
+
+      - run: conan --version
+
+      # ---------------------------------------------------------
+      # 🧱 Conan install (will use your profile)
+      # ---------------------------------------------------------
+      - name: Run Conan install
+        run: conan install raktr --output-folder=. -pr:a=profiles/${{ matrix.conan_profile }} -s:a build_type=${{ matrix.build_type }} -o:a='&:with_tests=True' --build=missing
+
+      # ---------------------------------------------------------
+      # 🧱 Configure with CMake
+      # ---------------------------------------------------------
+      - name: Configure CMake
+        run: |
+          cmake --preset conan-${{ steps.lower.outputs.build_type_lower }}
+        working-directory: ./raktr/
+        shell: cmd
+
+      # ---------------------------------------------------------
+      # 🧱 Build
+      # ---------------------------------------------------------
+      - name: Build
+        run: cmake --build --preset conan-${{ steps.lower.outputs.build_type_lower }} --parallel 10
+        working-directory: ./raktr/
+
+      # ---------------------------------------------------------
+      # 🧱 Test
+      # ---------------------------------------------------------
+      - name: Test
+        run: cd build ; ctest -j 10 -C ${{ matrix.build_type }} --output-on-failure
+
+  clang-cl:
+    runs-on: windows-2022
+
+    strategy:
+      matrix:
+        build_type: [Debug, Release]
+        conan_profile: [llvm_clang_vs.profile]
         llvm_version: [20.1.8]  # Pin or expand versions here
 
     steps:
