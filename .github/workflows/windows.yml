@@ -1,0 +1,294 @@
+name: Windows
+
+# | Purpose                     | Explanation                                                                                                       |
+# | --------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+# | **`clang-cl`**              | Uses MSVC ABI and runtime — identical linkage model to MSVC.                                                      |
+# | **`-T ClangCL`**            | Tells CMake/VS generator to use Clang in MSVC compatibility mode.                                                 |
+# | **`llvm_clang_vs.profile`** | Already defines `compiler=clang` and `compiler.runtime=dynamic`, matching MSVC’s runtime expectations.            |
+# | **No MinGW**                | No `--target=x86_64-w64-mingw32`, no `libstdc++`, no `pthread`. You’re linking against MSVC’s standard libraries. |
+# | **Conan + Ninja**           | Uses your Conan-generated `conan_toolchain.cmake` and Ninja generator (fast, MSVC-compatible).                    |
+
+on:
+  push:
+    branches:
+      - develop
+      - main
+      - release/*
+  pull_request:
+  workflow_dispatch: # Allows manual triggering
+
+permissions:
+  contents: read
+
+jobs:
+  msvc:
+    runs-on: windows-2022
+
+    strategy:
+      matrix:
+        build_type: [Debug, Release]
+        conan_profile: [msvc_vs.profile]
+
+    steps:
+      # Make build_type lowercase for preset naming
+      - name: Lowercase variables
+        id: lower
+        shell: pwsh
+        run: |
+          $buildTypeLower = "${{ matrix.build_type }}".ToLower()
+          echo "build_type_lower=$buildTypeLower" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - uses: actions/checkout@v5
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies with uv
+        shell: pwsh
+        run: |
+          uv sync
+          $venvPath = Join-Path (Get-Location) ".venv\Scripts"
+          echo $venvPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # ---------------------------------------------------------
+      # 🧱 Conan cache
+      # ---------------------------------------------------------
+      - name: Get Conan home directory
+        id: conan-home
+        shell: pwsh
+        run: |
+          $conanHome = conan config home
+          echo "path=$conanHome" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.conan-home.outputs.path }}/p
+          key: conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-${{ hashFiles('raktr/conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-
+            conan-${{ runner.os }}-
+
+      - run: conan --version
+
+      # ---------------------------------------------------------
+      # 🧱 Conan install (will use your profile)
+      # ---------------------------------------------------------
+      - name: Run Conan install
+        run: conan install raktr --output-folder=. -pr:a=profiles/${{ matrix.conan_profile }} -s:a build_type=${{ matrix.build_type }} -o:a='&:with_tests=True' --build=missing
+
+      # ---------------------------------------------------------
+      # 🧱 Configure with CMake
+      # ---------------------------------------------------------
+      - name: Configure CMake
+        run: |
+          cmake --preset conan-${{ steps.lower.outputs.build_type_lower }}
+        working-directory: ./raktr/
+        shell: cmd
+
+      # ---------------------------------------------------------
+      # 🧱 Build
+      # ---------------------------------------------------------
+      - name: Build
+        run: cmake --build --preset conan-${{ steps.lower.outputs.build_type_lower }} --parallel 10
+        working-directory: ./raktr/
+
+      # ---------------------------------------------------------
+      # 🧱 Test
+      # ---------------------------------------------------------
+      - name: Test
+        run: cd build ; ctest -j 10 -C ${{ matrix.build_type }} --output-on-failure
+
+  clang-cl:
+    runs-on: windows-2022
+
+    strategy:
+      matrix:
+        build_type: [Debug, Release]
+        conan_profile: [llvm_clang_vs.profile]
+
+    steps:
+      # Make build_type lowercase for preset naming
+      - name: Lowercase variables
+        id: lower
+        shell: pwsh
+        run: |
+          $buildTypeLower = "${{ matrix.build_type }}".ToLower()
+          echo "build_type_lower=$buildTypeLower" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - uses: actions/checkout@v5
+      
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies with uv
+        shell: pwsh
+        run: |
+          uv sync
+          $venvPath = Join-Path (Get-Location) ".venv\Scripts"
+          echo $venvPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # ---------------------------------------------------------
+      # 🧱 Conan cache
+      # ---------------------------------------------------------
+      - name: Get Conan home directory
+        id: conan-home
+        shell: pwsh
+        run: |
+          $conanHome = conan config home
+          echo "path=$conanHome" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.conan-home.outputs.path }}/p
+          key: conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-${{ hashFiles('raktr/conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-
+            conan-${{ runner.os }}-
+
+      - run: conan --version
+
+      # ---------------------------------------------------------
+      # 🧱 Conan install (will use your llvm_clang_vs.profile)
+      # ---------------------------------------------------------
+      - name: Run Conan install
+        run: conan install raktr --output-folder=. -pr:a=profiles/${{ matrix.conan_profile }} -s:a build_type=${{ matrix.build_type }} -o:a='&:with_tests=True' --build=missing
+
+      # ---------------------------------------------------------
+      # 🧱 Configure with CMake using ClangCL toolset
+      # ---------------------------------------------------------
+      - name: Configure CMake
+        run: |
+          cmake --preset conan-default
+        working-directory: ./raktr/
+
+      # ---------------------------------------------------------
+      # 🧱 Build
+      # ---------------------------------------------------------
+      - name: Build
+        run: cmake --build --preset conan-${{ steps.lower.outputs.build_type_lower }} --parallel 10
+        working-directory: ./raktr/
+
+      # ---------------------------------------------------------
+      # 🧱 Test
+      # ---------------------------------------------------------
+      - name: Test
+        run: cd build ; ctest -j 10 -C ${{ matrix.build_type }} --output-on-failure
+
+  llvm-clang-cl:
+    runs-on: windows-2022
+
+    strategy:
+      matrix:
+        build_type: [Debug, Release]
+        conan_profile: [llvm_clang_cl.profile]
+        llvm_version: [20.1.8]
+
+    steps:
+      # Make build_type lowercase for preset naming
+      - name: Lowercase variables
+        id: lower
+        shell: pwsh
+        run: |
+          $buildTypeLower = "${{ matrix.build_type }}".ToLower()
+          echo "build_type_lower=$buildTypeLower" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - uses: actions/checkout@v5
+      
+      - name: "Set up Python"
+        uses: actions/setup-python@v5
+        with:
+          python-version-file: "pyproject.toml"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies with uv
+        shell: pwsh
+        run: |
+          uv sync
+          $venvPath = Join-Path (Get-Location) ".venv\Scripts"
+          echo $venvPath | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      # ---------------------------------------------------------
+      # 🧱 Install LLVM (clang-cl with MSVC-like frontend)
+      # ---------------------------------------------------------
+      - name: Install LLVM ${{ matrix.llvm_version }}
+        shell: pwsh
+        run: |
+          $url = "https://github.com/llvm/llvm-project/releases/download/llvmorg-${{ matrix.llvm_version }}/LLVM-${{ matrix.llvm_version }}-win64.exe"
+          Write-Host "Downloading LLVM from $url"
+          curl.exe -fsSL -o LLVM-${{ matrix.llvm_version }}.exe $url
+          & "C:\Program Files\7-Zip\7z.exe" x LLVM-${{ matrix.llvm_version }}.exe -y -o"C:\Program Files\LLVM"
+          echo "LLVM installed to C:\Program Files\LLVM"
+          echo "C:\Program Files\LLVM\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Check ClangCL version
+        run: clang-cl --version
+
+      # ---------------------------------------------------------
+      # 🧱 Conan cache
+      # ---------------------------------------------------------
+      - name: Get Conan home directory
+        id: conan-home
+        shell: pwsh
+        run: |
+          $conanHome = conan config home
+          echo "path=$conanHome" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Cache Conan packages
+        uses: actions/cache@v4
+        with:
+          path: ${{ steps.conan-home.outputs.path }}/p
+          key: conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-${{ hashFiles('raktr/conanfile.py') }}
+          restore-keys: |
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-${{ matrix.build_type }}-
+            conan-${{ runner.os }}-${{ matrix.conan_profile }}-
+            conan-${{ runner.os }}-
+
+      - run: conan --version
+
+      # ---------------------------------------------------------
+      # 🧱 Conan install (MSVC-like clang-cl frontend)
+      # ---------------------------------------------------------
+      - name: Run Conan install
+        run: conan install raktr --output-folder=. -pr:a=profiles/${{ matrix.conan_profile }} -s:a build_type=${{ matrix.build_type }} -o:a='&:with_tests=True' --build=missing
+
+      # ---------------------------------------------------------
+      # 🧱 Configure with CMake using clang-cl
+      # ---------------------------------------------------------
+      - name: Configure CMake
+        run: |
+          cmake --preset conan-${{ steps.lower.outputs.build_type_lower }} ^
+            -DCMAKE_C_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe" ^
+            -DCMAKE_CXX_COMPILER="C:/Program Files/LLVM/bin/clang-cl.exe"
+        working-directory: ./raktr/
+        shell: cmd
+
+      # ---------------------------------------------------------
+      # 🧱 Build
+      # ---------------------------------------------------------
+      - name: Build
+        run: cmake --build --preset conan-${{ steps.lower.outputs.build_type_lower }} --parallel 10
+        working-directory: ./raktr/
+
+      # ---------------------------------------------------------
+      # 🧱 Test
+      # ---------------------------------------------------------
+      - name: Test
+        run: cd build ; ctest -j 10 -C ${{ matrix.build_type }} --output-on-failure
