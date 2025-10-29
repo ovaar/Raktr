@@ -174,10 +174,8 @@ jobs:
       # ---------------------------------------------------------
       - name: Configure CMake
         run: |
-          cmake --preset conan-${{ steps.lower.outputs.build_type_lower }} ^
-            -T ClangCL
+          cmake --preset conan-default
         working-directory: ./raktr/
-        shell: cmd
 
       # ---------------------------------------------------------
       # 🧱 Build
