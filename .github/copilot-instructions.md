@@ -121,7 +121,7 @@ raktr/
 ```
 
 * **Filenames:** `snake_case`. Example: `render_pipeline.cpp`.
-* **Headers:** `#pragma once` preferred.
+* **Headers:** `ifndef` include guard preferred.
 * **Header placement:**
 
   * Public → `include/raktr/`
@@ -140,8 +140,6 @@ raktr/
 | **Private members**                      | snake_case                              | `_frame_index`                   |
 | **Constants**                            | `k_constant_name` or `inline constexpr` | `k_max_frames`                   |
 | **CMake targets**                        | snake_case                              | `raktr_core`                     |
-
-Avoid leading underscores. Prefer trailing `_` for private members.
 
 ---
 
