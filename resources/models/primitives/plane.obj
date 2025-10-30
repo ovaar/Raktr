@@ -1,0 +1,21 @@
+# Plane primitive (2x2, XZ plane, centered at origin, Y=0)
+# 4 vertices, 2 triangles
+
+# Vertices
+v -1.0 0.0  1.0  # top-left
+v  1.0 0.0  1.0  # top-right
+v  1.0 0.0 -1.0  # bottom-right
+v -1.0 0.0 -1.0  # bottom-left
+
+# Normal (pointing up)
+vn 0.0 1.0 0.0
+
+# Texture coordinates
+vt 0.0 0.0
+vt 1.0 0.0
+vt 1.0 1.0
+vt 0.0 1.0
+
+# Faces (CCW winding, viewed from above)
+f 1/1/1 2/2/1 3/3/1
+f 1/1/1 3/3/1 4/4/1
