@@ -14,10 +14,26 @@
 namespace raktr::render::backend
 {
     /*!
+     * @brief Vertex format specification for interleaved vertex data.
+     */
+    enum class VertexFormat
+    {
+        Position,          // 3 floats: x, y, z
+        PositionNormal,    // 6 floats: x, y, z, nx, ny, nz
+        PositionUV,        // 5 floats: x, y, z, u, v
+        PositionNormalUV   // 8 floats: x, y, z, nx, ny, nz, u, v
+    };
+
+    /*!
      * @brief Fake device for testing - implements real software rendering.
      * 
      * Unlike a mock, this actually stores buffer data and renders to an
      * in-memory framebuffer, enabling true end-to-end rendering tests.
+     * 
+     * Features:
+     * - Software rasterization with depth testing
+     * - Simple directional lighting (ambient + diffuse)
+     * - Normals and UV coordinate support
      */
     class FakeDevice : public Device
     {
@@ -55,6 +71,26 @@ namespace raktr::render::backend
          */
         void set_clear_color(uint32_t color);
 
+        /*!
+         * @brief Enable or disable depth testing.
+         */
+        void enable_depth_test(bool enabled);
+
+        /*!
+         * @brief Check if depth testing is enabled.
+         */
+        bool is_depth_test_enabled() const;
+
+        /*!
+         * @brief Clear the depth buffer to far plane.
+         */
+        void clear_depth_buffer();
+
+        /*!
+         * @brief Set the vertex format for correct attribute parsing.
+         */
+        void set_vertex_format(VertexFormat format);
+
     private:
         // Buffer storage
         struct BufferData {
@@ -69,16 +105,26 @@ namespace raktr::render::backend
             uint32_t width;
             uint32_t height;
             std::vector<uint32_t> pixels;  // RGBA8 format
+            std::vector<float> depth;      // Depth buffer (0.0 = near, 1.0 = far)
             uint32_t clear_color = 0x000000FF;  // Black, opaque
 
             Framebuffer(uint32_t w, uint32_t h) 
-                : width(w), height(h), pixels(w * h, clear_color) {}
+                : width(w), height(h), 
+                  pixels(w * h, clear_color),
+                  depth(w * h, 1.0f) {}
         };
         Framebuffer _framebuffer;
 
+        // Render state
+        bool _depth_test_enabled = false;
+        VertexFormat _vertex_format = VertexFormat::Position;
+
         // Helper methods
         void rasterize_triangle(const float* v0, const float* v1, const float* v2);
+        void rasterize_triangle_with_normals(const float* v0, const float* v1, const float* v2);
         bool point_in_triangle(int px, int py, int x0, int y0, int x1, int y1, int x2, int y2) const;
+        float calculate_lighting(const float* normal) const;
+        uint32_t apply_lighting_to_color(uint32_t base_color, float intensity) const;
     };
 
 } // namespace raktr::render::backend
