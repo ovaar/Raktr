@@ -24,7 +24,7 @@ source .venv/bin/activate
 
 ```ps1
 # Install
-conan install raktr --output-folder=. -pr:a=profiles/llvm_clang_vs.profile -o:a='&:with_tests=True'
+conan install raktr --output-folder=. -pr:a=profiles/llvm_clang_vs.profile -o:a='&:with_tests=True' --build=missing
 
 # Configure
 cd raktr/; cmake --preset conan-release 
