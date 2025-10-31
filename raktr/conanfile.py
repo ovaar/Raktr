@@ -44,8 +44,9 @@ class RaktrConan(ConanFile):
         self.tool_requires("ccache/[>=4.11 <5]")
 
     def requirements(self):
-        self.requires("glm/1.0.1")
         self.requires("mimalloc/2.2.4")
+        self.requires("meshoptimizer/0.25")
+        self.requires("glm/1.0.1")
         self.requires("fmt/12.0.0")
         self.requires("spdlog/1.16.0")
 
