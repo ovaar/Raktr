@@ -11,6 +11,11 @@ compiler.runtime=dynamic
 compiler.runtime_type=Release
 compiler.runtime_version=v144
 
+wgpu-native*:compiler=msvc
+wgpu-native*:compiler.version=194
+wgpu-native*:compiler.runtime=dynamic
+wgpu-native*:compiler.runtime_type=Release
+
 [buildenv]
 PATH=+(path)C:/Program Files/LLVM/bin
 
