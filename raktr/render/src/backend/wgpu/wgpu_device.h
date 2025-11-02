@@ -72,6 +72,12 @@ private:
     std::expected<void, std::error_code>
     initialize(Window* window, bool enable_validation);
 
+    std::expected<void, std::error_code>
+    create_shader_module(const char* wgsl_source, const char* label);
+
+    std::expected<void, std::error_code>
+    create_render_pipeline();
+
     void cleanup();
 
     // WebGPU handles
@@ -88,6 +94,13 @@ private:
 
     // Buffer management
     std::vector<WGPUBuffer> _buffers;
+
+    // Shader and pipeline resources
+    WGPUShaderModule _shader_module = nullptr;
+    WGPURenderPipeline _render_pipeline = nullptr;
+
+    // Current frame surface texture (needs to be released after present)
+    WGPUTexture _current_surface_texture = nullptr;
 };
 
 } // namespace raktr::render::backend

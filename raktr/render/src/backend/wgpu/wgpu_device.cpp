@@ -170,7 +170,152 @@ WgpuDevice::initialize(Window* window, bool /* enable_validation */)
 
     wgpuSurfaceConfigure(_surface, &surface_config);
 
+    // Load and compile shader
+    const char* wgsl_source = R"(
+// Vertex shader
+struct VertexInput {
+    @location(0) position: vec3<f32>,
+};
+
+struct VertexOutput {
+    @builtin(position) position: vec4<f32>,
+    @location(0) color: vec3<f32>,
+};
+
+@vertex
+fn vs_main(input: VertexInput) -> VertexOutput {
+    var output: VertexOutput;
+    output.position = vec4<f32>(input.position, 1.0);
+    output.color = input.position * 0.5 + 0.5;
+    return output;
+}
+
+@fragment
+fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+    return vec4<f32>(input.color, 1.0);
+}
+)";
+
+    auto shader_result = create_shader_module(wgsl_source, "Basic Shader");
+    if (!shader_result)
+    {
+        spdlog::error("Failed to create shader module");
+        return std::unexpected(shader_result.error());
+    }
+
+    // Create render pipeline
+    auto pipeline_result = create_render_pipeline();
+    if (!pipeline_result)
+    {
+        spdlog::error("Failed to create render pipeline");
+        return std::unexpected(pipeline_result.error());
+    }
+
     spdlog::info("WebGPU device initialized successfully ({}x{})", _swapchain_width, _swapchain_height);
+    return {};
+}
+
+std::expected<void, std::error_code>
+WgpuDevice::create_shader_module(const char* wgsl_source, const char* label)
+{
+    if (!_device || !wgsl_source)
+    {
+        return std::unexpected(make_error_code(RenderError::ShaderCompilationFailed));
+    }
+
+    WGPUShaderSourceWGSL wgsl_desc = {};
+    wgsl_desc.chain.sType = WGPUSType_ShaderSourceWGSL;
+    wgsl_desc.chain.next = nullptr;
+    wgsl_desc.code = make_string_view(wgsl_source);
+
+    WGPUShaderModuleDescriptor shader_desc = {};
+    shader_desc.nextInChain = reinterpret_cast<WGPUChainedStruct*>(&wgsl_desc);
+    shader_desc.label = make_string_view(label);
+
+    _shader_module = wgpuDeviceCreateShaderModule(_device, &shader_desc);
+    if (!_shader_module)
+    {
+        spdlog::error("Failed to create shader module: {}", label);
+        return std::unexpected(make_error_code(RenderError::ShaderCompilationFailed));
+    }
+
+    spdlog::info("Shader module '{}' created successfully", label);
+    return {};
+}
+
+std::expected<void, std::error_code>
+WgpuDevice::create_render_pipeline()
+{
+    if (!_device || !_shader_module)
+    {
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    // Vertex buffer layout
+    WGPUVertexAttribute vertex_attribute = {};
+    vertex_attribute.format = WGPUVertexFormat_Float32x3;
+    vertex_attribute.offset = 0;
+    vertex_attribute.shaderLocation = 0;
+
+    WGPUVertexBufferLayout vertex_buffer_layout = {};
+    vertex_buffer_layout.arrayStride = 3 * sizeof(float);
+    vertex_buffer_layout.stepMode = WGPUVertexStepMode_Vertex;
+    vertex_buffer_layout.attributeCount = 1;
+    vertex_buffer_layout.attributes = &vertex_attribute;
+
+    // Color target state
+    WGPUColorTargetState color_target = {};
+    color_target.format = _swapchain_format;
+    color_target.writeMask = WGPUColorWriteMask_All;
+    color_target.blend = nullptr; // No blending
+
+    // Fragment state
+    WGPUFragmentState fragment_state = {};
+    fragment_state.module = _shader_module;
+    fragment_state.entryPoint = make_string_view("fs_main");
+    fragment_state.targetCount = 1;
+    fragment_state.targets = &color_target;
+    fragment_state.constantCount = 0;
+    fragment_state.constants = nullptr;
+
+    // Pipeline descriptor
+    WGPURenderPipelineDescriptor pipeline_desc = {};
+    pipeline_desc.nextInChain = nullptr;
+    pipeline_desc.label = make_string_view("Basic Render Pipeline");
+
+    // Vertex state
+    pipeline_desc.vertex.module = _shader_module;
+    pipeline_desc.vertex.entryPoint = make_string_view("vs_main");
+    pipeline_desc.vertex.bufferCount = 1;
+    pipeline_desc.vertex.buffers = &vertex_buffer_layout;
+    pipeline_desc.vertex.constantCount = 0;
+    pipeline_desc.vertex.constants = nullptr;
+
+    // Primitive state
+    pipeline_desc.primitive.topology = WGPUPrimitiveTopology_TriangleList;
+    pipeline_desc.primitive.stripIndexFormat = WGPUIndexFormat_Undefined;
+    pipeline_desc.primitive.frontFace = WGPUFrontFace_CCW;
+    pipeline_desc.primitive.cullMode = WGPUCullMode_None;
+
+    // Multisample state
+    pipeline_desc.multisample.count = 1;
+    pipeline_desc.multisample.mask = 0xFFFFFFFF;
+    pipeline_desc.multisample.alphaToCoverageEnabled = false;
+
+    // Fragment state
+    pipeline_desc.fragment = &fragment_state;
+
+    // No depth/stencil for now
+    pipeline_desc.depthStencil = nullptr;
+
+    _render_pipeline = wgpuDeviceCreateRenderPipeline(_device, &pipeline_desc);
+    if (!_render_pipeline)
+    {
+        spdlog::error("Failed to create render pipeline");
+        return std::unexpected(make_error_code(RenderError::InitializationFailed));
+    }
+
+    spdlog::info("Render pipeline created successfully");
     return {};
 }
 
@@ -185,6 +330,13 @@ void WgpuDevice::cleanup()
         }
     }
     _buffers.clear();
+
+    // Release shader and pipeline resources
+    if (_render_pipeline) { wgpuRenderPipelineRelease(_render_pipeline); _render_pipeline = nullptr; }
+    if (_shader_module) { wgpuShaderModuleRelease(_shader_module); _shader_module = nullptr; }
+
+    // Release any pending surface texture
+    if (_current_surface_texture) { wgpuTextureRelease(_current_surface_texture); _current_surface_texture = nullptr; }
 
     // Release WebGPU resources (no swapchain in new API)
     if (_queue) { wgpuQueueRelease(_queue); _queue = nullptr; }
@@ -257,13 +409,106 @@ WgpuDevice::create_index_buffer(std::span<const std::byte> data)
 }
 
 std::expected<void, std::error_code>
-WgpuDevice::draw_indexed(const Buffer& /* vertex_buffer */,
-                        const Buffer& /* index_buffer */,
-                        uint32_t /* index_count */)
+WgpuDevice::draw_indexed(const Buffer& vertex_buffer,
+                        const Buffer& index_buffer,
+                        uint32_t index_count)
 {
-    // TODO: Implement rendering with shaders and pipeline
-    spdlog::warn("draw_indexed not yet implemented for WebGPU");
-    return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    if (!_surface || !_queue || !_render_pipeline)
+    {
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    // Validate buffer IDs
+    if (vertex_buffer.id() >= _buffers.size() || index_buffer.id() >= _buffers.size())
+    {
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    WGPUBuffer wgpu_vertex_buffer = _buffers[vertex_buffer.id()];
+    WGPUBuffer wgpu_index_buffer = _buffers[index_buffer.id()];
+
+    if (!wgpu_vertex_buffer || !wgpu_index_buffer)
+    {
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    // Get current texture from surface
+    WGPUSurfaceTexture surface_texture;
+    wgpuSurfaceGetCurrentTexture(_surface, &surface_texture);
+    
+    if (surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+        surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
+    {
+        spdlog::error("Failed to get surface texture for drawing: {}", static_cast<int>(surface_texture.status));
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    // Create texture view
+    WGPUTextureViewDescriptor view_desc = {};
+    view_desc.nextInChain = nullptr;
+    view_desc.label = make_string_view("Surface Texture View");
+    view_desc.format = _swapchain_format;
+    view_desc.dimension = WGPUTextureViewDimension_2D;
+    view_desc.baseMipLevel = 0;
+    view_desc.mipLevelCount = 1;
+    view_desc.baseArrayLayer = 0;
+    view_desc.arrayLayerCount = 1;
+    view_desc.aspect = WGPUTextureAspect_All;
+
+    WGPUTextureView backbuffer_view = wgpuTextureCreateView(surface_texture.texture, &view_desc);
+
+    // Create command encoder
+    WGPUCommandEncoderDescriptor encoder_desc = {};
+    encoder_desc.nextInChain = nullptr;
+    encoder_desc.label = make_string_view("Draw Command Encoder");
+    WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(_device, &encoder_desc);
+
+    // Create render pass
+    WGPURenderPassColorAttachment color_attachment = {};
+    color_attachment.view = backbuffer_view;
+    color_attachment.depthSlice = WGPU_DEPTH_SLICE_UNDEFINED;
+    color_attachment.resolveTarget = nullptr;
+    color_attachment.loadOp = WGPULoadOp_Clear;
+    color_attachment.storeOp = WGPUStoreOp_Store;
+    color_attachment.clearValue = {0.1, 0.2, 0.3, 1.0}; // Clear to dark blue-gray
+
+    WGPURenderPassDescriptor render_pass_desc = {};
+    render_pass_desc.nextInChain = nullptr;
+    render_pass_desc.label = make_string_view("Draw Render Pass");
+    render_pass_desc.colorAttachmentCount = 1;
+    render_pass_desc.colorAttachments = &color_attachment;
+    render_pass_desc.depthStencilAttachment = nullptr;
+
+    WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &render_pass_desc);
+
+    // Set pipeline and buffers
+    wgpuRenderPassEncoderSetPipeline(pass, _render_pipeline);
+    wgpuRenderPassEncoderSetVertexBuffer(pass, 0, wgpu_vertex_buffer, 0, WGPU_WHOLE_SIZE);
+    wgpuRenderPassEncoderSetIndexBuffer(pass, wgpu_index_buffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
+
+    // Draw indexed geometry
+    wgpuRenderPassEncoderDrawIndexed(pass, index_count, 1, 0, 0, 0);
+
+    // End render pass
+    wgpuRenderPassEncoderEnd(pass);
+    wgpuRenderPassEncoderRelease(pass);
+
+    // Submit commands
+    WGPUCommandBufferDescriptor cmd_buffer_desc = {};
+    cmd_buffer_desc.nextInChain = nullptr;
+    cmd_buffer_desc.label = make_string_view("Draw Command Buffer");
+    WGPUCommandBuffer command = wgpuCommandEncoderFinish(encoder, &cmd_buffer_desc);
+    wgpuQueueSubmit(_queue, 1, &command);
+
+    // Cleanup command resources
+    wgpuCommandBufferRelease(command);
+    wgpuCommandEncoderRelease(encoder);
+    wgpuTextureViewRelease(backbuffer_view);
+
+    // Store surface texture to release after present
+    _current_surface_texture = surface_texture.texture;
+
+    return {};
 }
 
 void WgpuDevice::clear()
@@ -331,13 +576,13 @@ void WgpuDevice::clear()
     WGPUCommandBuffer command = wgpuCommandEncoderFinish(encoder, &cmd_buffer_desc);
     wgpuQueueSubmit(_queue, 1, &command);
 
-    // Cleanup
+    // Cleanup command resources
     wgpuCommandBufferRelease(command);
     wgpuCommandEncoderRelease(encoder);
     wgpuTextureViewRelease(backbuffer_view);
     
-    // CRITICAL: Release texture before presenting/destroying surface
-    wgpuTextureRelease(surface_texture.texture);
+    // Store surface texture to release after present
+    _current_surface_texture = surface_texture.texture;
 }
 
 void WgpuDevice::present()
@@ -347,7 +592,15 @@ void WgpuDevice::present()
         return;
     }
 
+    // Present the surface
     wgpuSurfacePresent(_surface);
+
+    // Now release the surface texture after presenting
+    if (_current_surface_texture)
+    {
+        wgpuTextureRelease(_current_surface_texture);
+        _current_surface_texture = nullptr;
+    }
 }
 
 } // namespace raktr::render::backend
