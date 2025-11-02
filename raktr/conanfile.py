@@ -49,6 +49,8 @@ class RaktrConan(ConanFile):
         self.requires("glm/1.0.1")
         self.requires("fmt/12.0.0")
         self.requires("spdlog/1.16.0")
+        self.requires("glfw/3.4")
+        self.requires("wgpu-native/27.0.2.0")
 
         self.test_requires("gtest/1.17.0")
 
