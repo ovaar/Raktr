@@ -23,14 +23,29 @@ source .venv/bin/activate
 ### Windows 
 
 ```ps1
+git clone https://github.com/ovaar/Raktr.git
+
+pip install uv
+uv sync
+.\.venv\Scripts\Activate.ps1
+
+# Create 3rd-party deps
+conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Release
+conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Debug
+
+cd ./raktr/
+
 # Install
-conan install raktr --output-folder=. -pr:a=profiles/llvm_clang_vs.profile -o:a='&:with_tests=True' --build=missing
+conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_vs.profile -o:a='&:with_tests=True' --build=missing
 
 # Configure
-cd raktr/; cmake --preset conan-release 
+cmake --preset conan-release 
 
 # Build
 cmake --build --preset conan-release
+
+# Build tests
+cmake --build ..\build --target render_tests --config Release
 
 # Clean
 cmake --build --preset conan-release --clean
