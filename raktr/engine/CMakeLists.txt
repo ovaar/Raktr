@@ -27,7 +27,8 @@ target_include_directories(
 
 target_link_libraries(
   ${PROJECT_NAME}_engine
-  PUBLIC 
+  PUBLIC
+    ${PROJECT_NAME}_render
     glm::glm 
     spdlog::spdlog
     fmt::fmt)
