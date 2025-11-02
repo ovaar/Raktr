@@ -20,6 +20,7 @@ namespace raktr::render
     enum class BackendType
     {
         Fake,        // Software renderer for testing
+        WebGPU,      // WebGPU via wgpu-native
         OpenGL,
         Vulkan,
         DirectX12

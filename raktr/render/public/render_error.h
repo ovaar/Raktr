@@ -22,7 +22,8 @@ namespace raktr::render
         DeviceCreationFailed,
         BufferCreationFailed,
         ShaderCompilationFailed,
-        InvalidOperation
+        InvalidOperation,
+        WindowCreationFailed
     };
 
     /*!
@@ -44,6 +45,7 @@ namespace raktr::render
                 case RenderError::BufferCreationFailed: return "Buffer creation failed";
                 case RenderError::ShaderCompilationFailed: return "Shader compilation failed";
                 case RenderError::InvalidOperation: return "Invalid operation";
+                case RenderError::WindowCreationFailed: return "Window creation failed";
                 default: return "Unknown error";
             }
         }

@@ -1,6 +1,8 @@
 find_package(glm REQUIRED CONFIG)
 find_package(spdlog REQUIRED CONFIG)
 find_package(fmt REQUIRED CONFIG)
+find_package(wgpu-native REQUIRED CONFIG)
+find_package(glfw3 REQUIRED CONFIG)
 
 set(${PROJECT_NAME}_libtype STATIC)
 if(BUILD_SHARED_LIBS)
@@ -22,12 +24,14 @@ target_include_directories(
 
 target_link_libraries(
   ${PROJECT_NAME}_render
-    PUBLIC 
-    ${PROJECT_NAME}_engine 
+  PUBLIC
     glm::glm
+  PRIVATE 
     spdlog::spdlog
-    fmt::fmt)
-
+    fmt::fmt
+    wgpu-native::wgpu-native
+    glfw)
+    
 if(BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)

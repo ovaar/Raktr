@@ -18,6 +18,7 @@ target_include_directories(render_tests
 target_link_libraries(render_tests
         PRIVATE
             raktr_render 
+            wgpu-native::wgpu-native
             GTest::gtest 
             GTest::gtest_main)
 
