@@ -5,6 +5,7 @@
 
 #include "backend/ibackend.h"
 #include "backend/fake_backend.h"
+#include "backend/wgpu/wgpu_backend.h"
 
 namespace raktr::render::backend
 {
@@ -15,6 +16,9 @@ std::unique_ptr<IBackend> create_backend(BackendType type)
     {
         case BackendType::Fake:
             return std::make_unique<FakeBackend>();
+        
+        case BackendType::WebGPU:
+            return std::make_unique<WgpuBackend>();
         
         case BackendType::OpenGL:
         case BackendType::Vulkan:
