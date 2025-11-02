@@ -22,6 +22,8 @@ class wgpu_nativeRecipe(ConanFile):
     virtualbuildenv = False
     virtualrunenv = False
 
+    def configure(self):
+        self.settings.rm_safe("compiler.cppstd")
 
     def get_prebuilt_url(self) -> str:
         version = str(self.version)
