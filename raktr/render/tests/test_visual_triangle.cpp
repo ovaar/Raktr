@@ -17,7 +17,6 @@ using namespace raktr::render::backend;
 
 TEST(VisualTest, DISABLED_ManualRenderTriangle)
 {
-
     // Create window
     WindowConfig config;
     config.width = 800;
