@@ -122,6 +122,43 @@ protected:
 std::expected<std::unique_ptr<Window>, std::error_code>
 create_window(const WindowConfig& config);
 
+/*!
+ * @brief Wrap an existing native window handle.
+ * 
+ * Creates a Window instance that wraps an externally-provided platform window
+ * handle (HWND on Windows, Window on X11, NSWindow* on macOS, etc.).
+ * 
+ * CRITICAL: The returned Window does NOT own the handle and will not destroy it.
+ * The external code that created the handle is responsible for its lifecycle.
+ * 
+ * Use case: Embedding Raktr rendering into existing applications (e.g., .NET WPF/WinForms,
+ * Qt, game engines) that already manage their own windows.
+ * 
+ * @param native_handle Platform-specific window handle. Must not be null and must remain valid.
+ * @param width Initial window width in pixels. Must be > 0.
+ * @param height Initial window height in pixels. Must be > 0.
+ * @return Window instance or error code.
+ * 
+ * @example
+ * // From a .NET C# application with P/Invoke:
+ * // IntPtr hwnd = myWpfWindow.Handle;
+ * // Pass to C++:
+ * void* hwnd = ...; // HWND from .NET
+ * auto window_result = create_window_from_native(hwnd, 1920, 1080);
+ * if (!window_result) {
+ *     // Handle error
+ *     return;
+ * }
+ * auto& window = *window_result;
+ * 
+ * // Use for rendering:
+ * auto device = WgpuDevice::create(window.get(), false);
+ * 
+ * // .NET code handles window events and destruction
+ */
+std::expected<std::unique_ptr<Window>, std::error_code>
+create_window_from_native(void* native_handle, uint32_t width, uint32_t height);
+
 } // namespace raktr::render
 
 #endif // RAKTR_RENDER_WINDOW_H

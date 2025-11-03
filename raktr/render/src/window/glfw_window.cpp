@@ -4,6 +4,7 @@
  */
 
 #include "glfw_window.h"
+#include "native_window.h"
 #include <GLFW/glfw3.h>
 
 #ifdef _WIN32
@@ -141,7 +142,7 @@ void* GLFWWindow::native_handle() const
 
 } // namespace detail
 
-// Factory function implementation
+// Factory function implementations
 std::expected<std::unique_ptr<Window>, std::error_code>
 create_window(const WindowConfig& config)
 {
@@ -152,6 +153,19 @@ create_window(const WindowConfig& config)
     }
     
     // Move unique_ptr<GLFWWindow> to unique_ptr<Window>
+    return std::unique_ptr<Window>(result->release());
+}
+
+std::expected<std::unique_ptr<Window>, std::error_code>
+create_window_from_native(void* native_handle, uint32_t width, uint32_t height)
+{
+    auto result = detail::NativeWindow::create(native_handle, width, height);
+    if (!result)
+    {
+        return std::unexpected(result.error());
+    }
+    
+    // Move unique_ptr<NativeWindow> to unique_ptr<Window>
     return std::unique_ptr<Window>(result->release());
 }
 
