@@ -55,6 +55,30 @@ public:
     void present() override;
 
     /*!
+     * @brief Create a uniform buffer for shader constants.
+     * @param size Size of the uniform buffer in bytes.
+     * @return Buffer handle or error code.
+     */
+    std::expected<Buffer, std::error_code>
+    create_uniform_buffer(size_t size);
+
+    /*!
+     * @brief Update uniform buffer data.
+     * @param buffer Buffer handle from create_uniform_buffer().
+     * @param data Data to upload.
+     * @return Success or error code.
+     */
+    std::expected<void, std::error_code>
+    update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data);
+
+    /*!
+     * @brief Set uniform buffer for rendering.
+     * Must be called before draw_indexed() to bind uniforms.
+     * @param buffer Uniform buffer to bind.
+     */
+    void set_uniform_buffer(const Buffer& buffer);
+
+    /*!
      * @brief Get the underlying WGPUDevice handle.
      * @return WGPUDevice handle (may be null if not initialized).
      */
@@ -98,6 +122,11 @@ private:
     // Shader and pipeline resources
     WGPUShaderModule _shader_module = nullptr;
     WGPURenderPipeline _render_pipeline = nullptr;
+
+    // Uniform buffer and bind group management
+    WGPUBindGroupLayout _bind_group_layout = nullptr;
+    WGPUBindGroup _current_bind_group = nullptr;
+    Buffer _default_uniform_buffer;  // Identity matrix for backward compatibility
 
     // Current frame surface texture (needs to be released after present)
     WGPUTexture _current_surface_texture = nullptr;
