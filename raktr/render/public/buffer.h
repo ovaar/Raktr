@@ -16,7 +16,8 @@ namespace raktr::render
     enum class BufferType
     {
         Vertex,
-        Index
+        Index,
+        Uniform
     };
 
     /*!

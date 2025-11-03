@@ -172,6 +172,14 @@ WgpuDevice::initialize(Window* window, bool /* enable_validation */)
 
     // Load and compile shader
     const char* wgsl_source = R"(
+// Uniform buffer for transformation matrix
+struct Uniforms {
+    mvp: mat4x4<f32>,
+};
+
+@group(0) @binding(0)
+var<uniform> uniforms: Uniforms;
+
 // Vertex shader
 struct VertexInput {
     @location(0) position: vec3<f32>,
@@ -185,7 +193,7 @@ struct VertexOutput {
 @vertex
 fn vs_main(input: VertexInput) -> VertexOutput {
     var output: VertexOutput;
-    output.position = vec4<f32>(input.position, 1.0);
+    output.position = uniforms.mvp * vec4<f32>(input.position, 1.0);
     output.color = input.position * 0.5 + 0.5;
     return output;
 }
@@ -210,6 +218,34 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         spdlog::error("Failed to create render pipeline");
         return std::unexpected(pipeline_result.error());
     }
+
+    // Create default uniform buffer with identity matrix for backward compatibility
+    // This allows existing tests to work without providing a uniform buffer
+    float identity_matrix[16] = {
+        1.0f, 0.0f, 0.0f, 0.0f,  // Column 0
+        0.0f, 1.0f, 0.0f, 0.0f,  // Column 1
+        0.0f, 0.0f, 1.0f, 0.0f,  // Column 2
+        0.0f, 0.0f, 0.0f, 1.0f   // Column 3
+    };
+    auto uniform_result = create_uniform_buffer(sizeof(identity_matrix));
+    if (!uniform_result)
+    {
+        spdlog::error("Failed to create default uniform buffer");
+        return std::unexpected(uniform_result.error());
+    }
+    _default_uniform_buffer = uniform_result.value();
+
+    // Upload identity matrix
+    auto identity_data = std::as_bytes(std::span(identity_matrix));
+    auto update_result = update_uniform_buffer(_default_uniform_buffer, identity_data);
+    if (!update_result)
+    {
+        spdlog::error("Failed to update default uniform buffer");
+        return std::unexpected(update_result.error());
+    }
+
+    // Set as current uniform buffer
+    set_uniform_buffer(_default_uniform_buffer);
 
     spdlog::info("WebGPU device initialized successfully ({}x{})", _swapchain_width, _swapchain_height);
     return {};
@@ -251,6 +287,39 @@ WgpuDevice::create_render_pipeline()
         return std::unexpected(make_error_code(RenderError::InvalidOperation));
     }
 
+    // Create bind group layout for uniform buffer
+    WGPUBindGroupLayoutEntry bind_group_layout_entry = {};
+    bind_group_layout_entry.binding = 0;
+    bind_group_layout_entry.visibility = WGPUShaderStage_Vertex;
+    bind_group_layout_entry.buffer.type = WGPUBufferBindingType_Uniform;
+    bind_group_layout_entry.buffer.hasDynamicOffset = false;
+    bind_group_layout_entry.buffer.minBindingSize = 0;
+
+    WGPUBindGroupLayoutDescriptor bind_group_layout_desc = {};
+    bind_group_layout_desc.entryCount = 1;
+    bind_group_layout_desc.entries = &bind_group_layout_entry;
+
+    _bind_group_layout = wgpuDeviceCreateBindGroupLayout(_device, &bind_group_layout_desc);
+    if (!_bind_group_layout)
+    {
+        spdlog::error("Failed to create bind group layout");
+        return std::unexpected(make_error_code(RenderError::InitializationFailed));
+    }
+
+    // Pipeline layout with bind group
+    WGPUPipelineLayoutDescriptor pipeline_layout_desc = {};
+    pipeline_layout_desc.bindGroupLayoutCount = 1;
+    pipeline_layout_desc.bindGroupLayouts = &_bind_group_layout;
+
+    WGPUPipelineLayout pipeline_layout = wgpuDeviceCreatePipelineLayout(_device, &pipeline_layout_desc);
+    if (!pipeline_layout)
+    {
+        wgpuBindGroupLayoutRelease(_bind_group_layout);
+        _bind_group_layout = nullptr;
+        spdlog::error("Failed to create pipeline layout");
+        return std::unexpected(make_error_code(RenderError::InitializationFailed));
+    }
+
     // Vertex buffer layout
     WGPUVertexAttribute vertex_attribute = {};
     vertex_attribute.format = WGPUVertexFormat_Float32x3;
@@ -282,6 +351,7 @@ WgpuDevice::create_render_pipeline()
     WGPURenderPipelineDescriptor pipeline_desc = {};
     pipeline_desc.nextInChain = nullptr;
     pipeline_desc.label = make_string_view("Basic Render Pipeline");
+    pipeline_desc.layout = pipeline_layout;
 
     // Vertex state
     pipeline_desc.vertex.module = _shader_module;
@@ -309,6 +379,10 @@ WgpuDevice::create_render_pipeline()
     pipeline_desc.depthStencil = nullptr;
 
     _render_pipeline = wgpuDeviceCreateRenderPipeline(_device, &pipeline_desc);
+    
+    // Release pipeline layout (retained by pipeline)
+    wgpuPipelineLayoutRelease(pipeline_layout);
+    
     if (!_render_pipeline)
     {
         spdlog::error("Failed to create render pipeline");
@@ -334,6 +408,10 @@ void WgpuDevice::cleanup()
     // Release shader and pipeline resources
     if (_render_pipeline) { wgpuRenderPipelineRelease(_render_pipeline); _render_pipeline = nullptr; }
     if (_shader_module) { wgpuShaderModuleRelease(_shader_module); _shader_module = nullptr; }
+
+    // Release bind group resources
+    if (_current_bind_group) { wgpuBindGroupRelease(_current_bind_group); _current_bind_group = nullptr; }
+    if (_bind_group_layout) { wgpuBindGroupLayoutRelease(_bind_group_layout); _bind_group_layout = nullptr; }
 
     // Release any pending surface texture
     if (_current_surface_texture) { wgpuTextureRelease(_current_surface_texture); _current_surface_texture = nullptr; }
@@ -406,6 +484,100 @@ WgpuDevice::create_index_buffer(std::span<const std::byte> data)
 
     // Return handle (use buffer index as ID)
     return Buffer(static_cast<uint64_t>(_buffers.size() - 1), BufferType::Index);
+}
+
+std::expected<Buffer, std::error_code>
+WgpuDevice::create_uniform_buffer(size_t size)
+{
+    if (size == 0 || !_device)
+    {
+        return std::unexpected(make_error_code(RenderError::BufferCreationFailed));
+    }
+
+    // WebGPU requires uniform buffer size to be multiple of 16 bytes
+    size_t aligned_size = (size + 15) & ~15;
+
+    WGPUBufferDescriptor buffer_desc = {};
+    buffer_desc.nextInChain = nullptr;
+    buffer_desc.label = make_string_view("Uniform Buffer");
+    buffer_desc.usage = WGPUBufferUsage_Uniform | WGPUBufferUsage_CopyDst;
+    buffer_desc.size = aligned_size;
+    buffer_desc.mappedAtCreation = false;
+
+    WGPUBuffer wgpu_buffer = wgpuDeviceCreateBuffer(_device, &buffer_desc);
+    if (!wgpu_buffer)
+    {
+        return std::unexpected(make_error_code(RenderError::BufferCreationFailed));
+    }
+
+    // Store buffer for cleanup
+    _buffers.push_back(wgpu_buffer);
+
+    // Return handle (use buffer index as ID)
+    return Buffer(static_cast<uint64_t>(_buffers.size() - 1), BufferType::Uniform);
+}
+
+std::expected<void, std::error_code>
+WgpuDevice::update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data)
+{
+    if (data.empty() || !_queue)
+    {
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    // Validate buffer ID
+    if (buffer.id() >= _buffers.size())
+    {
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    WGPUBuffer wgpu_buffer = _buffers[buffer.id()];
+    if (!wgpu_buffer)
+    {
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    // Upload data to uniform buffer
+    wgpuQueueWriteBuffer(_queue, wgpu_buffer, 0, data.data(), data.size());
+
+    return {};
+}
+
+void WgpuDevice::set_uniform_buffer(const Buffer& buffer)
+{
+    if (!_device || !_bind_group_layout || buffer.id() >= _buffers.size())
+    {
+        return;
+    }
+
+    WGPUBuffer wgpu_buffer = _buffers[buffer.id()];
+    if (!wgpu_buffer)
+    {
+        return;
+    }
+
+    // Create bind group entry for the uniform buffer
+    WGPUBindGroupEntry bind_group_entry = {};
+    bind_group_entry.binding = 0;
+    bind_group_entry.buffer = wgpu_buffer;
+    bind_group_entry.offset = 0;
+    bind_group_entry.size = WGPU_WHOLE_SIZE;
+
+    // Create bind group
+    WGPUBindGroupDescriptor bind_group_desc = {};
+    bind_group_desc.nextInChain = nullptr;
+    bind_group_desc.label = make_string_view("Uniform Bind Group");
+    bind_group_desc.layout = _bind_group_layout;
+    bind_group_desc.entryCount = 1;
+    bind_group_desc.entries = &bind_group_entry;
+
+    // Release old bind group if exists
+    if (_current_bind_group)
+    {
+        wgpuBindGroupRelease(_current_bind_group);
+    }
+
+    _current_bind_group = wgpuDeviceCreateBindGroup(_device, &bind_group_desc);
 }
 
 std::expected<void, std::error_code>
@@ -483,6 +655,13 @@ WgpuDevice::draw_indexed(const Buffer& vertex_buffer,
 
     // Set pipeline and buffers
     wgpuRenderPassEncoderSetPipeline(pass, _render_pipeline);
+    
+    // Bind uniform buffer if set
+    if (_current_bind_group)
+    {
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, _current_bind_group, 0, nullptr);
+    }
+    
     wgpuRenderPassEncoderSetVertexBuffer(pass, 0, wgpu_vertex_buffer, 0, WGPU_WHOLE_SIZE);
     wgpuRenderPassEncoderSetIndexBuffer(pass, wgpu_index_buffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
 
