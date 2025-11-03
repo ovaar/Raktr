@@ -68,12 +68,12 @@ public:
     /*!
      * @brief Get current window width in pixels.
      */
-    virtual uint32_t width() const = 0;
+    [[nodiscard]] virtual uint32_t width() const = 0;
 
     /*!
      * @brief Get current window height in pixels.
      */
-    virtual uint32_t height() const = 0;
+    [[nodiscard]] virtual uint32_t height() const = 0;
 
     /*!
      * @brief Get native platform window handle.
@@ -86,7 +86,7 @@ public:
      * 
      * @return Opaque pointer to native window handle.
      */
-    virtual void* native_handle() const = 0;
+    [[nodiscard]] virtual void* native_handle() const = 0;
 
 protected:
     Window() = default;
