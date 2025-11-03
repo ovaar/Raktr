@@ -2,6 +2,7 @@ from conan import ConanFile
 from conan.tools.files import get
 from conan.tools.files import collect_libs
 
+from pathlib import Path
 
 class wgpu_nativeRecipe(ConanFile):
     name = "wgpu-native"
@@ -36,6 +37,16 @@ class wgpu_nativeRecipe(ConanFile):
 
     def package(self):
         get(self, url=self.get_prebuilt_url(), destination=self.package_folder)
+
+        if self.settings.os == "Windows":
+            bin_dir: Path = Path(self.package_folder) / "bin"
+            lib_dir: Path = Path(self.package_folder) / "lib"
+            bin_dir.mkdir(parents=True, exist_ok=True)
+            for dll in lib_dir.glob("*.dll"):
+                dll.rename(bin_dir / dll.name)
+            for pdb in lib_dir.glob("*.pdb"):
+                pdb.rename(bin_dir / pdb.name)
+
 
     def package_info(self):
         self.cpp_info.libs = collect_libs(self)
