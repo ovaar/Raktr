@@ -8,9 +8,11 @@
 
 #include "backend/wgpu/wgpu_device.h"
 #include "window/window.h"
+#include "math/transform.h"
 #include <gtest/gtest.h>
 #include <thread>
-#include <cmath>
+#include <glm/glm.hpp>
+#include <glm/gtc/constants.hpp>
 
 using namespace raktr::render;
 using namespace raktr::render::backend;
@@ -164,68 +166,31 @@ TEST(VisualTest, DISABLED_SpinningCube)
     int frame_count = 0;
     while (!window->should_close())
     {
-        // Compute rotation matrix around Y axis (column-major)
-        float c = std::cos(angle);
-        float s = std::sin(angle);
-        
-        float rotation[16] = {
-            c,    0.0f, s,    0.0f,  // Column 0 (rotated X axis)
-            0.0f, 1.0f, 0.0f, 0.0f,  // Column 1 (Y axis unchanged)
-            -s,   0.0f, c,    0.0f,  // Column 2 (rotated Z axis)
-            0.0f, 0.0f, 0.0f, 1.0f   // Column 3
-        };
+        // Create transformation matrices using GLM
+        auto model = math::create_rotation(angle, glm::vec3(0.0f, 1.0f, 0.0f));
+        auto view = math::create_look_at(
+            glm::vec3(0.0f, 0.0f, 3.0f),  // Camera position
+            glm::vec3(0.0f, 0.0f, 0.0f),  // Look at origin
+            glm::vec3(0.0f, 1.0f, 0.0f)   // Up vector
+        );
+        auto projection = math::create_perspective(
+            glm::radians(45.0f),                              // FOV
+            static_cast<float>(config.width) / config.height, // Aspect ratio
+            0.1f,                                             // Near plane
+            100.0f                                            // Far plane
+        );
 
-        // Create view matrix (camera at z=3 looking at origin) - column-major
-        float view[16] = {
-            1.0f, 0.0f, 0.0f, 0.0f,  // Column 0
-            0.0f, 1.0f, 0.0f, 0.0f,  // Column 1
-            0.0f, 0.0f, 1.0f, 0.0f,  // Column 2
-            0.0f, 0.0f, -3.0f, 1.0f  // Column 3 (translation)
-        };
-
-        // Create perspective projection matrix - column-major
-        float aspect = static_cast<float>(config.width) / static_cast<float>(config.height);
-        float fov = 45.0f * 3.14159265359f / 180.0f;  // 45 degrees in radians
-        float near = 0.1f;
-        float far = 100.0f;
-        float f = 1.0f / std::tan(fov / 2.0f);
-        
-        float projection[16] = {
-            f / aspect, 0.0f, 0.0f,  0.0f,                                      // Column 0
-            0.0f,       f,    0.0f,  0.0f,                                      // Column 1
-            0.0f,       0.0f, (far + near) / (near - far), -1.0f,               // Column 2
-            0.0f,       0.0f, (2.0f * far * near) / (near - far), 0.0f          // Column 3
-        };
-
-        // Compute MVP = projection * view * rotation (column-major multiplication)
-        // First compute temp = view * rotation
-        float temp[16];
-        for (int col = 0; col < 4; ++col) {
-            for (int row = 0; row < 4; ++row) {
-                temp[col*4 + row] = 0.0f;
-                for (int k = 0; k < 4; ++k) {
-                    temp[col*4 + row] += view[k*4 + row] * rotation[col*4 + k];
-                }
-            }
-        }
-
-        // Then compute mvp = projection * temp
-        float mvp[16];
-        for (int col = 0; col < 4; ++col) {
-            for (int row = 0; row < 4; ++row) {
-                mvp[col*4 + row] = 0.0f;
-                for (int k = 0; k < 4; ++k) {
-                    mvp[col*4 + row] += projection[k*4 + row] * temp[col*4 + k];
-                }
-            }
-        }
+        // Compute MVP = projection * view * model
+        glm::mat4 mvp = projection * view * model;
         
         // Update angle for next frame (assuming ~60 FPS, so ~0.0167 seconds per frame)
         angle += rotation_speed * 0.016f;
 
-        // Update uniform buffer with new MVP
-        auto mvp_data = std::as_bytes(std::span(mvp));
-        auto update_result = device->update_uniform_buffer(uniform_buffer.value(), mvp_data);
+        // Update uniform buffer with new MVP using GLM helper
+        auto update_result = device->update_uniform_buffer(
+            uniform_buffer.value(), 
+            math::matrix_to_bytes(mvp)
+        );
         ASSERT_TRUE(update_result.has_value()) << "Failed to update uniform buffer";
 
         // Rebind the uniform buffer to ensure it sees the updated data
