@@ -26,7 +26,6 @@ target_link_libraries(
   ${PROJECT_NAME}_render
   PUBLIC
     glm::glm
-  PRIVATE 
     spdlog::spdlog
     fmt::fmt
     wgpu-native::wgpu-native
