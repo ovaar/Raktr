@@ -36,7 +36,7 @@ conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Debug
 cd ./raktr/
 
 # Install
-conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_vs.profile -o:a='&:with_tests=True' --build=missing
+conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_cl.profile -o:a='&:with_tests=True' --build=missing
 
 # Configure
 cmake --preset conan-release 
