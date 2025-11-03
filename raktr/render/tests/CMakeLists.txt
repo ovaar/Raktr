@@ -18,8 +18,16 @@ target_include_directories(render_tests
 target_link_libraries(render_tests
         PRIVATE
             raktr_render 
-            wgpu-native::wgpu-native
             GTest::gtest 
             GTest::gtest_main)
+
+if (WIN32)
+  # copy runtime dlls to output directory
+  add_custom_command(TARGET render_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_RUNTIME_DLLS:render_tests>
+    $<TARGET_FILE_DIR:render_tests>
+    COMMAND_EXPAND_LISTS)
+endif()
 
 gtest_discover_tests(render_tests DISCOVERY_MODE PRE_TEST)
