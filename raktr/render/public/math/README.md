@@ -173,7 +173,84 @@ model = glm::scale(model, glm::vec3(2.0f));
 GLM uses column-major matrices, which matches WGSL/GLSL shader expectations.
 Matrix multiplication order: `projection * view * model`
 
+---
+
+## Coordinate System Utilities
+
+The math library includes right-handed coordinate system utilities and strongly-typed coordinate space separation.
+
+### Coordinate System (`coordinate_system.h`)
+
+Provides utilities for working with right-handed coordinate systems (OpenGL/Vulkan convention):
+
+```cpp
+#include "math/coordinate_system.h"
+
+using namespace raktr::render::math;
+
+// Standard basis vectors
+glm::vec3 right = CoordinateBasis::Standard::right();     // (1, 0, 0)
+glm::vec3 up = CoordinateBasis::Standard::up();           // (0, 1, 0)
+glm::vec3 forward = CoordinateBasis::Standard::forward(); // (0, 0, -1)
+
+// Validate handedness
+bool is_valid = CoordinateBasis::is_right_handed(right, up, forward);
+
+// Compute basis vectors from two axes
+glm::vec3 computed_forward = CoordinateBasis::forward_from_right_up(right, up);
+```
+
+**Convention:**
+- Right-handed coordinate system
+- Right = +X, Up = +Y, Forward = -Z (toward viewer in OpenGL/Vulkan)
+- All cross products account for -Z forward convention
+
+### Coordinate Spaces (`coordinate_spaces.h`)
+
+Strongly-typed coordinate space separation prevents mixing vectors from different coordinate systems:
+
+```cpp
+#include "math/coordinate_spaces.h"
+
+using namespace raktr::render::math::spaces;
+
+// Create vectors in different spaces
+LocalVector local_pos(1.0f, 2.0f, 3.0f);
+WorldVector world_pos(5.0f, 10.0f, -3.0f);
+
+// ✅ Same-space operations work
+LocalVector offset(0.5f, 0.0f, 0.0f);
+LocalVector combined = local_pos + offset;
+
+// ❌ Won't compile - different spaces
+// auto bad = local_pos + world_pos;
+
+// Transform between spaces
+LocalToWorld model_transform(model_matrix);
+WorldVector transformed = model_transform * local_pos;
+```
+
+**Available Spaces:**
+- `LocalSpace` - Object's local coordinate system
+- `WorldSpace` - Global scene coordinates
+- `ViewSpace` - Camera-relative coordinates
+- `ClipSpace` - Post-projection homogeneous coordinates
+- `NDCSpace` - Normalized Device Coordinates [-1,1]
+- `ScreenSpace` - Pixel/viewport coordinates
+- `TangentSpace` - Per-vertex surface space (normal mapping)
+
+**Benefits:**
+- Compile-time space checking
+- Zero runtime overhead
+- Self-documenting code
+- Prevents common graphics bugs
+
+See [Coordinate Space Examples](coordinate_spaces_examples.md) for comprehensive usage patterns.
+
+---
+
 ## See Also
 
+- [Coordinate Space Examples](coordinate_spaces_examples.md) - Practical examples and patterns
 - [GLM Documentation](https://github.com/g-truc/glm)
 - Full example: `raktr/render/tests/test_visual_triangle.cpp` (DISABLED_SpinningCube test)
