@@ -4,9 +4,8 @@ The next generation modern c++ 3D game engine — Where Worlds Take Shape.
 
 ## Setup
 
-```sh
-pip install uv
-```
+* Install [LLVM](https://releases.llvm.org/)
+* Install [uv](https://docs.astral.sh/uv/) `pip install uv`
 
 ### Activate venv
 
@@ -39,7 +38,7 @@ cd ./raktr/
 conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_cl.profile -o:a='&:with_tests=True' --build=missing
 
 # Configure
-cmake --preset conan-release 
+cmake --preset conan-release -DENABLE_IWYU=ON
 
 # Build
 cmake --build --preset conan-release
