@@ -4,12 +4,16 @@ This document demonstrates practical usage patterns for the strongly-typed coord
 
 ## Table of Contents
 
-- [Basic Usage](#basic-usage)
-- [Transforming Between Spaces](#transforming-between-spaces)
-- [Composing Transformations](#composing-transformations)
-- [Direction vs Position Vectors](#direction-vs-position-vectors)
-- [Real-World MVP Pipeline](#real-world-mvp-pipeline)
-- [Preventing Common Bugs](#preventing-common-bugs)
+- [Coordinate Space Examples](#coordinate-space-examples)
+  - [Table of Contents](#table-of-contents)
+  - [Basic Usage](#basic-usage)
+  - [Transforming Between Spaces](#transforming-between-spaces)
+  - [Composing Transformations](#composing-transformations)
+  - [Direction vs Position Vectors](#direction-vs-position-vectors)
+  - [Real-World MVP Pipeline](#real-world-mvp-pipeline)
+  - [Preventing Common Bugs](#preventing-common-bugs)
+  - [Advanced Pattern: Per-Object Local Spaces](#advanced-pattern-per-object-local-spaces)
+  - [Summary](#summary)
 
 ---
 
