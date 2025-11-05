@@ -30,7 +30,11 @@ target_link_libraries(
     fmt::fmt
     wgpu-native::wgpu-native
     glfw)
-    
+
+if(ENABLE_IWYU)
+  add_iwyu_for_target(${PROJECT_NAME}_render)
+endif()
+
 if(BUILD_TESTS)
   enable_testing()
   add_subdirectory(tests)

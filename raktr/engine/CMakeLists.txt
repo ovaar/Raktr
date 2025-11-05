@@ -29,9 +29,13 @@ target_link_libraries(
   ${PROJECT_NAME}_engine
   PUBLIC
     ${PROJECT_NAME}_render
-    glm::glm 
+    glm::glm
     spdlog::spdlog
     fmt::fmt)
+
+if(ENABLE_IWYU)
+  add_iwyu_for_target(${PROJECT_NAME}_engine)
+endif()
 
 if(BUILD_TESTS)
   enable_testing()

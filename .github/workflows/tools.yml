@@ -1,0 +1,54 @@
+name: tools
+
+on:
+  push:
+    branches:
+      - analyzer
+
+jobs:
+  iwyu:
+    timeout-minutes: 60
+
+    env:
+      IWYU: "0.25"
+      LLVM: "20"
+
+    runs-on: ubuntu-latest
+    continue-on-error: true
+
+    steps:
+    - uses: actions/checkout@v5
+    - name: Install llvm/clang
+      run: |
+        wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh \
+            && chmod +x /tmp/llvm.sh \
+            && /tmp/llvm.sh ${LLVM_VERSION} all
+        update-alternatives --install /usr/bin/cc cc /usr/bin/clang-${LLVM_VERSION} 1000 \
+            && update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-${LLVM_VERSION} 1000 \
+            && update-alternatives --install /usr/bin/gcc gcc ${GCC_INSTALL_PREFIX}/bin/gcc 50 \
+            && update-alternatives --install /usr/bin/g++ g++ ${GCC_INSTALL_PREFIX}/bin/g++ 50
+
+    - name: Compile iwyu
+      working-directory: build
+      run: |
+        git clone https://github.com/include-what-you-use/include-what-you-use.git --branch $IWYU --depth 1
+        mkdir include-what-you-use/build
+        cd include-what-you-use/build
+        cmake -DCMAKE_C_COMPILER=clang-$LLVM \
+              -DCMAKE_CXX_COMPILER=clang++-$LLVM \
+              -DCMAKE_INSTALL_PREFIX=./ \
+              ..
+        make -j4
+        bin/include-what-you-use --version
+
+    - name: Compile tests
+      working-directory: build
+      run: |
+        export PATH=$PATH:${GITHUB_WORKSPACE}/build/include-what-you-use/build/bin
+        cmake -DCMAKE_C_COMPILER=clang-$LLVM \
+              -DCMAKE_CXX_COMPILER=clang++-$LLVM \
+              -DIWYU_ENABLED=ON \
+              -DCMAKE_CXX_INCLUDE_WHAT_YOU_USE="include-what-you-use;-Xiwyu;--mapping_file=${GITHUB_WORKSPACE}/raktr.imp;-Xiwyu;--no_fwd_decls;-Xiwyu;--verbose=1" \
+              ..
+        make -j4
+
