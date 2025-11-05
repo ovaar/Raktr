@@ -4,6 +4,8 @@ from conan.tools.files import collect_libs
 
 from pathlib import Path
 
+required_conan_version = ">=2.1"
+
 class wgpu_nativeRecipe(ConanFile):
     name = "wgpu-native"
     package_type = "shared-library"
