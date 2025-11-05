@@ -56,7 +56,7 @@ namespace raktr::render
          * @param config Rendering configuration.
          * @return Success or error code.
          */
-        std::expected<void, std::error_code> initialize(const RenderConfig& config);
+        [[nodiscard]] std::expected<void, std::error_code> initialize(const RenderConfig& config);
 
         /*!
          * @brief Shutdown the render context and free resources.
@@ -67,12 +67,12 @@ namespace raktr::render
          * @brief Get the initialized device.
          * @return Pointer to the device, or nullptr if not initialized.
          */
-        Device* device() const;
+        [[nodiscard]] Device* device() const;
 
         /*!
          * @brief Check if context is successfully initialized.
          */
-        bool is_initialized() const;
+        [[nodiscard]] bool is_initialized() const;
 
     private:
         struct Impl;
@@ -83,7 +83,7 @@ namespace raktr::render
      * @brief Factory function to create a render context.
      * @return Unique pointer to RenderContext.
      */
-    std::unique_ptr<RenderContext> create_render_context();
+    [[nodiscard]] std::unique_ptr<RenderContext> create_render_context();
 
 } // namespace raktr::render
 
