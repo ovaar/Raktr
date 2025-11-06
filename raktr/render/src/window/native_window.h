@@ -70,6 +70,9 @@ public:
 
     // Window interface implementation
     void set_resize_callback(ResizeCallback callback) override;
+    
+    bool is_fullscreen() const override;
+    void set_fullscreen(bool fullscreen) override;
 
 private:
     NativeWindow(void* native_handle, uint32_t width, uint32_t height);
@@ -78,6 +81,7 @@ private:
     uint32_t _width = 0;
     uint32_t _height = 0;
     bool _should_close = false;
+    bool _is_fullscreen = false;
     ResizeCallback _resize_callback;
 };
 

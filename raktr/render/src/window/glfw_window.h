@@ -41,6 +41,9 @@ public:
     void* native_handle() const override;
 
     void set_resize_callback(ResizeCallback callback) override;
+    
+    bool is_fullscreen() const override;
+    void set_fullscreen(bool fullscreen) override;
 
 private:
     explicit GLFWWindow(GLFWwindow* window);
@@ -51,6 +54,12 @@ private:
     uint32_t _width = 0;
     uint32_t _height = 0;
     ResizeCallback _resize_callback;
+    
+    // Windowed mode state (for restoring from fullscreen)
+    int _windowed_x = 0;
+    int _windowed_y = 0;
+    uint32_t _windowed_width = 0;
+    uint32_t _windowed_height = 0;
 
     static int _instance_count;
     static bool _glfw_initialized;

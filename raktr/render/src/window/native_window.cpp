@@ -93,4 +93,16 @@ void NativeWindow::set_resize_callback(ResizeCallback callback)
     _resize_callback = std::move(callback);
 }
 
+bool NativeWindow::is_fullscreen() const
+{
+    return _is_fullscreen;
+}
+
+void NativeWindow::set_fullscreen(bool fullscreen)
+{
+    // NativeWindow doesn't own the window, so it can't actually switch modes.
+    // We just update the flag. External code is responsible for the actual switch.
+    _is_fullscreen = fullscreen;
+}
+
 } // namespace raktr::render

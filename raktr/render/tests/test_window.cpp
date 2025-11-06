@@ -160,3 +160,58 @@ TEST_F(WindowTest, SetResizeCallback_CanSetAndClearCallback)
     // Callback was set and cleared without crashing
     SUCCEED();
 }
+
+TEST_F(WindowTest, IsFullscreen_InitiallyMatchesConfig)
+{
+    // Arrange - Create windowed window
+    auto config = default_config();
+    config.fullscreen = false;
+    auto result = create_window(config);
+    ASSERT_TRUE(result.has_value());
+    auto& window = *result;
+
+    // Assert
+    EXPECT_FALSE(window->is_fullscreen()) << "Windowed window should report not fullscreen";
+}
+
+TEST_F(WindowTest, SetFullscreen_CanToggleFullscreen)
+{
+    // Arrange
+    auto config = default_config();
+    config.fullscreen = false;
+    auto result = create_window(config);
+    ASSERT_TRUE(result.has_value());
+    auto& window = *result;
+
+    // Initially windowed
+    EXPECT_FALSE(window->is_fullscreen());
+
+    // Act - Switch to fullscreen
+    EXPECT_NO_THROW(window->set_fullscreen(true));
+
+    // Assert
+    EXPECT_TRUE(window->is_fullscreen()) << "Window should be fullscreen after set_fullscreen(true)";
+
+    // Act - Switch back to windowed
+    EXPECT_NO_THROW(window->set_fullscreen(false));
+
+    // Assert
+    EXPECT_FALSE(window->is_fullscreen()) << "Window should be windowed after set_fullscreen(false)";
+}
+
+TEST_F(WindowTest, SetFullscreen_NoOpWhenAlreadyInState)
+{
+    // Arrange
+    auto config = default_config();
+    auto result = create_window(config);
+    ASSERT_TRUE(result.has_value());
+    auto& window = *result;
+
+    bool is_fullscreen = window->is_fullscreen();
+
+    // Act - Set to current state
+    EXPECT_NO_THROW(window->set_fullscreen(is_fullscreen));
+
+    // Assert - State unchanged
+    EXPECT_EQ(window->is_fullscreen(), is_fullscreen);
+}

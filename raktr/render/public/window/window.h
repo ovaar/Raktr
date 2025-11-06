@@ -111,6 +111,28 @@ public:
      */
     virtual void set_resize_callback(ResizeCallback callback) = 0;
 
+    /*!
+     * @brief Check if window is currently in fullscreen mode.
+     * @return True if fullscreen, false if windowed.
+     */
+    [[nodiscard]] virtual bool is_fullscreen() const = 0;
+
+    /*!
+     * @brief Switch between fullscreen and windowed mode.
+     * 
+     * For GLFW windows, automatically saves/restores windowed position and size.
+     * For native windows, sets internal flag but external code must handle actual switch.
+     * 
+     * @param fullscreen True for fullscreen, false for windowed.
+     * 
+     * @example
+     * // Toggle fullscreen on Alt+Enter
+     * if (key == KEY_ENTER && alt_pressed) {
+     *     window->set_fullscreen(!window->is_fullscreen());
+     * }
+     */
+    virtual void set_fullscreen(bool fullscreen) = 0;
+
 protected:
     Window() = default;
 };
@@ -141,6 +163,12 @@ protected:
  *     // Recreate swapchain, update viewport, etc.
  *     // Called automatically when user resizes window
  * });
+ * 
+ * // Toggle fullscreen on Alt+Enter
+ * // (Pseudocode - actual input handling depends on your input system)
+ * if (alt_enter_pressed) {
+ *     window->set_fullscreen(!window->is_fullscreen());
+ * }
  * 
  * while (!window->should_close()) {
  *     window->poll_events();
