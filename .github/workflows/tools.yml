@@ -23,9 +23,10 @@ jobs:
     - uses: actions/checkout@v5
     - name: Install llvm/clang
       run: |
-        sudo wget -O /tmp/llvm.sh https://apt.llvm.org/llvm.sh \
-            && chmod +x /tmp/llvm.sh \
-            && /tmp/llvm.sh ${LLVM_VERSION} all
+        sudo wget -O ./llvm.sh https://apt.llvm.org/llvm.sh \
+            && chmod +x ./llvm.sh \
+            && ./llvm.sh ${LLVM_VERSION} all
+            && rm ./llvm.sh
         update-alternatives --install /usr/bin/cc cc /usr/bin/clang-${LLVM_VERSION} 1000 \
             && update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-${LLVM_VERSION} 1000 \
             && update-alternatives --install /usr/bin/gcc gcc ${GCC_INSTALL_PREFIX}/bin/gcc 50 \
