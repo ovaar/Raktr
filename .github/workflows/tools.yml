@@ -25,7 +25,7 @@ jobs:
       run: |
         sudo wget -O ./llvm.sh https://apt.llvm.org/llvm.sh \
             && sudo chmod +x ./llvm.sh \
-            && ./llvm.sh ${LLVM_VERSION} all \
+            && sudo ./llvm.sh ${LLVM_VERSION} all \
             && rm ./llvm.sh
 
     - name: Compile iwyu
