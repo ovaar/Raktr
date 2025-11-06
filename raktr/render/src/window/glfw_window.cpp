@@ -30,6 +30,12 @@ GLFWWindow::GLFWWindow(GLFWwindow* window)
         glfwGetFramebufferSize(_window, &w, &h);
         _width = static_cast<uint32_t>(w);
         _height = static_cast<uint32_t>(h);
+        
+        // Set user pointer for callback access
+        glfwSetWindowUserPointer(_window, this);
+        
+        // Set GLFW framebuffer size callback
+        glfwSetFramebufferSizeCallback(_window, framebuffer_size_callback);
     }
     ++_instance_count;
 }
@@ -38,8 +44,7 @@ GLFWWindow::~GLFWWindow()
 {
     if (_window)
     {
-        glfwDestroyWindow(_window);
-        _window = nullptr;
+        glfwDestroyWindow(std::exchange(_window, nullptr));
     }
 
     --_instance_count;
@@ -138,6 +143,28 @@ void* GLFWWindow::native_handle() const
 #else
     return nullptr;
 #endif
+}
+
+void GLFWWindow::set_resize_callback(ResizeCallback callback)
+{
+    _resize_callback = std::move(callback);
+}
+
+void GLFWWindow::framebuffer_size_callback(GLFWwindow* window, int width, int height)
+{
+    auto* self = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+    if (self)
+    {
+        // Update cached dimensions
+        self->_width = static_cast<uint32_t>(width);
+        self->_height = static_cast<uint32_t>(height);
+        
+        // Invoke user callback if set
+        if (self->_resize_callback)
+        {
+            self->_resize_callback(self->_width, self->_height);
+        }
+    }
 }
 
 } // namespace detail

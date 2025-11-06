@@ -125,3 +125,38 @@ TEST_F(WindowTest, MultipleWindows_CanCoexist)
     EXPECT_NE(window1->get(), window2->get());
     EXPECT_NE(window1->get()->native_handle(), window2->get()->native_handle());
 }
+
+TEST_F(WindowTest, SetResizeCallback_WithNullCallback_DoesNotCrash)
+{
+    // Arrange
+    auto config = default_config();
+    auto result = create_window(config);
+    ASSERT_TRUE(result.has_value());
+    auto& window = *result;
+
+    // Act & Assert - Should not crash
+    EXPECT_NO_THROW(window->set_resize_callback(nullptr));
+}
+
+TEST_F(WindowTest, SetResizeCallback_CanSetAndClearCallback)
+{
+    // Arrange
+    auto config = default_config();
+    auto result = create_window(config);
+    ASSERT_TRUE(result.has_value());
+    auto& window = *result;
+
+    bool callback_called = false;
+    auto callback = [&callback_called](uint32_t, uint32_t) {
+        callback_called = true;
+    };
+
+    // Act - Set callback
+    EXPECT_NO_THROW(window->set_resize_callback(callback));
+    
+    // Act - Clear callback
+    EXPECT_NO_THROW(window->set_resize_callback(nullptr));
+    
+    // Callback was set and cleared without crashing
+    SUCCEED();
+}

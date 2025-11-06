@@ -40,12 +40,17 @@ public:
     uint32_t height() const override;
     void* native_handle() const override;
 
+    void set_resize_callback(ResizeCallback callback) override;
+
 private:
     explicit GLFWWindow(GLFWwindow* window);
+    
+    static void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 
     GLFWwindow* _window = nullptr;
     uint32_t _width = 0;
     uint32_t _height = 0;
+    ResizeCallback _resize_callback;
 
     static int _instance_count;
     static bool _glfw_initialized;

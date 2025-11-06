@@ -75,11 +75,22 @@ void NativeWindow::update_dimensions(uint32_t width, uint32_t height)
 {
     _width = width;
     _height = height;
+    
+    // Invoke resize callback if set
+    if (_resize_callback)
+    {
+        _resize_callback(width, height);
+    }
 }
 
 void NativeWindow::request_close()
 {
     _should_close = true;
+}
+
+void NativeWindow::set_resize_callback(ResizeCallback callback)
+{
+    _resize_callback = std::move(callback);
 }
 
 } // namespace raktr::render

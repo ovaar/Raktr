@@ -68,6 +68,9 @@ public:
      */
     void request_close();
 
+    // Window interface implementation
+    void set_resize_callback(ResizeCallback callback) override;
+
 private:
     NativeWindow(void* native_handle, uint32_t width, uint32_t height);
 
@@ -75,6 +78,7 @@ private:
     uint32_t _width = 0;
     uint32_t _height = 0;
     bool _should_close = false;
+    ResizeCallback _resize_callback;
 };
 
 } // namespace raktr::render::detail

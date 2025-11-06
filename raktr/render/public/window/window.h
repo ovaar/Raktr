@@ -11,9 +11,17 @@
 #include <system_error>
 #include <cstdint>
 #include <memory>
+#include <functional>
 
 namespace raktr::render
 {
+
+/*!
+ * @brief Callback function type for window resize events.
+ * @param width New width in pixels.
+ * @param height New height in pixels.
+ */
+using ResizeCallback = std::function<void(uint32_t width, uint32_t height)>;
 
 /*!
  * @brief Configuration for window creation.
@@ -88,6 +96,21 @@ public:
      */
     [[nodiscard]] virtual void* native_handle() const = 0;
 
+    /*!
+     * @brief Set callback to be invoked when window is resized.
+     * 
+     * The callback will be invoked with new dimensions whenever the window
+     * is resized by the user or programmatically.
+     * 
+     * @param callback Function to call on resize, or nullptr to clear callback.
+     * 
+     * @example
+     * window->set_resize_callback([](uint32_t w, uint32_t h) {
+     *     // Recreate swapchain, update viewport, etc.
+     * });
+     */
+    virtual void set_resize_callback(ResizeCallback callback) = 0;
+
 protected:
     Window() = default;
 };
@@ -112,6 +135,12 @@ protected:
  *     return;
  * }
  * auto& window = *window_result;
+ * 
+ * // Set up resize callback to handle window size changes
+ * window->set_resize_callback([](uint32_t width, uint32_t height) {
+ *     // Recreate swapchain, update viewport, etc.
+ *     // Called automatically when user resizes window
+ * });
  * 
  * while (!window->should_close()) {
  *     window->poll_events();
