@@ -129,3 +129,18 @@ TEST_F(NativeWindowTest, MultipleInstances_CanShareHandle)
     EXPECT_EQ(window1.value()->native_handle(), window2.value()->native_handle())
         << "Multiple NativeWindow instances can wrap the same handle";
 }
+
+TEST_F(NativeWindowTest, SetResizeCallback_CanSetCallback)
+{
+    auto result = create_window_from_native(_test_handle, 800, 600);
+    ASSERT_TRUE(result.has_value());
+    auto& window = result.value();
+
+    bool callback_called = false;
+    window->set_resize_callback([&callback_called](uint32_t, uint32_t) {
+        callback_called = true;
+    });
+
+    // Callback set successfully (test that it doesn't crash)
+    EXPECT_FALSE(callback_called) << "Callback should not be called yet";
+}
