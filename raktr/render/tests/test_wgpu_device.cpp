@@ -330,3 +330,157 @@ TEST_F(WgpuNativeWindowTest, ResizeCallback_MultipleResizes_AllSucceed)
     device->clear();
     EXPECT_NO_THROW(device->present());
 }
+
+// ============================================================================
+// Test: Aspect Ratio Support
+// ============================================================================
+
+TEST_F(WgpuDeviceTest, AspectRatio_DefaultIs16_9)
+{
+    auto result = WgpuDevice::create(_window.get(), false);
+    ASSERT_TRUE(result.has_value());
+    
+    auto& device = result.value();
+    EXPECT_EQ(device->aspect_ratio(), AspectRatio::Ratio_16_9);
+}
+
+TEST_F(WgpuDeviceTest, SetAspectRatio_UpdatesAspectRatio)
+{
+    auto result = WgpuDevice::create(_window.get(), false);
+    ASSERT_TRUE(result.has_value());
+    
+    auto& device = result.value();
+    
+    // Test setting different aspect ratios
+    device->set_aspect_ratio(AspectRatio::Ratio_4_3);
+    EXPECT_EQ(device->aspect_ratio(), AspectRatio::Ratio_4_3);
+    
+    device->set_aspect_ratio(AspectRatio::Ratio_21_9);
+    EXPECT_EQ(device->aspect_ratio(), AspectRatio::Ratio_21_9);
+    
+    device->set_aspect_ratio(AspectRatio::Auto);
+    EXPECT_EQ(device->aspect_ratio(), AspectRatio::Auto);
+}
+
+TEST_F(WgpuDeviceTest, SetAspectRatio_RecalculatesViewport)
+{
+    auto result = WgpuDevice::create(_window.get(), false);
+    ASSERT_TRUE(result.has_value());
+    
+    auto& device = result.value();
+    
+    // Get initial viewport (16:9 default with 800x600 window)
+    // Note: 800x600 is 4:3, so 16:9 will be letterboxed
+    auto initial_vp = device->viewport();
+    
+    // Change to 21:9 (ultrawide - even more letterboxed)
+    device->set_aspect_ratio(AspectRatio::Ratio_21_9);
+    auto new_vp = device->viewport();
+    
+    // 21:9 should produce a more narrow viewport (more letterboxing)
+    EXPECT_EQ(new_vp.width, 800u); // Width stays same
+    EXPECT_LT(new_vp.height, initial_vp.height); // Height should be smaller
+    EXPECT_GT(new_vp.y, initial_vp.y); // More top/bottom padding
+}
+
+TEST_F(WgpuDeviceTest, Viewport_16_9_WithWideWindow_MatchesWindow)
+{
+    // Create 16:9 window
+    WindowConfig config;
+    config.width = 1920;
+    config.height = 1080;
+    config.resizable = false;
+    
+    auto window_result = create_window(config);
+    ASSERT_TRUE(window_result.has_value());
+    
+    auto device_result = WgpuDevice::create(window_result.value().get(), false);
+    ASSERT_TRUE(device_result.has_value());
+    
+    auto& device = device_result.value();
+    auto vp = device->viewport();
+    
+    // Should use full window (exact match)
+    EXPECT_EQ(vp.x, 0u);
+    EXPECT_EQ(vp.y, 0u);
+    EXPECT_EQ(vp.width, 1920u);
+    EXPECT_EQ(vp.height, 1080u);
+}
+
+TEST_F(WgpuDeviceTest, Viewport_16_9_WithTallWindow_Letterboxes)
+{
+    // Create tall window (1920x1200 is 16:10, taller than 16:9)
+    WindowConfig config;
+    config.width = 1920;
+    config.height = 1200;
+    config.resizable = false;
+    
+    auto window_result = create_window(config);
+    ASSERT_TRUE(window_result.has_value());
+    
+    auto device_result = WgpuDevice::create(window_result.value().get(), false);
+    ASSERT_TRUE(device_result.has_value());
+    
+    auto& device = device_result.value();
+    auto vp = device->viewport();
+    
+    // Should letterbox (black bars top/bottom)
+    EXPECT_EQ(vp.width, 1920u);
+    EXPECT_EQ(vp.height, 1080u);
+    EXPECT_EQ(vp.x, 0u);
+    EXPECT_EQ(vp.y, 60u); // (1200 - 1080) / 2
+}
+
+TEST_F(WgpuDeviceTest, Viewport_Auto_UsesFullWindow)
+{
+    auto result = WgpuDevice::create(_window.get(), false);
+    ASSERT_TRUE(result.has_value());
+    
+    auto& device = result.value();
+    device->set_aspect_ratio(AspectRatio::Auto);
+    
+    auto vp = device->viewport();
+    
+    // Auto mode uses full window
+    EXPECT_EQ(vp.x, 0u);
+    EXPECT_EQ(vp.y, 0u);
+    EXPECT_EQ(vp.width, 800u);
+    EXPECT_EQ(vp.height, 600u);
+}
+
+TEST_F(WgpuDeviceTest, ResizeWithAspectRatio_UpdatesViewport)
+{
+    auto result = WgpuDevice::create(_window.get(), false);
+    ASSERT_TRUE(result.has_value());
+    
+    auto& device = result.value();
+    
+    // Resize window
+    auto resize_result = device->resize(1600, 900);
+    ASSERT_TRUE(resize_result.has_value());
+    
+    auto vp = device->viewport();
+    
+    // Should calculate viewport for 16:9 aspect ratio
+    // 1600x900 is exactly 16:9, so should use full window
+    EXPECT_EQ(vp.width, 1600u);
+    EXPECT_EQ(vp.height, 900u);
+}
+
+TEST_F(WgpuDeviceTest, CustomAspectRatio_UsesCustomValue)
+{
+    auto result = WgpuDevice::create(_window.get(), false);
+    ASSERT_TRUE(result.has_value());
+    
+    auto& device = result.value();
+    
+    // Set custom cinemascope ratio (2.35:1)
+    device->set_aspect_ratio(AspectRatio::Custom, 2.35f);
+    
+    auto vp = device->viewport();
+    
+    // With 800x600 window and 2.35:1 ratio, should letterbox heavily
+    EXPECT_EQ(vp.width, 800u);
+    EXPECT_LT(vp.height, 600u);
+    EXPECT_GT(vp.y, 0u); // Should have top/bottom bars
+}
