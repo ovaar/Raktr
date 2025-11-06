@@ -93,3 +93,12 @@ cmake --build --preset conan-release --clean
 │  └── DX12Backend     (src/backend/directx12/)         │
 └─────────────────────────────────────────────────────────┘
 ```
+
+#### Coordinate System
+
+Raktr uses the Right-hand rule convention:
+- X-axis: Right (thumb)
+- Y-axis: Up (index finger)
+- Z-axis: Forward (middle finger, toward viewer = negative Z in OpenGL/Vulkan)
+
+To verify: Point thumb right (+X), curl fingers up (+Y), middle finger points toward you (-Z).

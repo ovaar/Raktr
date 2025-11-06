@@ -7,7 +7,7 @@
 #define RAKTR_RENDER_WGPU_DEVICE_H
 
 #include "device.h"
-#include "backend/aspect_ratio.h"
+#include "aspect_ratio.h"
 #include <webgpu/webgpu.h>
 #include <memory>
 #include <vector>
