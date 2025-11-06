@@ -4,7 +4,7 @@
  */
 
 #include <gtest/gtest.h>
-#include "backend/aspect_ratio.h"
+#include "aspect_ratio.h"
 
 #include <cstdint>
 
