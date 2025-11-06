@@ -3,7 +3,10 @@ name: tools
 on:
   push:
     branches:
-      - analyzer
+      - develop
+  pull_request:
+  workflow_dispatch: # Allows manual triggering
+
 
 jobs:
   iwyu:
