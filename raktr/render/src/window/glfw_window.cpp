@@ -31,6 +31,14 @@ GLFWWindow::GLFWWindow(GLFWwindow* window)
         _width = static_cast<uint32_t>(w);
         _height = static_cast<uint32_t>(h);
         
+        // Save initial windowed position and size
+        if (!is_fullscreen())
+        {
+            glfwGetWindowPos(_window, &_windowed_x, &_windowed_y);
+            _windowed_width = _width;
+            _windowed_height = _height;
+        }
+        
         // Set user pointer for callback access
         glfwSetWindowUserPointer(_window, this);
         
@@ -164,6 +172,54 @@ void GLFWWindow::framebuffer_size_callback(GLFWwindow* window, int width, int he
         {
             self->_resize_callback(self->_width, self->_height);
         }
+    }
+}
+
+bool GLFWWindow::is_fullscreen() const
+{
+    if (!_window)
+    {
+        return false;
+    }
+    
+    return glfwGetWindowMonitor(_window) != nullptr;
+}
+
+void GLFWWindow::set_fullscreen(bool fullscreen)
+{
+    if (!_window)
+    {
+        return;
+    }
+    
+    // Check if already in desired state
+    if (is_fullscreen() == fullscreen)
+    {
+        return;
+    }
+    
+    if (fullscreen)
+    {
+        // Save windowed position and size before going fullscreen
+        glfwGetWindowPos(_window, &_windowed_x, &_windowed_y);
+        glfwGetWindowSize(_window, reinterpret_cast<int*>(&_windowed_width), 
+                          reinterpret_cast<int*>(&_windowed_height));
+        
+        // Get primary monitor and its video mode
+        GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+        const GLFWvidmode* mode = glfwGetVideoMode(monitor);
+        
+        // Switch to fullscreen
+        glfwSetWindowMonitor(_window, monitor, 0, 0, 
+                            mode->width, mode->height, mode->refreshRate);
+    }
+    else
+    {
+        // Restore windowed mode with saved position and size
+        glfwSetWindowMonitor(_window, nullptr, 
+                            _windowed_x, _windowed_y,
+                            _windowed_width, _windowed_height, 
+                            GLFW_DONT_CARE);
     }
 }
 

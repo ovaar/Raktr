@@ -144,3 +144,33 @@ TEST_F(NativeWindowTest, SetResizeCallback_CanSetCallback)
     // Callback set successfully (test that it doesn't crash)
     EXPECT_FALSE(callback_called) << "Callback should not be called yet";
 }
+
+TEST_F(NativeWindowTest, IsFullscreen_InitiallyFalse)
+{
+    auto result = create_window_from_native(_test_handle, 800, 600);
+    ASSERT_TRUE(result.has_value());
+    auto& window = result.value();
+
+    EXPECT_FALSE(window->is_fullscreen()) 
+        << "NativeWindow should report not fullscreen initially";
+}
+
+TEST_F(NativeWindowTest, SetFullscreen_UpdatesInternalFlag)
+{
+    auto result = create_window_from_native(_test_handle, 800, 600);
+    ASSERT_TRUE(result.has_value());
+    auto& window = result.value();
+
+    // Initially not fullscreen
+    EXPECT_FALSE(window->is_fullscreen());
+
+    // Set fullscreen flag
+    window->set_fullscreen(true);
+    EXPECT_TRUE(window->is_fullscreen()) 
+        << "NativeWindow should report fullscreen after set_fullscreen(true)";
+
+    // Clear fullscreen flag
+    window->set_fullscreen(false);
+    EXPECT_FALSE(window->is_fullscreen()) 
+        << "NativeWindow should report windowed after set_fullscreen(false)";
+}
