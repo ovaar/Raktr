@@ -102,7 +102,8 @@ TEST(VisualTest, DISABLED_SpinningCube)
     ASSERT_TRUE(device_result.has_value()) << "Failed to create WebGPU device";
     
     auto& device = device_result.value();
-    
+
+    device->set_aspect_ratio(AspectRatio::Ratio_16_9);
     window->set_resize_callback([&](uint32_t width, uint32_t height) {
         [[maybe_unused]] auto resize_result = device->resize(width, height);
     });
@@ -243,6 +244,7 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
 
     auto& device = device_result.value();
     
+    device->set_aspect_ratio(AspectRatio::Ratio_16_9);
     window->set_resize_callback([&](uint32_t width, uint32_t height) {
         [[maybe_unused]] auto resize_result = device->resize(width, height);
     });

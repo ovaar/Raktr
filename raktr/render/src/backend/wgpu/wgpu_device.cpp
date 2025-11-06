@@ -63,6 +63,10 @@ WgpuDevice::initialize(Window* window, bool /* enable_validation */)
     // Create surface from window
     _swapchain_width = window->width();
     _swapchain_height = window->height();
+    
+    // Initialize viewport with default aspect ratio (16:9)
+    _viewport = calculate_viewport(_swapchain_width, _swapchain_height, 
+                                   _aspect_ratio, _custom_aspect_ratio);
 
 #ifdef _WIN32
     WGPUSurfaceSourceWindowsHWND surface_source = {};
@@ -656,6 +660,22 @@ WgpuDevice::draw_indexed(const Buffer& vertex_buffer,
     // Set pipeline and buffers
     wgpuRenderPassEncoderSetPipeline(pass, _render_pipeline);
     
+    // Set viewport to maintain aspect ratio
+    wgpuRenderPassEncoderSetViewport(pass, 
+                                     static_cast<float>(_viewport.x),
+                                     static_cast<float>(_viewport.y),
+                                     static_cast<float>(_viewport.width),
+                                     static_cast<float>(_viewport.height),
+                                     0.0f,  // minDepth
+                                     1.0f); // maxDepth
+    
+    // Set scissor rect to match viewport
+    wgpuRenderPassEncoderSetScissorRect(pass, 
+                                       _viewport.x,
+                                       _viewport.y,
+                                       _viewport.width,
+                                       _viewport.height);
+    
     // Bind uniform buffer if set
     if (_current_bind_group)
     {
@@ -801,6 +821,9 @@ WgpuDevice::resize(uint32_t width, uint32_t height)
     _swapchain_width = width;
     _swapchain_height = height;
 
+    // Calculate viewport based on aspect ratio
+    _viewport = calculate_viewport(width, height, _aspect_ratio, _custom_aspect_ratio);
+
     // Reconfigure surface with new dimensions
     WGPUSurfaceConfiguration surface_config = {};
     surface_config.nextInChain = nullptr;
@@ -814,8 +837,24 @@ WgpuDevice::resize(uint32_t width, uint32_t height)
 
     wgpuSurfaceConfigure(_surface, &surface_config);
 
-    spdlog::info("Surface resized to {}x{}", width, height);
+    spdlog::info("Surface resized to {}x{}, viewport {}x{}", 
+                 width, height, _viewport.width, _viewport.height);
     return {};
+}
+
+void WgpuDevice::set_aspect_ratio(AspectRatio ratio, float custom_value)
+{
+    _aspect_ratio = ratio;
+    _custom_aspect_ratio = custom_value;
+    
+    // Recalculate viewport with new aspect ratio if surface is initialized
+    if (_swapchain_width > 0 && _swapchain_height > 0)
+    {
+        _viewport = calculate_viewport(_swapchain_width, _swapchain_height, 
+                                       _aspect_ratio, _custom_aspect_ratio);
+        spdlog::info("Aspect ratio changed, viewport updated to {}x{} at ({}, {})",
+                     _viewport.width, _viewport.height, _viewport.x, _viewport.y);
+    }
 }
 
 } // namespace raktr::render::backend

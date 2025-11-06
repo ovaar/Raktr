@@ -7,6 +7,7 @@
 #define RAKTR_RENDER_WGPU_DEVICE_H
 
 #include "device.h"
+#include "backend/aspect_ratio.h"
 #include <webgpu/webgpu.h>
 #include <memory>
 #include <vector>
@@ -98,6 +99,47 @@ public:
     resize(uint32_t width, uint32_t height);
 
     /*!
+     * @brief Set the aspect ratio for rendering.
+     * 
+     * Controls how the viewport maintains proportions when the window is resized.
+     * Uses letterboxing (black bars top/bottom) or pillarboxing (black bars left/right)
+     * to maintain the specified aspect ratio.
+     * 
+     * @param ratio Desired aspect ratio (default: Ratio_16_9).
+     * @param custom_value Custom ratio value (only used if ratio == Custom).
+     * 
+     * @example
+     * // Use 16:9 aspect ratio (most common)
+     * device->set_aspect_ratio(AspectRatio::Ratio_16_9);
+     * 
+     * // Use ultrawide 21:9
+     * device->set_aspect_ratio(AspectRatio::Ratio_21_9);
+     * 
+     * // Use custom cinema ratio
+     * device->set_aspect_ratio(AspectRatio::Custom, 2.35f);
+     * 
+     * // Allow free stretching (no constraint)
+     * device->set_aspect_ratio(AspectRatio::Auto);
+     */
+    void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f);
+
+    /*!
+     * @brief Get the current aspect ratio setting.
+     * @return Current aspect ratio mode.
+     */
+    AspectRatio aspect_ratio() const { return _aspect_ratio; }
+
+    /*!
+     * @brief Get the current viewport rectangle.
+     * 
+     * Returns the viewport used for rendering, which may be smaller than
+     * the window if aspect ratio preservation is enabled.
+     * 
+     * @return Current viewport (x, y, width, height).
+     */
+    const Viewport& viewport() const { return _viewport; }
+
+    /*!
      * @brief Get the underlying WGPUDevice handle.
      * @return WGPUDevice handle (may be null if not initialized).
      */
@@ -134,6 +176,11 @@ private:
     uint32_t _swapchain_width = 0;
     uint32_t _swapchain_height = 0;
     WGPUTextureFormat _swapchain_format = WGPUTextureFormat_BGRA8Unorm;
+
+    // Aspect ratio and viewport
+    AspectRatio _aspect_ratio = AspectRatio::Ratio_16_9;  // Default to 16:9
+    float _custom_aspect_ratio = 1.0f;
+    Viewport _viewport = {};
 
     // Buffer management
     std::vector<WGPUBuffer> _buffers;

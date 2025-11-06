@@ -12,4 +12,8 @@
 * Color modulation
 * direction
 * diffuse
+* Aspect ratio
+* Viewport
+* Letterboxing
+* Pillarboxing
 * 
