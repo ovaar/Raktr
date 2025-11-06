@@ -79,6 +79,25 @@ public:
     void set_uniform_buffer(const Buffer& buffer);
 
     /*!
+     * @brief Resize the surface to new dimensions.
+     * 
+     * Reconfigures the WebGPU surface with new width and height.
+     * Should be called when the window is resized.
+     * 
+     * @param width New width in pixels (must be > 0).
+     * @param height New height in pixels (must be > 0).
+     * @return Success or error code.
+     * 
+     * @example
+     * // In window resize callback:
+     * window->set_resize_callback([&device](uint32_t w, uint32_t h) {
+     *     device->resize(w, h);
+     * });
+     */
+    std::expected<void, std::error_code>
+    resize(uint32_t width, uint32_t height);
+
+    /*!
      * @brief Get the underlying WGPUDevice handle.
      * @return WGPUDevice handle (may be null if not initialized).
      */

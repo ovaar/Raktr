@@ -102,7 +102,11 @@ TEST(VisualTest, DISABLED_SpinningCube)
     ASSERT_TRUE(device_result.has_value()) << "Failed to create WebGPU device";
     
     auto& device = device_result.value();
-
+    
+    window->set_resize_callback([&](uint32_t width, uint32_t height) {
+        [[maybe_unused]] auto resize_result = device->resize(width, height);
+    });
+    
     // Create cube vertex buffer - 8 vertices at corners (scaled down to 0.5 units)
     float vertices[] = {
         // Back face (z = -0.5)
@@ -222,10 +226,11 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
 {
     // Create window
     WindowConfig config;
-    config.width = 800;
-    config.height = 600;
+    config.width = 1920;
+    config.height = 1080;
     config.title = "WebGPU Spinning Cube (Type-Safe) Test";
-    config.resizable = false;
+    config.resizable = true;
+    config.fullscreen = false;
 
     auto window_result = create_window(config);
     ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
@@ -235,9 +240,13 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
     // Create WebGPU device
     auto device_result = WgpuDevice::create(window.get(), false);
     ASSERT_TRUE(device_result.has_value()) << "Failed to create WebGPU device";
-    
-    auto& device = device_result.value();
 
+    auto& device = device_result.value();
+    
+    window->set_resize_callback([&](uint32_t width, uint32_t height) {
+        [[maybe_unused]] auto resize_result = device->resize(width, height);
+    });
+    
     // Create cube vertex buffer - 8 vertices at corners (scaled down to 0.5 units)
     float vertices[] = {
         // Back face (z = -0.5)
