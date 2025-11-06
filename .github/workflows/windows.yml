@@ -83,7 +83,10 @@ jobs:
       # 🧱 Conan install (will use your profile)
       # ---------------------------------------------------------
       - name: Run Conan install
-        run: conan install raktr --output-folder=. -pr:a=profiles/${{ matrix.conan_profile }} -s:a build_type=${{ matrix.build_type }} -o:a='&:with_tests=True' --build=missing
+        run: |
+          conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Release
+          conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Debug
+          conan install raktr --output-folder=. -pr:a=profiles/${{ matrix.conan_profile }} -s:a build_type=${{ matrix.build_type }} -o:a='&:with_tests=True' --build=missing
 
       # ---------------------------------------------------------
       # 🧱 Configure with CMake
