@@ -25,7 +25,7 @@ jobs:
       run: |
         sudo wget -O ./llvm.sh https://apt.llvm.org/llvm.sh \
             && chmod +x ./llvm.sh \
-            && ./llvm.sh ${LLVM_VERSION} all
+            && ./llvm.sh ${LLVM_VERSION} all \
             && rm ./llvm.sh
         update-alternatives --install /usr/bin/cc cc /usr/bin/clang-${LLVM_VERSION} 1000 \
             && update-alternatives --install /usr/bin/c++ c++ /usr/bin/clang++-${LLVM_VERSION} 1000 \
