@@ -26,7 +26,7 @@ static WGPUStringView make_string_view(const char* str)
 std::expected<std::unique_ptr<WgpuDevice>, std::error_code>
 WgpuDevice::create(Window* window, bool enable_validation)
 {
-    auto device = std::unique_ptr<WgpuDevice>(new WgpuDevice());
+    std::unique_ptr<WgpuDevice> device(new WgpuDevice());
     
     auto result = device->initialize(window, enable_validation);
     if (!result)
@@ -780,6 +780,42 @@ void WgpuDevice::present()
         wgpuTextureRelease(_current_surface_texture);
         _current_surface_texture = nullptr;
     }
+}
+
+std::expected<void, std::error_code>
+WgpuDevice::resize(uint32_t width, uint32_t height)
+{
+    if (width == 0 || height == 0)
+    {
+        spdlog::error("Invalid resize dimensions: {}x{}", width, height);
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    if (!_surface || !_device)
+    {
+        spdlog::error("Cannot resize: surface or device not initialized");
+        return std::unexpected(make_error_code(RenderError::InvalidOperation));
+    }
+
+    // Update stored dimensions
+    _swapchain_width = width;
+    _swapchain_height = height;
+
+    // Reconfigure surface with new dimensions
+    WGPUSurfaceConfiguration surface_config = {};
+    surface_config.nextInChain = nullptr;
+    surface_config.device = _device;
+    surface_config.format = _swapchain_format;
+    surface_config.usage = WGPUTextureUsage_RenderAttachment;
+    surface_config.width = _swapchain_width;
+    surface_config.height = _swapchain_height;
+    surface_config.presentMode = WGPUPresentMode_Fifo; // VSync
+    surface_config.alphaMode = WGPUCompositeAlphaMode_Auto;
+
+    wgpuSurfaceConfigure(_surface, &surface_config);
+
+    spdlog::info("Surface resized to {}x{}", width, height);
+    return {};
 }
 
 } // namespace raktr::render::backend
