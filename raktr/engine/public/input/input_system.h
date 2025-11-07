@@ -34,6 +34,8 @@ namespace raktr::engine
         double               mouse_x = 0.0;
         double               mouse_y = 0.0;
 
+        // TODO future: add delta tracking.
+
         // Convenience methods
         [[nodiscard]] bool is_pressed(KeyCode key) const
         {
