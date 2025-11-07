@@ -6,6 +6,9 @@
 #include "input/input_system.h"
 #include "window/window.h"
 #include <algorithm>
+#include <mutex>
+#include <unordered_map>
+#include <vector>
 
 // GLFW key codes (from GLFW/glfw3.h)
 #define GLFW_KEY_SPACE         32
@@ -151,29 +154,63 @@
 namespace raktr::engine
 {
 
+    /*!
+     * @brief Implementation details for InputSystem (pImpl idiom).
+     */
+    struct InputSystem::Impl
+    {
+        // Input state
+        std::unordered_map<KeyCode, bool>     key_states;
+        std::unordered_map<MouseButton, bool> mouse_button_states;
+        double                                mouse_x = 0.0;
+        double                                mouse_y = 0.0;
+
+        // Thread-safe event queue
+        mutable std::mutex      event_queue_mutex;
+        std::vector<InputEvent> event_queue;
+
+        // Window event callbacks (invoked on main thread)
+        void on_key(int key, int scancode, int action, int mods);
+        void on_mouse_button(int button, int action, int mods);
+        void on_cursor_pos(double xpos, double ypos);
+        void on_scroll(double xoffset, double yoffset);
+
+        // Handle individual events (update state)
+        void handle_event(const KeyEvent& event);
+        void handle_event(const MouseButtonEvent& event);
+        void handle_event(const MouseMoveEvent& event);
+        void handle_event(const MouseScrollEvent& event);
+    };
+
     InputSystem::InputSystem(raktr::render::Window& window)
+        : _pimpl(std::make_unique<Impl>())
     {
         // Subscribe to window input callbacks
         window.set_key_callback([this](int key, int scancode, int action, int mods)
                                 {
-                                    on_key(key, scancode, action, mods);
+                                    _pimpl->on_key(key, scancode, action, mods);
                                 });
 
         window.set_mouse_button_callback([this](int button, int action, int mods)
                                          {
-                                             on_mouse_button(button, action, mods);
+                                             _pimpl->on_mouse_button(button, action, mods);
                                          });
 
         window.set_cursor_pos_callback([this](double xpos, double ypos)
                                        {
-                                           on_cursor_pos(xpos, ypos);
+                                           _pimpl->on_cursor_pos(xpos, ypos);
                                        });
 
         window.set_scroll_callback([this](double xoffset, double yoffset)
                                    {
-                                       on_scroll(xoffset, yoffset);
+                                       _pimpl->on_scroll(xoffset, yoffset);
                                    });
     }
+
+    InputSystem::~InputSystem() = default;
+
+    InputSystem::InputSystem(InputSystem&&) noexcept            = default;
+    InputSystem& InputSystem::operator=(InputSystem&&) noexcept = default;
 
     KeyCode InputSystem::map_glfw_key(int glfw_key)
     {
@@ -460,9 +497,9 @@ namespace raktr::engine
         // Swap event queue (minimize lock time)
         std::vector<InputEvent> events;
         {
-            std::lock_guard<std::mutex> lock(_event_queue_mutex);
-            events = std::move(_event_queue);
-            _event_queue.clear();
+            std::lock_guard<std::mutex> lock(_pimpl->event_queue_mutex);
+            events = std::move(_pimpl->event_queue);
+            _pimpl->event_queue.clear();
         }
 
         // Process all events
@@ -470,7 +507,7 @@ namespace raktr::engine
         {
             std::visit([this](const auto& e)
                        {
-                           handle_event(e);
+                           _pimpl->handle_event(e);
                        },
                        event);
         }
@@ -478,102 +515,102 @@ namespace raktr::engine
 
     bool InputSystem::is_key_pressed(KeyCode key) const
     {
-        auto it = _key_states.find(key);
-        return it != _key_states.end() && it->second;
+        auto it = _pimpl->key_states.find(key);
+        return it != _pimpl->key_states.end() && it->second;
     }
 
     bool InputSystem::is_mouse_button_pressed(MouseButton button) const
     {
-        auto it = _mouse_button_states.find(button);
-        return it != _mouse_button_states.end() && it->second;
+        auto it = _pimpl->mouse_button_states.find(button);
+        return it != _pimpl->mouse_button_states.end() && it->second;
     }
 
     std::pair<double, double> InputSystem::get_mouse_position() const
     {
-        return { _mouse_x, _mouse_y };
+        return { _pimpl->mouse_x, _pimpl->mouse_y };
     }
 
-    void InputSystem::on_key(int key, int scancode, int action, int mods)
+    void InputSystem::Impl::on_key(int key, int scancode, int action, int mods)
     {
         KeyEvent event{
-            .key      = map_glfw_key(key),
+            .key      = InputSystem::map_glfw_key(key),
             .scancode = scancode,
             .action   = static_cast<KeyAction>(action),
-            .mods     = map_glfw_mods(mods)
+            .mods     = InputSystem::map_glfw_mods(mods)
         };
 
-        std::lock_guard<std::mutex> lock(_event_queue_mutex);
-        _event_queue.emplace_back(std::move(event));
+        std::lock_guard<std::mutex> lock(event_queue_mutex);
+        event_queue.emplace_back(std::move(event));
     }
 
-    void InputSystem::on_mouse_button(int button, int action, int mods)
+    void InputSystem::Impl::on_mouse_button(int button, int action, int mods)
     {
         MouseButtonEvent event{
-            .button = map_glfw_mouse_button(button),
+            .button = InputSystem::map_glfw_mouse_button(button),
             .action = static_cast<MouseAction>(action),
-            .mods   = map_glfw_mods(mods)
+            .mods   = InputSystem::map_glfw_mods(mods)
         };
 
-        std::lock_guard<std::mutex> lock(_event_queue_mutex);
-        _event_queue.emplace_back(std::move(event));
+        std::lock_guard<std::mutex> lock(event_queue_mutex);
+        event_queue.emplace_back(std::move(event));
     }
 
-    void InputSystem::on_cursor_pos(double xpos, double ypos)
+    void InputSystem::Impl::on_cursor_pos(double xpos, double ypos)
     {
         MouseMoveEvent event{
             .x = xpos,
             .y = ypos
         };
 
-        std::lock_guard<std::mutex> lock(_event_queue_mutex);
-        _event_queue.emplace_back(std::move(event));
+        std::lock_guard<std::mutex> lock(event_queue_mutex);
+        event_queue.emplace_back(std::move(event));
     }
 
-    void InputSystem::on_scroll(double xoffset, double yoffset)
+    void InputSystem::Impl::on_scroll(double xoffset, double yoffset)
     {
         MouseScrollEvent event{
             .xoffset = xoffset,
             .yoffset = yoffset
         };
 
-        std::lock_guard<std::mutex> lock(_event_queue_mutex);
-        _event_queue.emplace_back(std::move(event));
+        std::lock_guard<std::mutex> lock(event_queue_mutex);
+        event_queue.emplace_back(std::move(event));
     }
 
-    void InputSystem::handle_event(const KeyEvent& event)
+    void InputSystem::Impl::handle_event(const KeyEvent& event)
     {
         // Update key state
         if (event.action == KeyAction::Press || event.action == KeyAction::Repeat)
         {
-            _key_states[event.key] = true;
+            key_states[event.key] = true;
         }
         else if (event.action == KeyAction::Release)
         {
-            _key_states[event.key] = false;
+            key_states[event.key] = false;
         }
     }
 
-    void InputSystem::handle_event(const MouseButtonEvent& event)
+    void InputSystem::Impl::handle_event(const MouseButtonEvent& event)
     {
         // Update mouse button state
         if (event.action == MouseAction::Press)
         {
-            _mouse_button_states[event.button] = true;
+            mouse_button_states[event.button] = true;
         }
         else if (event.action == MouseAction::Release)
         {
-            _mouse_button_states[event.button] = false;
+            mouse_button_states[event.button] = false;
         }
     }
 
-    void InputSystem::handle_event(const MouseMoveEvent& event)
+    void InputSystem::Impl::handle_event(const MouseMoveEvent& event)
     {
         // Update mouse position
-        _mouse_x = event.x;
-        _mouse_y = event.y;
+        mouse_x = event.x;
+        mouse_y = event.y;
     }
 
-    void InputSystem::handle_event(const MouseScrollEvent& /* event */)
+    void InputSystem::Impl::handle_event(const MouseScrollEvent& /* event */)
     {
         // Scroll events don't maintain state (they're deltas)
         // Applications should handle scroll events directly if needed
