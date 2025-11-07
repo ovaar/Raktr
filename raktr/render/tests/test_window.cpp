@@ -3,8 +3,8 @@
  * @brief Unit tests for Window abstraction.
  */
 
-#include <gtest/gtest.h>
 #include "window/window.h"
+#include <gtest/gtest.h>
 
 using namespace raktr::render;
 
@@ -17,10 +17,10 @@ protected:
     WindowConfig default_config()
     {
         WindowConfig config;
-        config.width = 800;
-        config.height = 600;
-        config.title = "Test Window";
-        config.resizable = false;
+        config.width      = 800;
+        config.height     = 600;
+        config.title      = "Test Window";
+        config.resizable  = false;
         config.fullscreen = false;
         return config;
     }
@@ -42,8 +42,8 @@ TEST_F(WindowTest, CreateWindow_WithValidConfig_Succeeds)
 TEST_F(WindowTest, CreateWindow_ReturnsCorrectDimensions)
 {
     // Arrange
-    auto config = default_config();
-    config.width = 1024;
+    auto config   = default_config();
+    config.width  = 1024;
     config.height = 768;
 
     // Act
@@ -110,9 +110,9 @@ TEST_F(WindowTest, SwapBuffers_DoesNotCrash)
 TEST_F(WindowTest, MultipleWindows_CanCoexist)
 {
     // Arrange
-    auto config1 = default_config();
+    auto config1  = default_config();
     config1.title = "Window 1";
-    auto config2 = default_config();
+    auto config2  = default_config();
     config2.title = "Window 2";
 
     // Act
@@ -147,16 +147,17 @@ TEST_F(WindowTest, SetResizeCallback_CanSetAndClearCallback)
     auto& window = *result;
 
     bool callback_called = false;
-    auto callback = [&callback_called](uint32_t, uint32_t) {
+    auto callback        = [&callback_called](uint32_t, uint32_t)
+    {
         callback_called = true;
     };
 
     // Act - Set callback
     EXPECT_NO_THROW(window->set_resize_callback(callback));
-    
+
     // Act - Clear callback
     EXPECT_NO_THROW(window->set_resize_callback(nullptr));
-    
+
     // Callback was set and cleared without crashing
     SUCCEED();
 }
@@ -164,9 +165,9 @@ TEST_F(WindowTest, SetResizeCallback_CanSetAndClearCallback)
 TEST_F(WindowTest, IsFullscreen_InitiallyMatchesConfig)
 {
     // Arrange - Create windowed window
-    auto config = default_config();
+    auto config       = default_config();
     config.fullscreen = false;
-    auto result = create_window(config);
+    auto result       = create_window(config);
     ASSERT_TRUE(result.has_value());
     auto& window = *result;
 
@@ -177,9 +178,9 @@ TEST_F(WindowTest, IsFullscreen_InitiallyMatchesConfig)
 TEST_F(WindowTest, SetFullscreen_CanToggleFullscreen)
 {
     // Arrange
-    auto config = default_config();
+    auto config       = default_config();
     config.fullscreen = false;
-    auto result = create_window(config);
+    auto result       = create_window(config);
     ASSERT_TRUE(result.has_value());
     auto& window = *result;
 

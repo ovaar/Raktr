@@ -13,30 +13,29 @@
 namespace raktr::engine
 {
 
-/*!
- * @brief Variant type holding any input event.
- * 
- * Prefer composition over inheritance using std::variant for type-safe
- * event handling without vtable overhead.
- * 
- * @example
- * void handle_event(const InputEvent& event) {
- *     std::visit([](const auto& e) {
- *         using T = std::decay_t<decltype(e)>;
- *         if constexpr (std::is_same_v<T, KeyEvent>) {
- *             // Handle keyboard event
- *         } else if constexpr (std::is_same_v<T, MouseButtonEvent>) {
- *             // Handle mouse button
- *         }
- *     }, event);
- * }
- */
-using InputEvent = std::variant<
-    KeyEvent,
-    MouseButtonEvent,
-    MouseMoveEvent,
-    MouseScrollEvent
->;
+    /*!
+     * @brief Variant type holding any input event.
+     *
+     * Prefer composition over inheritance using std::variant for type-safe
+     * event handling without vtable overhead.
+     *
+     * @example
+     * void handle_event(const InputEvent& event) {
+     *     std::visit([](const auto& e) {
+     *         using T = std::decay_t<decltype(e)>;
+     *         if constexpr (std::is_same_v<T, KeyEvent>) {
+     *             // Handle keyboard event
+     *         } else if constexpr (std::is_same_v<T, MouseButtonEvent>) {
+     *             // Handle mouse button
+     *         }
+     *     }, event);
+     * }
+     */
+    using InputEvent = std::variant<
+        KeyEvent,
+        MouseButtonEvent,
+        MouseMoveEvent,
+        MouseScrollEvent>;
 
 } // namespace raktr::engine
 

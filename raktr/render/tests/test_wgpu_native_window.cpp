@@ -21,18 +21,14 @@ protected:
     {
 #ifdef _WIN32
         // Create a real hidden window for testing WebGPU surface creation
-        WNDCLASSA wc = {};
-        wc.lpfnWndProc = DefWindowProcA;
-        wc.hInstance = GetModuleHandle(nullptr);
+        WNDCLASSA wc     = {};
+        wc.lpfnWndProc   = DefWindowProcA;
+        wc.hInstance     = GetModuleHandle(nullptr);
         wc.lpszClassName = "RaktrTestWindow";
         RegisterClassA(&wc);
 
         _hwnd = CreateWindowExA(
-            0, "RaktrTestWindow", "Test",
-            WS_OVERLAPPEDWINDOW,
-            CW_USEDEFAULT, CW_USEDEFAULT, 800, 600,
-            nullptr, nullptr, GetModuleHandle(nullptr), nullptr
-        );
+            0, "RaktrTestWindow", "Test", WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, CW_USEDEFAULT, 800, 600, nullptr, nullptr, GetModuleHandle(nullptr), nullptr);
 
         ASSERT_NE(_hwnd, nullptr) << "Failed to create test window";
 #else
@@ -66,13 +62,13 @@ TEST_F(WgpuNativeWindowTest, CreateDevice_WithNativeWindow_Succeeds)
 
     // Create WgpuDevice with the native window
     auto device_result = WgpuDevice::create(window.get(), false);
-    
+
 #ifdef _WIN32
     // On Windows with real HWND, device creation should succeed
     ASSERT_TRUE(device_result.has_value()) << "Failed to create WgpuDevice with NativeWindow";
 
     auto& device = device_result.value();
-    
+
     // Verify device is functional
     EXPECT_NE(device->wgpu_device(), nullptr);
     EXPECT_NE(device->wgpu_queue(), nullptr);
@@ -100,17 +96,15 @@ TEST_F(WgpuNativeWindowTest, RenderToNativeWindow_Succeeds)
 
     // Create a simple triangle
     float vertices[] = {
-         0.0f,  0.5f, 0.0f,
-        -0.5f, -0.5f, 0.0f,
-         0.5f, -0.5f, 0.0f
+        0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f
     };
-    auto vertex_data = std::as_bytes(std::span(vertices));
+    auto vertex_data   = std::as_bytes(std::span(vertices));
     auto vertex_buffer = device->create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
 
-    uint32_t indices[] = {0, 1, 2};
-    auto index_data = std::as_bytes(std::span(indices));
-    auto index_buffer = device->create_index_buffer(index_data);
+    uint32_t indices[]    = { 0, 1, 2 };
+    auto     index_data   = std::as_bytes(std::span(indices));
+    auto     index_buffer = device->create_index_buffer(index_data);
     ASSERT_TRUE(index_buffer.has_value());
 
     // Render to the native window
@@ -130,19 +124,19 @@ TEST_F(WgpuNativeWindowTest, MultipleFrames_WithNativeWindow_Succeeds)
     auto window_result = create_window_from_native(_hwnd, 800, 600);
     ASSERT_TRUE(window_result.has_value());
 
-    auto& window = window_result.value();
-    auto device_result = WgpuDevice::create(window.get(), false);
+    auto& window        = window_result.value();
+    auto  device_result = WgpuDevice::create(window.get(), false);
     ASSERT_TRUE(device_result.has_value());
 
     auto& device = device_result.value();
 
     // Create geometry
-    float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
-    auto vertex_buffer = device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    float vertices[]    = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
+    auto  vertex_buffer = device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vertex_buffer.has_value());
 
-    uint32_t indices[] = {0, 1, 2};
-    auto index_buffer = device->create_index_buffer(std::as_bytes(std::span(indices)));
+    uint32_t indices[]    = { 0, 1, 2 };
+    auto     index_buffer = device->create_index_buffer(std::as_bytes(std::span(indices)));
     ASSERT_TRUE(index_buffer.has_value());
 
     // Render multiple frames

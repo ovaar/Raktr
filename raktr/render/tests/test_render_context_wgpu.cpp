@@ -3,8 +3,8 @@
  * @brief Integration tests for RenderContext with WebGPU backend.
  */
 
-#include <gtest/gtest.h>
 #include "render_context.h"
+#include <gtest/gtest.h>
 
 using namespace raktr::render;
 
@@ -25,12 +25,12 @@ protected:
 TEST_F(RenderContextWgpuTest, CreateContext_WithWebGPU_Succeeds)
 {
     RenderConfig config;
-    config.backend = BackendType::WebGPU;
+    config.backend           = BackendType::WebGPU;
     config.enable_validation = false;
 
     auto context = create_render_context();
     ASSERT_NE(context, nullptr);
-    
+
     auto result = context->initialize(config);
     ASSERT_TRUE(result.has_value()) << "Failed to initialize RenderContext with WebGPU backend";
     EXPECT_TRUE(context->is_initialized());
@@ -39,15 +39,15 @@ TEST_F(RenderContextWgpuTest, CreateContext_WithWebGPU_Succeeds)
 TEST_F(RenderContextWgpuTest, GetDevice_ReturnsValidDevice)
 {
     RenderConfig config;
-    config.backend = BackendType::WebGPU;
+    config.backend           = BackendType::WebGPU;
     config.enable_validation = false;
 
     auto context = create_render_context();
     ASSERT_NE(context, nullptr);
-    
+
     auto result = context->initialize(config);
     ASSERT_TRUE(result.has_value());
-    
+
     Device* device = context->device();
     EXPECT_NE(device, nullptr);
 }
@@ -55,15 +55,15 @@ TEST_F(RenderContextWgpuTest, GetDevice_ReturnsValidDevice)
 TEST_F(RenderContextWgpuTest, DeviceOperations_DoNotCrash)
 {
     RenderConfig config;
-    config.backend = BackendType::WebGPU;
+    config.backend           = BackendType::WebGPU;
     config.enable_validation = false;
 
     auto context = create_render_context();
     ASSERT_NE(context, nullptr);
-    
+
     auto result = context->initialize(config);
     ASSERT_TRUE(result.has_value());
-    
+
     Device* device = context->device();
     ASSERT_NE(device, nullptr);
 
@@ -77,35 +77,35 @@ TEST_F(RenderContextWgpuTest, DeviceOperations_DoNotCrash)
 TEST_F(RenderContextWgpuTest, CreateBuffers_Succeeds)
 {
     RenderConfig config;
-    config.backend = BackendType::WebGPU;
+    config.backend           = BackendType::WebGPU;
     config.enable_validation = false;
 
     auto context = create_render_context();
     ASSERT_NE(context, nullptr);
-    
+
     auto result = context->initialize(config);
     ASSERT_TRUE(result.has_value());
-    
+
     Device* device = context->device();
     ASSERT_NE(device, nullptr);
 
     // Create vertex buffer
-    float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
-    auto vertex_data = std::as_bytes(std::span(vertices));
-    auto vertex_buffer = device->create_vertex_buffer(vertex_data);
+    float vertices[]    = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
+    auto  vertex_data   = std::as_bytes(std::span(vertices));
+    auto  vertex_buffer = device->create_vertex_buffer(vertex_data);
     EXPECT_TRUE(vertex_buffer.has_value());
 
     // Create index buffer
-    uint32_t indices[] = {0, 1, 2};
-    auto index_data = std::as_bytes(std::span(indices));
-    auto index_buffer = device->create_index_buffer(index_data);
+    uint32_t indices[]    = { 0, 1, 2 };
+    auto     index_data   = std::as_bytes(std::span(indices));
+    auto     index_buffer = device->create_index_buffer(index_data);
     EXPECT_TRUE(index_buffer.has_value());
 }
 
 TEST_F(RenderContextWgpuTest, MultipleContexts_CanCoexist)
 {
     RenderConfig config;
-    config.backend = BackendType::WebGPU;
+    config.backend           = BackendType::WebGPU;
     config.enable_validation = false;
 
     auto context1 = create_render_context();

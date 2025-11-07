@@ -3,10 +3,10 @@
 #include <mimalloc-new-delete.h>
 // clang-format on
 
-
 #include <iostream>
 
-int main() {
+int main()
+{
     std::cout << "Hello, Raktr!" << std::endl;
     return 0;
 }
