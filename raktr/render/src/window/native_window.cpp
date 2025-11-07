@@ -93,6 +93,26 @@ void NativeWindow::set_resize_callback(ResizeCallback callback)
     _resize_callback = std::move(callback);
 }
 
+void NativeWindow::set_key_callback(KeyCallback callback)
+{
+    _key_callback = std::move(callback);
+}
+
+void NativeWindow::set_mouse_button_callback(MouseButtonCallback callback)
+{
+    _mouse_button_callback = std::move(callback);
+}
+
+void NativeWindow::set_cursor_pos_callback(CursorPosCallback callback)
+{
+    _cursor_pos_callback = std::move(callback);
+}
+
+void NativeWindow::set_scroll_callback(ScrollCallback callback)
+{
+    _scroll_callback = std::move(callback);
+}
+
 bool NativeWindow::is_fullscreen() const
 {
     return _is_fullscreen;

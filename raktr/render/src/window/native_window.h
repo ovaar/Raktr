@@ -70,6 +70,10 @@ public:
 
     // Window interface implementation
     void set_resize_callback(ResizeCallback callback) override;
+    void set_key_callback(KeyCallback callback) override;
+    void set_mouse_button_callback(MouseButtonCallback callback) override;
+    void set_cursor_pos_callback(CursorPosCallback callback) override;
+    void set_scroll_callback(ScrollCallback callback) override;
     
     bool is_fullscreen() const override;
     void set_fullscreen(bool fullscreen) override;
@@ -82,7 +86,13 @@ private:
     uint32_t _height = 0;
     bool _should_close = false;
     bool _is_fullscreen = false;
+    
+    // User callbacks
     ResizeCallback _resize_callback;
+    KeyCallback _key_callback;
+    MouseButtonCallback _mouse_button_callback;
+    CursorPosCallback _cursor_pos_callback;
+    ScrollCallback _scroll_callback;
 };
 
 } // namespace raktr::render::detail

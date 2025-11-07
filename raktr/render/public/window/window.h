@@ -24,6 +24,37 @@ namespace raktr::render
 using ResizeCallback = std::function<void(uint32_t width, uint32_t height)>;
 
 /*!
+ * @brief Callback function type for keyboard events.
+ * @param key GLFW key code (GLFW_KEY_* constants).
+ * @param scancode Platform-specific scancode.
+ * @param action GLFW action (GLFW_PRESS, GLFW_RELEASE, GLFW_REPEAT).
+ * @param mods Modifier key bitfield (GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, etc.).
+ */
+using KeyCallback = std::function<void(int key, int scancode, int action, int mods)>;
+
+/*!
+ * @brief Callback function type for mouse button events.
+ * @param button GLFW mouse button code (GLFW_MOUSE_BUTTON_LEFT, etc.).
+ * @param action GLFW action (GLFW_PRESS or GLFW_RELEASE).
+ * @param mods Modifier key bitfield (GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, etc.).
+ */
+using MouseButtonCallback = std::function<void(int button, int action, int mods)>;
+
+/*!
+ * @brief Callback function type for cursor position events.
+ * @param xpos Cursor x-coordinate in screen coordinates.
+ * @param ypos Cursor y-coordinate in screen coordinates.
+ */
+using CursorPosCallback = std::function<void(double xpos, double ypos)>;
+
+/*!
+ * @brief Callback function type for scroll events.
+ * @param xoffset Horizontal scroll offset.
+ * @param yoffset Vertical scroll offset.
+ */
+using ScrollCallback = std::function<void(double xoffset, double yoffset)>;
+
+/*!
  * @brief Configuration for window creation.
  */
 struct WindowConfig
@@ -110,6 +141,58 @@ public:
      * });
      */
     virtual void set_resize_callback(ResizeCallback callback) = 0;
+
+    /*!
+     * @brief Set callback to be invoked on keyboard events.
+     * 
+     * @param callback Function receiving GLFW key events, or nullptr to clear callback.
+     * 
+     * @example
+     * window->set_key_callback([](int key, int scancode, int action, int mods) {
+     *     if (action == GLFW_PRESS) {
+     *         // Handle key press
+     *     }
+     * });
+     */
+    virtual void set_key_callback(KeyCallback callback) = 0;
+
+    /*!
+     * @brief Set callback to be invoked on mouse button events.
+     * 
+     * @param callback Function receiving GLFW mouse button events, or nullptr to clear callback.
+     * 
+     * @example
+     * window->set_mouse_button_callback([](int button, int action, int mods) {
+     *     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+     *         // Handle left mouse button click
+     *     }
+     * });
+     */
+    virtual void set_mouse_button_callback(MouseButtonCallback callback) = 0;
+
+    /*!
+     * @brief Set callback to be invoked on cursor position changes.
+     * 
+     * @param callback Function receiving cursor position, or nullptr to clear callback.
+     * 
+     * @example
+     * window->set_cursor_pos_callback([](double x, double y) {
+     *     // Handle mouse movement
+     * });
+     */
+    virtual void set_cursor_pos_callback(CursorPosCallback callback) = 0;
+
+    /*!
+     * @brief Set callback to be invoked on scroll events.
+     * 
+     * @param callback Function receiving scroll offsets, or nullptr to clear callback.
+     * 
+     * @example
+     * window->set_scroll_callback([](double xoffset, double yoffset) {
+     *     // Handle mouse wheel scroll
+     * });
+     */
+    virtual void set_scroll_callback(ScrollCallback callback) = 0;
 
     /*!
      * @brief Check if window is currently in fullscreen mode.
