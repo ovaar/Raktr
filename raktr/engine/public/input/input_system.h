@@ -9,6 +9,7 @@
 #include "core/flag_set.h"
 #include "input_event.h"
 #include <memory>
+#include <type_traits>
 #include <utility>
 
 // Forward declaration to avoid including render headers
@@ -27,11 +28,27 @@ namespace raktr::engine
      */
     struct InputState
     {
+
         FlagSet<KeyCode>     keys{};
         FlagSet<MouseButton> mouse_buttons{};
         double               mouse_x = 0.0;
         double               mouse_y = 0.0;
+
+        // Convenience methods
+        [[nodiscard]] bool is_pressed(KeyCode key) const
+        {
+            return keys[key];
+        }
+        [[nodiscard]] bool is_pressed(MouseButton btn) const
+        {
+            return mouse_buttons[btn];
+        }
+        [[nodiscard]] std::pair<double, double> mouse_pos() const
+        {
+            return std::pair{ mouse_x, mouse_y };
+        }
     };
+    static_assert(std::is_trivially_copyable_v<InputState>);
 
     /*!
      * @brief Input system for processing user input events.
