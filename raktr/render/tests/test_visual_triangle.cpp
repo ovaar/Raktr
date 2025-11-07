@@ -7,14 +7,18 @@
  */
 
 #include "backend/wgpu/wgpu_device.h"
+#include "input/input_system.h" // From engine module
 #include "math/transform.h"
 #include "math/transform_types.h"
+#include "scene/camera.h" // From engine module
 #include "window/window.h"
+#include <chrono>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 #include <thread>
+
 
 using namespace raktr::render;
 using namespace raktr::render::backend;
@@ -236,7 +240,7 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
     WindowConfig config;
     config.width      = 1920;
     config.height     = 1080;
-    config.title      = "WebGPU Spinning Cube (Type-Safe) Test";
+    config.title      = "WebGPU Spinning Cube (Type-Safe) Test - WASD + Mouse to control camera, ESC to exit";
     config.resizable  = true;
     config.fullscreen = false;
 
@@ -257,25 +261,20 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
                                     [[maybe_unused]] auto resize_result = device->resize(width, height);
                                 });
 
-    window->set_key_callback([](int key, int scancode, int action, int mods)
-                             {
-                                 spdlog::info("Key event: {} {} {} {}", key, scancode, action, mods);
-                             });
+    // Create input system
+    raktr::engine::InputSystem input_system(*window);
 
-    window->set_mouse_button_callback([](int button, int action, int mods)
-                                      {
-                                          spdlog::info("Mouse button event: {} {} {}", button, action, mods);
-                                      });
+    // Create camera
+    raktr::engine::scene::Camera camera(
+        glm::vec3(0.0F, 0.0F, 5.0F), // Start 5 units back from origin
+        45.0F,                       // 45° FOV
+        static_cast<float>(config.width) / static_cast<float>(config.height),
+        0.1F,  // Near plane
+        100.0F // Far plane
+    );
+    camera.set_movement_speed(5.0F);
+    camera.set_mouse_sensitivity(0.1F);
 
-    window->set_cursor_pos_callback([](double x, double y)
-                                    {
-                                        spdlog::info("Cursor position event: {} {}", x, y);
-                                    });
-
-    window->set_scroll_callback([](double xoffset, double yoffset)
-                                {
-                                    spdlog::info("Scroll event: {} {}", xoffset, yoffset);
-                                });
     // Create cube vertex buffer - 8 vertices at corners (scaled down to 0.5 units)
     // clang-format off
     float vertices[] = {
@@ -330,35 +329,46 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
     device->set_uniform_buffer(uniform_buffer.value());
 
     // Animation state
-    float       angle          = 0.0f;
-    const float rotation_speed = 1.0f; // radians per second
+    float       angle          = 0.0F;
+    const float rotation_speed = 1.0F; // radians per second
+
+    // Frame timing
+    auto last_frame_time = std::chrono::high_resolution_clock::now();
 
     // Render loop
     int frame_count = 0;
     while (!window->should_close())
     {
-        // Create type-safe transformations
+        // Calculate delta time
+        auto  current_frame_time = std::chrono::high_resolution_clock::now();
+        float delta_time         = std::chrono::duration<float>(current_frame_time - last_frame_time).count();
+        last_frame_time          = current_frame_time;
+
+        // Poll window events (triggers callbacks)
+        window->poll_events();
+
+        // Process input and update camera
+        auto input_state = input_system.process_events();
+        camera.process_input(input_state, delta_time);
+
+        // Check for ESC to exit
+        if (input_state.keys[raktr::engine::KeyCode::Escape])
+        {
+            break;
+        }
+
+        // Create model transformation (spinning cube)
         math::Rotation model_rotation(angle, math::Axis::Y());
 
-        math::View view = math::View::look_at(
-            glm::vec3(0.0f, 0.0f, 3.0f), // Camera position
-            glm::vec3(0.0f, 0.0f, 0.0f), // Look at origin
-            glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector
-        );
-
-        math::Perspective projection = math::Perspective::from_fov_degrees(
-            45.0f,                                            // FOV in degrees
-            static_cast<float>(config.width) / config.height, // Aspect ratio
-            0.1f,                                             // Near plane
-            100.0f                                            // Far plane
-        );
+        // Get camera matrices
+        math::View        view       = camera.view();
+        math::Perspective projection = camera.projection();
 
         // Compose transformations with type-safe operators
-        // This enforces correct order: projection * view * model
         math::ModelViewProjection mvp = projection * view * model_rotation;
 
-        // Update angle for next frame (assuming ~60 FPS, so ~0.0167 seconds per frame)
-        angle += rotation_speed * 0.016f;
+        // Update angle for next frame
+        angle += rotation_speed * delta_time;
 
         // Update uniform buffer using type-safe to_bytes()
         auto update_result = device->update_uniform_buffer(
@@ -368,9 +378,6 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
 
         // Rebind the uniform buffer to ensure it sees the updated data
         device->set_uniform_buffer(uniform_buffer.value());
-
-        // Poll window events
-        window->poll_events();
 
         // Draw the cube
         auto draw_result = device->draw_indexed(vertex_buffer.value(), index_buffer.value(), 36);

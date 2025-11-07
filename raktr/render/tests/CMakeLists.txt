@@ -17,7 +17,8 @@ target_include_directories(render_tests
 
 target_link_libraries(render_tests
         PRIVATE
-            raktr_render 
+            raktr_render
+            raktr_engine  # Needed for Camera and InputSystem 
             GTest::gtest 
             GTest::gtest_main)
 
