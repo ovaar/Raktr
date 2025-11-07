@@ -40,15 +40,13 @@ TEST(VisualTest, DISABLED_ManualRenderTriangle)
 
     // Create triangle vertex buffer
     // Positions in NDC space: top center, bottom left, bottom right
+    // clang-format off
     float vertices[] = {
-        0.0f, 0.6f, 0.0f, // Top (will be greenish due to shader)
-        -0.6f,
-        -0.6f,
-        0.0f, // Bottom-left (will be bluish)
-        0.6f,
-        -0.6f,
-        0.0f // Bottom-right (will be reddish)
+         0.0f,  0.6f, 0.0f,  // Top (will be greenish due to shader)
+        -0.6f, -0.6f, 0.0f,  // Bottom-left (will be bluish)
+         0.6f, -0.6f, 0.0f   // Bottom-right (will be reddish)
     };
+    // clang-format on
 
     auto vertex_data   = std::as_bytes(std::span(vertices));
     auto vertex_buffer = device->create_vertex_buffer(vertex_data);
@@ -112,34 +110,20 @@ TEST(VisualTest, DISABLED_SpinningCube)
                                 });
 
     // Create cube vertex buffer - 8 vertices at corners (scaled down to 0.5 units)
+    // clang-format off
     float vertices[] = {
         // Back face (z = -0.5)
-        -0.5f,
-        -0.5f,
-        -0.5f, // 0: back-bottom-left
-        0.5f,
-        -0.5f,
-        -0.5f, // 1: back-bottom-right
-        0.5f,
-        0.5f,
-        -0.5f, // 2: back-top-right
-        -0.5f,
-        0.5f,
-        -0.5f, // 3: back-top-left
+        -0.5f, -0.5f, -0.5f,  // 0: back-bottom-left
+         0.5f, -0.5f, -0.5f,  // 1: back-bottom-right
+         0.5f,  0.5f, -0.5f,  // 2: back-top-right
+        -0.5f,  0.5f, -0.5f,  // 3: back-top-left
         // Front face (z = +0.5)
-        -0.5f,
-        -0.5f,
-        0.5f, // 4: front-bottom-left
-        0.5f,
-        -0.5f,
-        0.5f, // 5: front-bottom-right
-        0.5f,
-        0.5f,
-        0.5f, // 6: front-top-right
-        -0.5f,
-        0.5f,
-        0.5f // 7: front-top-left
+        -0.5f, -0.5f,  0.5f,  // 4: front-bottom-left
+         0.5f, -0.5f,  0.5f,  // 5: front-bottom-right
+         0.5f,  0.5f,  0.5f,  // 6: front-top-right
+        -0.5f,  0.5f,  0.5f   // 7: front-top-left
     };
+    // clang-format on
 
     auto vertex_data   = std::as_bytes(std::span(vertices));
     auto vertex_buffer = device->create_vertex_buffer(vertex_data);
@@ -147,50 +131,22 @@ TEST(VisualTest, DISABLED_SpinningCube)
 
     // Create index buffer - 36 indices for 12 triangles (2 per face, 6 faces)
     // All triangles wound counter-clockwise when viewed from outside
+    // clang-format off
     uint32_t indices[] = {
         // Back face (looking at -Z)
-        0,
-        2,
-        1,
-        0,
-        3,
-        2,
+        0, 2, 1,  0, 3, 2,
         // Front face (looking at +Z)
-        4,
-        5,
-        6,
-        4,
-        6,
-        7,
+        4, 5, 6,  4, 6, 7,
         // Left face (looking at -X)
-        4,
-        7,
-        3,
-        4,
-        3,
-        0,
+        4, 7, 3,  4, 3, 0,
         // Right face (looking at +X)
-        1,
-        2,
-        6,
-        1,
-        6,
-        5,
+        1, 2, 6,  1, 6, 5,
         // Bottom face (looking at -Y)
-        0,
-        1,
-        5,
-        0,
-        5,
-        4,
+        0, 1, 5,  0, 5, 4,
         // Top face (looking at +Y)
-        3,
-        6,
-        2,
-        3,
-        7,
-        6
+        3, 6, 2,  3, 7, 6
     };
+    // clang-format on
     auto index_data   = std::as_bytes(std::span(indices));
     auto index_buffer = device->create_index_buffer(index_data);
     ASSERT_TRUE(index_buffer.has_value()) << "Failed to create index buffer";
@@ -200,9 +156,14 @@ TEST(VisualTest, DISABLED_SpinningCube)
     ASSERT_TRUE(uniform_buffer.has_value()) << "Failed to create uniform buffer";
 
     // Initialize with identity matrix
+    // clang-format off
     float initial_mvp[16] = {
-        1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f, 1.0f
+        1.0f, 0.0f, 0.0f, 0.0f,
+        0.0f, 1.0f, 0.0f, 0.0f,
+        0.0f, 0.0f, 1.0f, 0.0f,
+        0.0f, 0.0f, 0.0f, 1.0f
     };
+    // clang-format on
     auto initial_data = std::as_bytes(std::span(initial_mvp));
     auto init_result  = device->update_uniform_buffer(uniform_buffer.value(), initial_data);
     ASSERT_TRUE(init_result.has_value()) << "Failed to initialize uniform buffer";
@@ -295,85 +256,62 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
                                     [[maybe_unused]] auto resize_result = device->resize(width, height);
                                 });
 
+    window->set_key_callback([&key_called](int, int, int, int)
+                             {
+                                 key_called++;
+                             });
+
+    window->set_mouse_button_callback([&mouse_button_called](int, int, int)
+                                      {
+                                          mouse_button_called++;
+                                      });
+
+    window->set_cursor_pos_callback([&cursor_pos_called](double, double)
+                                    {
+                                        cursor_pos_called++;
+                                    });
+
+    window->set_scroll_callback([&scroll_called](double, double)
+                                {
+                                    scroll_called++;
+                                });
     // Create cube vertex buffer - 8 vertices at corners (scaled down to 0.5 units)
+    // clang-format off
     float vertices[] = {
         // Back face (z = -0.5)
-        -0.5f,
-        -0.5f,
-        -0.5f, // 0: back-bottom-left
-        0.5f,
-        -0.5f,
-        -0.5f, // 1: back-bottom-right
-        0.5f,
-        0.5f,
-        -0.5f, // 2: back-top-right
-        -0.5f,
-        0.5f,
-        -0.5f, // 3: back-top-left
+        -0.5f, -0.5f, -0.5f,  // 0: back-bottom-left
+         0.5f, -0.5f, -0.5f,  // 1: back-bottom-right
+         0.5f,  0.5f, -0.5f,  // 2: back-top-right
+        -0.5f,  0.5f, -0.5f,  // 3: back-top-left
         // Front face (z = +0.5)
-        -0.5f,
-        -0.5f,
-        0.5f, // 4: front-bottom-left
-        0.5f,
-        -0.5f,
-        0.5f, // 5: front-bottom-right
-        0.5f,
-        0.5f,
-        0.5f, // 6: front-top-right
-        -0.5f,
-        0.5f,
-        0.5f // 7: front-top-left
+        -0.5f, -0.5f,  0.5f,  // 4: front-bottom-left
+         0.5f, -0.5f,  0.5f,  // 5: front-bottom-right
+         0.5f,  0.5f,  0.5f,  // 6: front-top-right
+        -0.5f,  0.5f,  0.5f   // 7: front-top-left
     };
+    // clang-format on
 
     auto vertex_data   = std::as_bytes(std::span(vertices));
     auto vertex_buffer = device->create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value()) << "Failed to create vertex buffer";
 
     // Create index buffer - 36 indices for 12 triangles (2 per face, 6 faces)
+    // clang-format off
     uint32_t indices[] = {
         // Back face (looking at -Z)
-        0,
-        2,
-        1,
-        0,
-        3,
-        2,
+        0, 2, 1,  0, 3, 2,
         // Front face (looking at +Z)
-        4,
-        5,
-        6,
-        4,
-        6,
-        7,
+        4, 5, 6,  4, 6, 7,
         // Left face (looking at -X)
-        4,
-        7,
-        3,
-        4,
-        3,
-        0,
+        4, 7, 3,  4, 3, 0,
         // Right face (looking at +X)
-        1,
-        2,
-        6,
-        1,
-        6,
-        5,
+        1, 2, 6,  1, 6, 5,
         // Bottom face (looking at -Y)
-        0,
-        1,
-        5,
-        0,
-        5,
-        4,
+        0, 1, 5,  0, 5, 4,
         // Top face (looking at +Y)
-        3,
-        6,
-        2,
-        3,
-        7,
-        6
+        3, 6, 2,  3, 7, 6
     };
+    // clang-format on
     auto index_data   = std::as_bytes(std::span(indices));
     auto index_buffer = device->create_index_buffer(index_data);
     ASSERT_TRUE(index_buffer.has_value()) << "Failed to create index buffer";

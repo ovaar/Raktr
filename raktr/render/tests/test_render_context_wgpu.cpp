@@ -90,9 +90,15 @@ TEST_F(RenderContextWgpuTest, CreateBuffers_Succeeds)
     ASSERT_NE(device, nullptr);
 
     // Create vertex buffer
-    float vertices[]    = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
-    auto  vertex_data   = std::as_bytes(std::span(vertices));
-    auto  vertex_buffer = device->create_vertex_buffer(vertex_data);
+    // clang-format off
+    float vertices[] = { 
+        0.0f, 0.5f, 0.0f, 
+        -0.5f, -0.5f, 0.0f, 
+        0.5f, -0.5f, 0.0f 
+    };
+    // clang-format on
+    auto vertex_data   = std::as_bytes(std::span(vertices));
+    auto vertex_buffer = device->create_vertex_buffer(vertex_data);
     EXPECT_TRUE(vertex_buffer.has_value());
 
     // Create index buffer

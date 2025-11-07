@@ -95,9 +95,13 @@ TEST_F(WgpuNativeWindowTest, RenderToNativeWindow_Succeeds)
     auto& device = device_result.value();
 
     // Create a simple triangle
+    // clang-format off
     float vertices[] = {
-        0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f
+        0.0f, 0.5f, 0.0f, 
+        -0.5f, -0.5f, 0.0f, 
+        0.5f, -0.5f, 0.0f
     };
+    // clang-format on
     auto vertex_data   = std::as_bytes(std::span(vertices));
     auto vertex_buffer = device->create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
@@ -131,8 +135,14 @@ TEST_F(WgpuNativeWindowTest, MultipleFrames_WithNativeWindow_Succeeds)
     auto& device = device_result.value();
 
     // Create geometry
-    float vertices[]    = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
-    auto  vertex_buffer = device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    // clang-format off
+    float vertices[] = {
+        0.0f, 0.5f, 0.0f, 
+        -0.5f, -0.5f, 0.0f, 
+        0.5f, -0.5f, 0.0f
+    };
+    // clang-format on
+    auto vertex_buffer = device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vertex_buffer.has_value());
 
     uint32_t indices[]    = { 0, 1, 2 };

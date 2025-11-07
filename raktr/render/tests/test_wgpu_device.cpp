@@ -91,8 +91,14 @@ TEST_F(WgpuDeviceTest, CreateVertexBuffer_WithValidData_Succeeds)
     auto& device = result.value();
 
     // Create simple vertex data
-    float vertices[] = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
-    auto  data       = std::as_bytes(std::span(vertices));
+    // clang-format off
+    float vertices[] = {
+        0.0f, 0.5f, 0.0f, 
+        -0.5f, -0.5f, 0.0f, 
+        0.5f, -0.5f, 0.0f 
+    };
+    // clang-format on
+    auto data = std::as_bytes(std::span(vertices));
 
     auto buffer_result = device->create_vertex_buffer(data);
     EXPECT_TRUE(buffer_result.has_value());
@@ -135,15 +141,13 @@ TEST_F(WgpuDeviceTest, DrawIndexed_WithTriangle_Succeeds)
     auto& device = result.value();
 
     // Create triangle vertices
+    // clang-format off
     float vertices[] = {
-        0.0f, 0.5f, 0.0f, // Top
-        -0.5f,
-        -0.5f,
-        0.0f, // Bottom left
-        0.5f,
-        -0.5f,
-        0.0f // Bottom right
+        0.0f, 0.5f,   0.0f, // Top
+        -0.5f, -0.5f, 0.0f, // Bottom left
+        0.5f, -0.5f,  0.0f  // Bottom right
     };
+    // clang-format on
     auto vertex_data   = std::as_bytes(std::span(vertices));
     auto vertex_buffer = device->create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
@@ -170,9 +174,15 @@ TEST_F(WgpuDeviceTest, DrawIndexed_MultipleFrames_Succeeds)
     auto& device = result.value();
 
     // Create triangle
-    float vertices[]    = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
-    auto  vertex_data   = std::as_bytes(std::span(vertices));
-    auto  vertex_buffer = device->create_vertex_buffer(vertex_data);
+    // clang-format off
+    float vertices[] = {
+        0.0f, 0.5f, 0.0f, 
+        -0.5f, -0.5f, 0.0f, 
+        0.5f, -0.5f, 0.0f
+    };
+    // clang-format on
+    auto vertex_data   = std::as_bytes(std::span(vertices));
+    auto vertex_buffer = device->create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
 
     uint32_t indices[]    = { 0, 1, 2 };
@@ -201,9 +211,15 @@ TEST_F(WgpuDeviceTest, Resize_WithValidDimensions_Succeeds)
     EXPECT_TRUE(resize_result.has_value()) << "Failed to resize surface";
 
     // Verify rendering still works after resize
-    float vertices[]    = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
-    auto  vertex_data   = std::as_bytes(std::span(vertices));
-    auto  vertex_buffer = device->create_vertex_buffer(vertex_data);
+    // clang-format off
+    float vertices[] = {
+        0.0f, 0.5f, 0.0f, 
+        -0.5f, -0.5f, 0.0f, 
+        0.5f, -0.5f, 0.0f
+    };
+    // clang-format on
+    auto vertex_data   = std::as_bytes(std::span(vertices));
+    auto vertex_buffer = device->create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
 
     uint32_t indices[]    = { 0, 1, 2 };
