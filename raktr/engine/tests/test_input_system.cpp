@@ -213,10 +213,10 @@ namespace raktr::engine::test
         window_ptr->trigger_key(65, 0, 1, 0);
 
         // Process events
-        input_system.process_events();
+        auto state = input_system.process_events();
 
         // Check state
-        EXPECT_TRUE(input_system.is_key_pressed(KeyCode::A));
+        EXPECT_TRUE(state.keys[KeyCode::A]);
     }
 
     TEST(InputSystem_process_events, key_release_updates_state)
@@ -227,12 +227,12 @@ namespace raktr::engine::test
 
         // Simulate key press then release
         window_ptr->trigger_key(65, 0, 1, 0); // Press
-        input_system.process_events();
-        EXPECT_TRUE(input_system.is_key_pressed(KeyCode::A));
+        auto state1 = input_system.process_events();
+        EXPECT_TRUE(state1.keys[KeyCode::A]);
 
         window_ptr->trigger_key(65, 0, 0, 0); // Release (GLFW_RELEASE = 0)
-        input_system.process_events();
-        EXPECT_FALSE(input_system.is_key_pressed(KeyCode::A));
+        auto state2 = input_system.process_events();
+        EXPECT_FALSE(state2.keys[KeyCode::A]);
     }
 
     TEST(InputSystem_process_events, multiple_keys_tracked_independently)
@@ -244,17 +244,17 @@ namespace raktr::engine::test
         // Press A and B
         window_ptr->trigger_key(65, 0, 1, 0); // A
         window_ptr->trigger_key(66, 0, 1, 0); // B
-        input_system.process_events();
+        auto state1 = input_system.process_events();
 
-        EXPECT_TRUE(input_system.is_key_pressed(KeyCode::A));
-        EXPECT_TRUE(input_system.is_key_pressed(KeyCode::B));
+        EXPECT_TRUE(state1.keys[KeyCode::A]);
+        EXPECT_TRUE(state1.keys[KeyCode::B]);
 
         // Release A, keep B pressed
         window_ptr->trigger_key(65, 0, 0, 0); // Release A
-        input_system.process_events();
+        auto state2 = input_system.process_events();
 
-        EXPECT_FALSE(input_system.is_key_pressed(KeyCode::A));
-        EXPECT_TRUE(input_system.is_key_pressed(KeyCode::B));
+        EXPECT_FALSE(state2.keys[KeyCode::A]);
+        EXPECT_TRUE(state2.keys[KeyCode::B]);
     }
 
     TEST(InputSystem_process_events, mouse_button_press_updates_state)
@@ -265,9 +265,9 @@ namespace raktr::engine::test
 
         // Simulate left mouse button press (GLFW_MOUSE_BUTTON_1 = 0, GLFW_PRESS = 1)
         window_ptr->trigger_mouse_button(0, 1, 0);
-        input_system.process_events();
+        auto state = input_system.process_events();
 
-        EXPECT_TRUE(input_system.is_mouse_button_pressed(MouseButton::Left));
+        EXPECT_TRUE(state.mouse_buttons[MouseButton::Left]);
     }
 
     TEST(InputSystem_process_events, mouse_button_release_updates_state)
@@ -278,12 +278,12 @@ namespace raktr::engine::test
 
         // Press and release
         window_ptr->trigger_mouse_button(0, 1, 0); // Press
-        input_system.process_events();
-        EXPECT_TRUE(input_system.is_mouse_button_pressed(MouseButton::Left));
+        auto state1 = input_system.process_events();
+        EXPECT_TRUE(state1.mouse_buttons[MouseButton::Left]);
 
         window_ptr->trigger_mouse_button(0, 0, 0); // Release
-        input_system.process_events();
-        EXPECT_FALSE(input_system.is_mouse_button_pressed(MouseButton::Left));
+        auto state2 = input_system.process_events();
+        EXPECT_FALSE(state2.mouse_buttons[MouseButton::Left]);
     }
 
     TEST(InputSystem_process_events, cursor_position_updates)
@@ -294,11 +294,10 @@ namespace raktr::engine::test
 
         // Trigger cursor move
         window_ptr->trigger_cursor_pos(123.45, 678.90);
-        input_system.process_events();
+        auto state = input_system.process_events();
 
-        auto [x, y] = input_system.get_mouse_position();
-        EXPECT_DOUBLE_EQ(x, 123.45);
-        EXPECT_DOUBLE_EQ(y, 678.90);
+        EXPECT_DOUBLE_EQ(state.mouse_x, 123.45);
+        EXPECT_DOUBLE_EQ(state.mouse_y, 678.90);
     }
 
     TEST(InputSystem_process_events, cursor_position_updates_multiple_times)
@@ -309,17 +308,15 @@ namespace raktr::engine::test
 
         // First move
         window_ptr->trigger_cursor_pos(100.0, 200.0);
-        input_system.process_events();
-        auto [x1, y1] = input_system.get_mouse_position();
-        EXPECT_DOUBLE_EQ(x1, 100.0);
-        EXPECT_DOUBLE_EQ(y1, 200.0);
+        auto state1 = input_system.process_events();
+        EXPECT_DOUBLE_EQ(state1.mouse_x, 100.0);
+        EXPECT_DOUBLE_EQ(state1.mouse_y, 200.0);
 
         // Second move
         window_ptr->trigger_cursor_pos(300.0, 400.0);
-        input_system.process_events();
-        auto [x2, y2] = input_system.get_mouse_position();
-        EXPECT_DOUBLE_EQ(x2, 300.0);
-        EXPECT_DOUBLE_EQ(y2, 400.0);
+        auto state2 = input_system.process_events();
+        EXPECT_DOUBLE_EQ(state2.mouse_x, 300.0);
+        EXPECT_DOUBLE_EQ(state2.mouse_y, 400.0);
     }
 
     TEST(InputSystem_query, unpressed_key_returns_false)
@@ -327,8 +324,9 @@ namespace raktr::engine::test
         auto        window = std::make_unique<MockWindow>();
         InputSystem input_system(*window);
 
-        EXPECT_FALSE(input_system.is_key_pressed(KeyCode::A));
-        EXPECT_FALSE(input_system.is_key_pressed(KeyCode::Escape));
+        auto state = input_system.get_state();
+        EXPECT_FALSE(state.keys[KeyCode::A]);
+        EXPECT_FALSE(state.keys[KeyCode::Escape]);
     }
 
     TEST(InputSystem_query, unpressed_mouse_button_returns_false)
@@ -336,8 +334,9 @@ namespace raktr::engine::test
         auto        window = std::make_unique<MockWindow>();
         InputSystem input_system(*window);
 
-        EXPECT_FALSE(input_system.is_mouse_button_pressed(MouseButton::Left));
-        EXPECT_FALSE(input_system.is_mouse_button_pressed(MouseButton::Right));
+        auto state = input_system.get_state();
+        EXPECT_FALSE(state.mouse_buttons[MouseButton::Left]);
+        EXPECT_FALSE(state.mouse_buttons[MouseButton::Right]);
     }
 
     TEST(InputSystem_query, initial_mouse_position_is_zero)
@@ -345,9 +344,9 @@ namespace raktr::engine::test
         auto        window = std::make_unique<MockWindow>();
         InputSystem input_system(*window);
 
-        auto [x, y] = input_system.get_mouse_position();
-        EXPECT_DOUBLE_EQ(x, 0.0);
-        EXPECT_DOUBLE_EQ(y, 0.0);
+        auto state = input_system.get_state();
+        EXPECT_DOUBLE_EQ(state.mouse_x, 0.0);
+        EXPECT_DOUBLE_EQ(state.mouse_y, 0.0);
     }
 
 } // namespace raktr::engine::test

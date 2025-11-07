@@ -5,9 +5,7 @@
 
 #include "input/input_system.h"
 #include "window/window.h"
-#include <algorithm>
 #include <mutex>
-#include <unordered_map>
 #include <vector>
 
 // GLFW key codes (from GLFW/glfw3.h)
@@ -160,10 +158,10 @@ namespace raktr::engine
     struct InputSystem::Impl
     {
         // Input state
-        std::unordered_map<KeyCode, bool>     key_states;
-        std::unordered_map<MouseButton, bool> mouse_button_states;
-        double                                mouse_x = 0.0;
-        double                                mouse_y = 0.0;
+        FlagSet<KeyCode>     keys;
+        FlagSet<MouseButton> mouse_buttons;
+        double               mouse_x = 0.0;
+        double               mouse_y = 0.0;
 
         // Thread-safe event queue
         mutable std::mutex      event_queue_mutex;
@@ -492,7 +490,7 @@ namespace raktr::engine
         return mods;
     }
 
-    void InputSystem::process_events()
+    InputState InputSystem::process_events()
     {
         // Swap event queue (minimize lock time)
         std::vector<InputEvent> events;
@@ -511,23 +509,19 @@ namespace raktr::engine
                        },
                        event);
         }
+
+        // Return current state snapshot
+        return get_state();
     }
 
-    bool InputSystem::is_key_pressed(KeyCode key) const
+    InputState InputSystem::get_state() const
     {
-        auto it = _pimpl->key_states.find(key);
-        return it != _pimpl->key_states.end() && it->second;
-    }
-
-    bool InputSystem::is_mouse_button_pressed(MouseButton button) const
-    {
-        auto it = _pimpl->mouse_button_states.find(button);
-        return it != _pimpl->mouse_button_states.end() && it->second;
-    }
-
-    std::pair<double, double> InputSystem::get_mouse_position() const
-    {
-        return { _pimpl->mouse_x, _pimpl->mouse_y };
+        InputState state;
+        state.keys          = _pimpl->keys;
+        state.mouse_buttons = _pimpl->mouse_buttons;
+        state.mouse_x       = _pimpl->mouse_x;
+        state.mouse_y       = _pimpl->mouse_y;
+        return state;
     }
 
     void InputSystem::Impl::on_key(int key, int scancode, int action, int mods)
@@ -582,11 +576,11 @@ namespace raktr::engine
         // Update key state
         if (event.action == KeyAction::Press || event.action == KeyAction::Repeat)
         {
-            key_states[event.key] = true;
+            keys.set(event.key, true);
         }
         else if (event.action == KeyAction::Release)
         {
-            key_states[event.key] = false;
+            keys.set(event.key, false);
         }
     }
 
@@ -595,11 +589,11 @@ namespace raktr::engine
         // Update mouse button state
         if (event.action == MouseAction::Press)
         {
-            mouse_button_states[event.button] = true;
+            mouse_buttons.set(event.button, true);
         }
         else if (event.action == MouseAction::Release)
         {
-            mouse_button_states[event.button] = false;
+            mouse_buttons.set(event.button, false);
         }
     }
 

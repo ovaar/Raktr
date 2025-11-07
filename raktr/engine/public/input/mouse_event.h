@@ -12,57 +12,60 @@
 namespace raktr::engine
 {
 
-/*!
- * @brief Mouse button codes mapped from GLFW.
- */
-enum class MouseButton : uint8_t
-{
-    Left = 0,
-    Right = 1,
-    Middle = 2,
-    Button4 = 3,
-    Button5 = 4,
-    Button6 = 5,
-    Button7 = 6,
-    Button8 = 7
-};
+    /*!
+     * @brief Mouse button codes mapped from GLFW.
+     */
+    enum class MouseButton : uint8_t
+    {
+        Left    = 0,
+        Right   = 1,
+        Middle  = 2,
+        Button4 = 3,
+        Button5 = 4,
+        Button6 = 5,
+        Button7 = 6,
+        Button8 = 7,
 
-/*!
- * @brief Mouse button action (press, release).
- */
-enum class MouseAction : uint8_t
-{
-    Release = 0,
-    Press = 1
-};
+        // Sentinel value for FlagSet (must be last)
+        _
+    };
 
-/*!
- * @brief Mouse button event data.
- */
-struct MouseButtonEvent
-{
-    MouseButton button;
-    MouseAction action;
-    KeyModifiers mods;
-};
+    /*!
+     * @brief Mouse button action (press, release).
+     */
+    enum class MouseAction : uint8_t
+    {
+        Release = 0,
+        Press   = 1
+    };
 
-/*!
- * @brief Mouse cursor movement event data.
- */
-struct MouseMoveEvent
-{
-    double x;
-    double y;
-};
+    /*!
+     * @brief Mouse button event data.
+     */
+    struct MouseButtonEvent
+    {
+        MouseButton  button;
+        MouseAction  action;
+        KeyModifiers mods;
+    };
 
-/*!
- * @brief Mouse scroll event data.
- */
-struct MouseScrollEvent
-{
-    double xoffset;
-    double yoffset;
-};
+    /*!
+     * @brief Mouse cursor movement event data.
+     */
+    struct MouseMoveEvent
+    {
+        double x;
+        double y;
+    };
+
+    /*!
+     * @brief Mouse scroll event data.
+     */
+    struct MouseScrollEvent
+    {
+        double xoffset;
+        double yoffset;
+    };
 
 } // namespace raktr::engine
 

@@ -6,6 +6,7 @@
 #ifndef RAKTR_ENGINE_INPUT_INPUT_SYSTEM_H
 #define RAKTR_ENGINE_INPUT_INPUT_SYSTEM_H
 
+#include "core/flag_set.h"
 #include "input_event.h"
 #include <memory>
 #include <utility>
@@ -18,6 +19,19 @@ namespace raktr::render
 
 namespace raktr::engine
 {
+
+    /*!
+     * @brief Current input state snapshot.
+     *
+     * Contains the state of all keys and mouse buttons at a given moment.
+     */
+    struct InputState
+    {
+        FlagSet<KeyCode>     keys{};
+        FlagSet<MouseButton> mouse_buttons{};
+        double               mouse_x = 0.0;
+        double               mouse_y = 0.0;
+    };
 
     /*!
      * @brief Input system for processing user input events.
@@ -37,9 +51,9 @@ namespace raktr::engine
      * // Main loop
      * while (!window->should_close()) {
      *     window->poll_events();  // Triggers callbacks (enqueues events)
-     *     input_system.process_events();  // Process queued events
+     *     InputState input_state = input_system.process_events();
      *
-     *     if (input_system.is_key_pressed(KeyCode::Escape)) {
+     *     if (input_state.keys[KeyCode::Escape]) {
      *         break;
      *     }
      * }
@@ -83,32 +97,20 @@ namespace raktr::engine
         static KeyModifiers map_glfw_mods(int glfw_mods);
 
         /*!
-         * @brief Process all queued input events.
+         * @brief Process all queued input events and return current state.
          *
-         * Dequeues all events and updates input state.
+         * Dequeues all events, updates internal state, and returns a snapshot.
          * Thread-safe - can be called from worker threads.
+         *
+         * @return Current input state snapshot.
          */
-        void process_events();
+        InputState process_events();
 
         /*!
-         * @brief Check if a key is currently pressed.
-         * @param key KeyCode to check.
-         * @return True if key is pressed, false otherwise.
+         * @brief Get current input state without processing events.
+         * @return Current input state snapshot.
          */
-        [[nodiscard]] bool is_key_pressed(KeyCode key) const;
-
-        /*!
-         * @brief Check if a mouse button is currently pressed.
-         * @param button MouseButton to check.
-         * @return True if button is pressed, false otherwise.
-         */
-        [[nodiscard]] bool is_mouse_button_pressed(MouseButton button) const;
-
-        /*!
-         * @brief Get current mouse cursor position.
-         * @return Pair of (x, y) coordinates in screen space.
-         */
-        [[nodiscard]] std::pair<double, double> get_mouse_position() const;
+        [[nodiscard]] InputState get_state() const;
 
     private:
         struct Impl;
