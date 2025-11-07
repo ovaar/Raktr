@@ -13,6 +13,7 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <gtest/gtest.h>
+#include <spdlog/spdlog.h>
 #include <thread>
 
 using namespace raktr::render;
@@ -256,24 +257,24 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
                                     [[maybe_unused]] auto resize_result = device->resize(width, height);
                                 });
 
-    window->set_key_callback([&key_called](int, int, int, int)
+    window->set_key_callback([](int key, int scancode, int action, int mods)
                              {
-                                 key_called++;
+                                 spdlog::info("Key event: {} {} {} {}", key, scancode, action, mods);
                              });
 
-    window->set_mouse_button_callback([&mouse_button_called](int, int, int)
+    window->set_mouse_button_callback([](int button, int action, int mods)
                                       {
-                                          mouse_button_called++;
+                                          spdlog::info("Mouse button event: {} {} {}", button, action, mods);
                                       });
 
-    window->set_cursor_pos_callback([&cursor_pos_called](double, double)
+    window->set_cursor_pos_callback([](double x, double y)
                                     {
-                                        cursor_pos_called++;
+                                        spdlog::info("Cursor position event: {} {}", x, y);
                                     });
 
-    window->set_scroll_callback([&scroll_called](double, double)
+    window->set_scroll_callback([](double xoffset, double yoffset)
                                 {
-                                    scroll_called++;
+                                    spdlog::info("Scroll event: {} {}", xoffset, yoffset);
                                 });
     // Create cube vertex buffer - 8 vertices at corners (scaled down to 0.5 units)
     // clang-format off
