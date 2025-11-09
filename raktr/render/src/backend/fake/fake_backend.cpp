@@ -3,7 +3,7 @@
  * @brief Implementation of FakeBackend.
  */
 
-#include "backend/fake_backend.h"
+#include "backend/fake/fake_backend.h"
 #include <memory>
 
 namespace raktr::render::backend

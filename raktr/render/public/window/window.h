@@ -7,297 +7,298 @@
 #define RAKTR_RENDER_WINDOW_H
 
 #include "render_error.h"
-#include <expected>
-#include <system_error>
 #include <cstdint>
-#include <memory>
+#include <expected>
 #include <functional>
+#include <memory>
+#include <system_error>
+
 
 namespace raktr::render
 {
 
-/*!
- * @brief Callback function type for window resize events.
- * @param width New width in pixels.
- * @param height New height in pixels.
- */
-using ResizeCallback = std::function<void(uint32_t width, uint32_t height)>;
-
-/*!
- * @brief Callback function type for keyboard events.
- * @param key GLFW key code (GLFW_KEY_* constants).
- * @param scancode Platform-specific scancode.
- * @param action GLFW action (GLFW_PRESS, GLFW_RELEASE, GLFW_REPEAT).
- * @param mods Modifier key bitfield (GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, etc.).
- */
-using KeyCallback = std::function<void(int key, int scancode, int action, int mods)>;
-
-/*!
- * @brief Callback function type for mouse button events.
- * @param button GLFW mouse button code (GLFW_MOUSE_BUTTON_LEFT, etc.).
- * @param action GLFW action (GLFW_PRESS or GLFW_RELEASE).
- * @param mods Modifier key bitfield (GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, etc.).
- */
-using MouseButtonCallback = std::function<void(int button, int action, int mods)>;
-
-/*!
- * @brief Callback function type for cursor position events.
- * @param xpos Cursor x-coordinate in screen coordinates.
- * @param ypos Cursor y-coordinate in screen coordinates.
- */
-using CursorPosCallback = std::function<void(double xpos, double ypos)>;
-
-/*!
- * @brief Callback function type for scroll events.
- * @param xoffset Horizontal scroll offset.
- * @param yoffset Vertical scroll offset.
- */
-using ScrollCallback = std::function<void(double xoffset, double yoffset)>;
-
-/*!
- * @brief Configuration for window creation.
- */
-struct WindowConfig
-{
-    uint32_t width = 1280;
-    uint32_t height = 720;
-    const char* title = "Raktr";
-    bool resizable = true;
-    bool fullscreen = false;
-};
-
-/*!
- * @brief Abstract window interface for cross-platform window management.
- * 
- * Provides platform-agnostic window creation, event handling, and surface
- * management for graphics APIs (OpenGL, Vulkan, DirectX, WebGPU).
- */
-class Window
-{
-public:
-    virtual ~Window() = default;
-
-    // Non-copyable, moveable
-    Window(const Window&) = delete;
-    Window& operator=(const Window&) = delete;
-    Window(Window&&) noexcept = default;
-    Window& operator=(Window&&) noexcept = default;
-
     /*!
-     * @brief Check if the window should close.
-     * @return True if close was requested (e.g., X button clicked).
+     * @brief Callback function type for window resize events.
+     * @param width New width in pixels.
+     * @param height New height in pixels.
      */
-    virtual bool should_close() const = 0;
+    using ResizeCallback = std::function<void(uint32_t width, uint32_t height)>;
 
     /*!
-     * @brief Poll and process window events.
-     * 
-     * Should be called once per frame to handle input, resize, etc.
+     * @brief Callback function type for keyboard events.
+     * @param key GLFW key code (GLFW_KEY_* constants).
+     * @param scancode Platform-specific scancode.
+     * @param action GLFW action (GLFW_PRESS, GLFW_RELEASE, GLFW_REPEAT).
+     * @param mods Modifier key bitfield (GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, etc.).
      */
-    virtual void poll_events() = 0;
+    using KeyCallback = std::function<void(int key, int scancode, int action, int mods)>;
 
     /*!
-     * @brief Swap front and back buffers (present frame).
-     * 
-     * For OpenGL contexts. Other APIs (Vulkan, WebGPU) handle swapping
-     * through their own swapchain mechanisms.
+     * @brief Callback function type for mouse button events.
+     * @param button GLFW mouse button code (GLFW_MOUSE_BUTTON_LEFT, etc.).
+     * @param action GLFW action (GLFW_PRESS or GLFW_RELEASE).
+     * @param mods Modifier key bitfield (GLFW_MOD_SHIFT, GLFW_MOD_CONTROL, etc.).
      */
-    virtual void swap_buffers() = 0;
+    using MouseButtonCallback = std::function<void(int button, int action, int mods)>;
 
     /*!
-     * @brief Get current window width in pixels.
+     * @brief Callback function type for cursor position events.
+     * @param xpos Cursor x-coordinate in screen coordinates.
+     * @param ypos Cursor y-coordinate in screen coordinates.
      */
-    [[nodiscard]] virtual uint32_t width() const = 0;
+    using CursorPosCallback = std::function<void(double xpos, double ypos)>;
 
     /*!
-     * @brief Get current window height in pixels.
+     * @brief Callback function type for scroll events.
+     * @param xoffset Horizontal scroll offset.
+     * @param yoffset Vertical scroll offset.
      */
-    [[nodiscard]] virtual uint32_t height() const = 0;
+    using ScrollCallback = std::function<void(double xoffset, double yoffset)>;
 
     /*!
-     * @brief Get native platform window handle.
-     * 
-     * Returns platform-specific handle for graphics API initialization:
-     * - Windows: HWND
-     * - Linux X11: Window (XID)
-     * - Linux Wayland: wl_surface*
-     * - macOS: NSWindow*
-     * 
-     * @return Opaque pointer to native window handle.
+     * @brief Configuration for window creation.
      */
-    [[nodiscard]] virtual void* native_handle() const = 0;
+    struct WindowConfig
+    {
+        uint32_t    width      = 1280;
+        uint32_t    height     = 720;
+        const char* title      = "Raktr";
+        bool        resizable  = true;
+        bool        fullscreen = false;
+    };
 
     /*!
-     * @brief Set callback to be invoked when window is resized.
-     * 
-     * The callback will be invoked with new dimensions whenever the window
-     * is resized by the user or programmatically.
-     * 
-     * @param callback Function to call on resize, or nullptr to clear callback.
-     * 
+     * @brief Abstract window interface for cross-platform window management.
+     *
+     * Provides platform-agnostic window creation, event handling, and surface
+     * management for graphics APIs (OpenGL, Vulkan, DirectX, WebGPU).
+     */
+    class Window
+    {
+    public:
+        virtual ~Window() = default;
+
+        // Non-copyable, moveable
+        Window(const Window&)                = delete;
+        Window& operator=(const Window&)     = delete;
+        Window(Window&&) noexcept            = default;
+        Window& operator=(Window&&) noexcept = default;
+
+        /*!
+         * @brief Check if the window should close.
+         * @return True if close was requested (e.g., X button clicked).
+         */
+        virtual bool should_close() const = 0;
+
+        /*!
+         * @brief Poll and process window events.
+         *
+         * Should be called once per frame to handle input, resize, etc.
+         */
+        virtual void poll_events() = 0;
+
+        /*!
+         * @brief Swap front and back buffers (present frame).
+         *
+         * For OpenGL contexts. Other APIs (Vulkan, WebGPU) handle swapping
+         * through their own swapchain mechanisms.
+         */
+        virtual void swap_buffers() = 0;
+
+        /*!
+         * @brief Get current window width in pixels.
+         */
+        [[nodiscard]] virtual uint32_t width() const = 0;
+
+        /*!
+         * @brief Get current window height in pixels.
+         */
+        [[nodiscard]] virtual uint32_t height() const = 0;
+
+        /*!
+         * @brief Get native platform window handle.
+         *
+         * Returns platform-specific handle for graphics API initialization:
+         * - Windows: HWND
+         * - Linux X11: Window (XID)
+         * - Linux Wayland: wl_surface*
+         * - macOS: NSWindow*
+         *
+         * @return Opaque pointer to native window handle.
+         */
+        [[nodiscard]] virtual void* native_handle() const = 0;
+
+        /*!
+         * @brief Set callback to be invoked when window is resized.
+         *
+         * The callback will be invoked with new dimensions whenever the window
+         * is resized by the user or programmatically.
+         *
+         * @param callback Function to call on resize, or nullptr to clear callback.
+         *
+         * @example
+         * window->set_resize_callback([](uint32_t w, uint32_t h) {
+         *     // Recreate swapchain, update viewport, etc.
+         * });
+         */
+        virtual void set_resize_callback(ResizeCallback callback) = 0;
+
+        /*!
+         * @brief Set callback to be invoked on keyboard events.
+         *
+         * @param callback Function receiving GLFW key events, or nullptr to clear callback.
+         *
+         * @example
+         * window->set_key_callback([](int key, int scancode, int action, int mods) {
+         *     if (action == GLFW_PRESS) {
+         *         // Handle key press
+         *     }
+         * });
+         */
+        virtual void set_key_callback(KeyCallback callback) = 0;
+
+        /*!
+         * @brief Set callback to be invoked on mouse button events.
+         *
+         * @param callback Function receiving GLFW mouse button events, or nullptr to clear callback.
+         *
+         * @example
+         * window->set_mouse_button_callback([](int button, int action, int mods) {
+         *     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
+         *         // Handle left mouse button click
+         *     }
+         * });
+         */
+        virtual void set_mouse_button_callback(MouseButtonCallback callback) = 0;
+
+        /*!
+         * @brief Set callback to be invoked on cursor position changes.
+         *
+         * @param callback Function receiving cursor position, or nullptr to clear callback.
+         *
+         * @example
+         * window->set_cursor_pos_callback([](double x, double y) {
+         *     // Handle mouse movement
+         * });
+         */
+        virtual void set_cursor_pos_callback(CursorPosCallback callback) = 0;
+
+        /*!
+         * @brief Set callback to be invoked on scroll events.
+         *
+         * @param callback Function receiving scroll offsets, or nullptr to clear callback.
+         *
+         * @example
+         * window->set_scroll_callback([](double xoffset, double yoffset) {
+         *     // Handle mouse wheel scroll
+         * });
+         */
+        virtual void set_scroll_callback(ScrollCallback callback) = 0;
+
+        /*!
+         * @brief Check if window is currently in fullscreen mode.
+         * @return True if fullscreen, false if windowed.
+         */
+        [[nodiscard]] virtual bool is_fullscreen() const = 0;
+
+        /*!
+         * @brief Switch between fullscreen and windowed mode.
+         *
+         * For GLFW windows, automatically saves/restores windowed position and size.
+         * For native windows, sets internal flag but external code must handle actual switch.
+         *
+         * @param fullscreen True for fullscreen, false for windowed.
+         *
+         * @example
+         * // Toggle fullscreen on Alt+Enter
+         * if (key == KEY_ENTER && alt_pressed) {
+         *     window->set_fullscreen(!window->is_fullscreen());
+         * }
+         */
+        virtual void set_fullscreen(bool fullscreen) = 0;
+
+    protected:
+        Window() = default;
+    };
+
+    /*!
+     * @brief Factory function to create a window.
+     *
+     * Creates platform-specific window implementation (GLFW, SDL, native).
+     *
+     * @param config Window configuration.
+     * @return Window instance or error code.
+     *
      * @example
-     * window->set_resize_callback([](uint32_t w, uint32_t h) {
+     * WindowConfig config;
+     * config.width = 1920;
+     * config.height = 1080;
+     * config.title = "My Game";
+     *
+     * auto window_result = create_window(config);
+     * if (!window_result) {
+     *     // Handle error
+     *     return;
+     * }
+     * auto& window = *window_result;
+     *
+     * // Set up resize callback to handle window size changes
+     * window->set_resize_callback([](uint32_t width, uint32_t height) {
      *     // Recreate swapchain, update viewport, etc.
+     *     // Called automatically when user resizes window
      * });
-     */
-    virtual void set_resize_callback(ResizeCallback callback) = 0;
-
-    /*!
-     * @brief Set callback to be invoked on keyboard events.
-     * 
-     * @param callback Function receiving GLFW key events, or nullptr to clear callback.
-     * 
-     * @example
-     * window->set_key_callback([](int key, int scancode, int action, int mods) {
-     *     if (action == GLFW_PRESS) {
-     *         // Handle key press
-     *     }
-     * });
-     */
-    virtual void set_key_callback(KeyCallback callback) = 0;
-
-    /*!
-     * @brief Set callback to be invoked on mouse button events.
-     * 
-     * @param callback Function receiving GLFW mouse button events, or nullptr to clear callback.
-     * 
-     * @example
-     * window->set_mouse_button_callback([](int button, int action, int mods) {
-     *     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
-     *         // Handle left mouse button click
-     *     }
-     * });
-     */
-    virtual void set_mouse_button_callback(MouseButtonCallback callback) = 0;
-
-    /*!
-     * @brief Set callback to be invoked on cursor position changes.
-     * 
-     * @param callback Function receiving cursor position, or nullptr to clear callback.
-     * 
-     * @example
-     * window->set_cursor_pos_callback([](double x, double y) {
-     *     // Handle mouse movement
-     * });
-     */
-    virtual void set_cursor_pos_callback(CursorPosCallback callback) = 0;
-
-    /*!
-     * @brief Set callback to be invoked on scroll events.
-     * 
-     * @param callback Function receiving scroll offsets, or nullptr to clear callback.
-     * 
-     * @example
-     * window->set_scroll_callback([](double xoffset, double yoffset) {
-     *     // Handle mouse wheel scroll
-     * });
-     */
-    virtual void set_scroll_callback(ScrollCallback callback) = 0;
-
-    /*!
-     * @brief Check if window is currently in fullscreen mode.
-     * @return True if fullscreen, false if windowed.
-     */
-    [[nodiscard]] virtual bool is_fullscreen() const = 0;
-
-    /*!
-     * @brief Switch between fullscreen and windowed mode.
-     * 
-     * For GLFW windows, automatically saves/restores windowed position and size.
-     * For native windows, sets internal flag but external code must handle actual switch.
-     * 
-     * @param fullscreen True for fullscreen, false for windowed.
-     * 
-     * @example
+     *
      * // Toggle fullscreen on Alt+Enter
-     * if (key == KEY_ENTER && alt_pressed) {
+     * // (Pseudocode - actual input handling depends on your input system)
+     * if (alt_enter_pressed) {
      *     window->set_fullscreen(!window->is_fullscreen());
      * }
+     *
+     * while (!window->should_close()) {
+     *     window->poll_events();
+     *     // Render...
+     *     window->swap_buffers();
+     * }
      */
-    virtual void set_fullscreen(bool fullscreen) = 0;
+    std::expected<std::unique_ptr<Window>, std::error_code>
+    create_window(const WindowConfig& config);
 
-protected:
-    Window() = default;
-};
-
-/*!
- * @brief Factory function to create a window.
- * 
- * Creates platform-specific window implementation (GLFW, SDL, native).
- * 
- * @param config Window configuration.
- * @return Window instance or error code.
- * 
- * @example
- * WindowConfig config;
- * config.width = 1920;
- * config.height = 1080;
- * config.title = "My Game";
- * 
- * auto window_result = create_window(config);
- * if (!window_result) {
- *     // Handle error
- *     return;
- * }
- * auto& window = *window_result;
- * 
- * // Set up resize callback to handle window size changes
- * window->set_resize_callback([](uint32_t width, uint32_t height) {
- *     // Recreate swapchain, update viewport, etc.
- *     // Called automatically when user resizes window
- * });
- * 
- * // Toggle fullscreen on Alt+Enter
- * // (Pseudocode - actual input handling depends on your input system)
- * if (alt_enter_pressed) {
- *     window->set_fullscreen(!window->is_fullscreen());
- * }
- * 
- * while (!window->should_close()) {
- *     window->poll_events();
- *     // Render...
- *     window->swap_buffers();
- * }
- */
-std::expected<std::unique_ptr<Window>, std::error_code>
-create_window(const WindowConfig& config);
-
-/*!
- * @brief Wrap an existing native window handle.
- * 
- * Creates a Window instance that wraps an externally-provided platform window
- * handle (HWND on Windows, Window on X11, NSWindow* on macOS, etc.).
- * 
- * CRITICAL: The returned Window does NOT own the handle and will not destroy it.
- * The external code that created the handle is responsible for its lifecycle.
- * 
- * Use case: Embedding Raktr rendering into existing applications (e.g., .NET WPF/WinForms,
- * Qt, game engines) that already manage their own windows.
- * 
- * @param native_handle Platform-specific window handle. Must not be null and must remain valid.
- * @param width Initial window width in pixels. Must be > 0.
- * @param height Initial window height in pixels. Must be > 0.
- * @return Window instance or error code.
- * 
- * @example
- * // From a .NET C# application with P/Invoke:
- * // IntPtr hwnd = myWpfWindow.Handle;
- * // Pass to C++:
- * void* hwnd = ...; // HWND from .NET
- * auto window_result = create_window_from_native(hwnd, 1920, 1080);
- * if (!window_result) {
- *     // Handle error
- *     return;
- * }
- * auto& window = *window_result;
- * 
- * // Use for rendering:
- * auto device = WgpuDevice::create(window.get(), false);
- * 
- * // .NET code handles window events and destruction
- */
-std::expected<std::unique_ptr<Window>, std::error_code>
-create_window_from_native(void* native_handle, uint32_t width, uint32_t height);
+    /*!
+     * @brief Wrap an existing native window handle.
+     *
+     * Creates a Window instance that wraps an externally-provided platform window
+     * handle (HWND on Windows, Window on X11, NSWindow* on macOS, etc.).
+     *
+     * CRITICAL: The returned Window does NOT own the handle and will not destroy it.
+     * The external code that created the handle is responsible for its lifecycle.
+     *
+     * Use case: Embedding Raktr rendering into existing applications (e.g., .NET WPF/WinForms,
+     * Qt, game engines) that already manage their own windows.
+     *
+     * @param native_handle Platform-specific window handle. Must not be null and must remain valid.
+     * @param width Initial window width in pixels. Must be > 0.
+     * @param height Initial window height in pixels. Must be > 0.
+     * @return Window instance or error code.
+     *
+     * @example
+     * // From a .NET C# application with P/Invoke:
+     * // IntPtr hwnd = myWpfWindow.Handle;
+     * // Pass to C++:
+     * void* hwnd = ...; // HWND from .NET
+     * auto window_result = create_window_from_native(hwnd, 1920, 1080);
+     * if (!window_result) {
+     *     // Handle error
+     *     return;
+     * }
+     * auto& window = *window_result;
+     *
+     * // Use for rendering:
+     * auto device = WgpuDevice::create(window.get(), false);
+     *
+     * // .NET code handles window events and destruction
+     */
+    std::expected<std::unique_ptr<Window>, std::error_code>
+    create_window_from_native(void* native_handle, uint32_t width, uint32_t height);
 
 } // namespace raktr::render
 

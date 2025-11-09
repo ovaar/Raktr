@@ -4,8 +4,10 @@
  */
 
 #include "backend/wgpu/wgpu_device.h"
+#include "buffer.h"
 #include "window/window.h"
 #include <gtest/gtest.h>
+
 
 #ifdef _WIN32
 #include <windows.h>

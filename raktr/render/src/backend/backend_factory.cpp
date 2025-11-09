@@ -3,7 +3,7 @@
  * @brief Factory for creating backend implementations.
  */
 
-#include "backend/fake_backend.h"
+#include "backend/fake/fake_backend.h"
 #include "backend/ibackend.h"
 #include "backend/wgpu/wgpu_backend.h"
 

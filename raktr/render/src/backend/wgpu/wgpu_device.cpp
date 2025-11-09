@@ -4,6 +4,7 @@
  */
 
 #include "wgpu_device.h"
+#include "buffer.h"
 #include "window/window.h"
 #include <spdlog/spdlog.h>
 
@@ -230,21 +231,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         // Create default uniform buffer with identity matrix for backward compatibility
         // This allows existing tests to work without providing a uniform buffer
+        // clang-format off
         float identity_matrix[16] = {
             1.0f, 0.0f, 0.0f, 0.0f, // Column 0
-            0.0f,
-            1.0f,
-            0.0f,
-            0.0f, // Column 1
-            0.0f,
-            0.0f,
-            1.0f,
-            0.0f, // Column 2
-            0.0f,
-            0.0f,
-            0.0f,
-            1.0f // Column 3
+            0.0f, 1.0f, 0.0f, 0.0f, // Column 1
+            0.0f, 0.0f, 1.0f, 0.0f, // Column 2
+            0.0f, 0.0f, 0.0f, 1.0f // Column 3
         };
+        // clang-format on
         auto uniform_result = create_uniform_buffer(sizeof(identity_matrix));
         if (!uniform_result)
         {

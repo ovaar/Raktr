@@ -6,10 +6,12 @@
 #ifndef RAKTR_RENDER_BACKEND_FAKE_DEVICE_H
 #define RAKTR_RENDER_BACKEND_FAKE_DEVICE_H
 
+#include "aspect_ratio.h"
+#include "buffer.h"
 #include "device.h"
-#include <vector>
-#include <unordered_map>
 #include <cstdint>
+#include <unordered_map>
+#include <vector>
 
 namespace raktr::render::backend
 {
@@ -18,18 +20,18 @@ namespace raktr::render::backend
      */
     enum class VertexFormat
     {
-        Position,          // 3 floats: x, y, z
-        PositionNormal,    // 6 floats: x, y, z, nx, ny, nz
-        PositionUV,        // 5 floats: x, y, z, u, v
-        PositionNormalUV   // 8 floats: x, y, z, nx, ny, nz, u, v
+        Position,        // 3 floats: x, y, z
+        PositionNormal,  // 6 floats: x, y, z, nx, ny, nz
+        PositionUV,      // 5 floats: x, y, z, u, v
+        PositionNormalUV // 8 floats: x, y, z, nx, ny, nz, u, v
     };
 
     /*!
      * @brief Fake device for testing - implements real software rendering.
-     * 
+     *
      * Unlike a mock, this actually stores buffer data and renders to an
      * in-memory framebuffer, enabling true end-to-end rendering tests.
-     * 
+     *
      * Features:
      * - Software rasterization with depth testing
      * - Simple directional lighting (ambient + diffuse)
@@ -41,16 +43,16 @@ namespace raktr::render::backend
         FakeDevice(uint32_t width = 800, uint32_t height = 600);
         ~FakeDevice() override = default;
 
-        std::expected<Buffer, std::error_code> 
+        std::expected<Buffer, std::error_code>
         create_vertex_buffer(std::span<const std::byte> data) override;
 
-        std::expected<Buffer, std::error_code> 
+        std::expected<Buffer, std::error_code>
         create_index_buffer(std::span<const std::byte> data) override;
 
         std::expected<void, std::error_code>
-        draw_indexed(const Buffer& vertex_buffer, 
-                    const Buffer& index_buffer, 
-                    uint32_t index_count) override;
+        draw_indexed(const Buffer& vertex_buffer,
+                     const Buffer& index_buffer,
+                     uint32_t      index_count) override;
 
         void clear() override;
         void present() override;
@@ -91,39 +93,61 @@ namespace raktr::render::backend
          */
         void set_vertex_format(VertexFormat format);
 
+        // Stub implementations for interface completeness (not supported in fake device)
+        std::expected<Buffer, std::error_code>
+        create_uniform_buffer(size_t size) override;
+
+        std::expected<void, std::error_code>
+        update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data) override;
+
+        void set_uniform_buffer(const Buffer& buffer) override;
+
+        std::expected<void, std::error_code>
+        resize(uint32_t width, uint32_t height) override;
+
+        void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f) override;
+
+        AspectRatio aspect_ratio() const override;
+
+        const Viewport& viewport() const override;
+
     private:
         // Buffer storage
-        struct BufferData {
+        struct BufferData
+        {
             std::vector<std::byte> data;
-            BufferType type;
+            BufferType             type;
         };
         std::unordered_map<uint64_t, BufferData> _buffers;
-        uint64_t _next_buffer_id = 1;
+        uint64_t                                 _next_buffer_id = 1;
 
         // Framebuffer
-        struct Framebuffer {
-            uint32_t width;
-            uint32_t height;
-            std::vector<uint32_t> pixels;  // RGBA8 format
-            std::vector<float> depth;      // Depth buffer (0.0 = near, 1.0 = far)
-            uint32_t clear_color = 0x000000FF;  // Black, opaque
+        struct Framebuffer
+        {
+            uint32_t              width;
+            uint32_t              height;
+            std::vector<uint32_t> pixels;                   // RGBA8 format
+            std::vector<float>    depth;                    // Depth buffer (0.0 = near, 1.0 = far)
+            uint32_t              clear_color = 0x000000FF; // Black, opaque
 
-            Framebuffer(uint32_t w, uint32_t h) 
-                : width(w), height(h), 
+            Framebuffer(uint32_t w, uint32_t h)
+                : width(w), height(h),
                   pixels(w * h, clear_color),
-                  depth(w * h, 1.0f) {}
+                  depth(w * h, 1.0f)
+            {
+            }
         };
         Framebuffer _framebuffer;
 
         // Render state
-        bool _depth_test_enabled = false;
-        VertexFormat _vertex_format = VertexFormat::Position;
+        bool         _depth_test_enabled = false;
+        VertexFormat _vertex_format      = VertexFormat::Position;
 
         // Helper methods
-        void rasterize_triangle(const float* v0, const float* v1, const float* v2);
-        void rasterize_triangle_with_normals(const float* v0, const float* v1, const float* v2);
-        bool point_in_triangle(int px, int py, int x0, int y0, int x1, int y1, int x2, int y2) const;
-        float calculate_lighting(const float* normal) const;
+        void     rasterize_triangle(const float* v0, const float* v1, const float* v2);
+        void     rasterize_triangle_with_normals(const float* v0, const float* v1, const float* v2);
+        bool     point_in_triangle(int px, int py, int x0, int y0, int x1, int y1, int x2, int y2) const;
+        float    calculate_lighting(const float* normal) const;
         uint32_t apply_lighting_to_color(uint32_t base_color, float intensity) const;
     };
 

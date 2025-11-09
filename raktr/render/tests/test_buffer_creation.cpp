@@ -3,6 +3,7 @@
  * @brief Unit tests for buffer creation and management.
  */
 
+#include "buffer.h"
 #include "render_context.h"
 #include <gtest/gtest.h>
 #include <vector>

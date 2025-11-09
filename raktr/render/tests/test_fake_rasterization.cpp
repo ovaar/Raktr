@@ -3,6 +3,7 @@
  * @brief Unit tests for FakeDevice rasterization behavior.
  */
 
+#include "buffer.h"
 #include "render_context.h"
 #include <array>
 #include <gtest/gtest.h>

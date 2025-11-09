@@ -3,8 +3,8 @@
  * @brief Fake backend for testing - software renderer with real behavior.
  */
 
-#ifndef RAKTR_RENDER_BACKEND_FAKE_BACKEND_H
-#define RAKTR_RENDER_BACKEND_FAKE_BACKEND_H
+#ifndef RAKTR_RENDER_BACKEND_FAKE_FAKE_BACKEND_H
+#define RAKTR_RENDER_BACKEND_FAKE_FAKE_BACKEND_H
 
 #include "backend/ibackend.h"
 #include "fake_device.h"
@@ -22,8 +22,8 @@ namespace raktr::render::backend
         ~FakeBackend() override;
 
         std::expected<void, std::error_code> initialize(const RenderConfig& config) override;
-        void shutdown() override;
-        Device* device() override;
+        void                                 shutdown() override;
+        Device*                              device() override;
 
     private:
         std::unique_ptr<FakeDevice> _device;
@@ -31,4 +31,4 @@ namespace raktr::render::backend
 
 } // namespace raktr::render::backend
 
-#endif // RAKTR_RENDER_BACKEND_FAKE_BACKEND_H
+#endif // RAKTR_RENDER_BACKEND_FAKE_FAKE_BACKEND_H

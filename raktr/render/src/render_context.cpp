@@ -4,7 +4,6 @@
  */
 
 #include "render_context.h"
-#include "backend/fake_backend.h"
 #include "backend/ibackend.h"
 #include <memory>
 

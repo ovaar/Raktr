@@ -365,4 +365,44 @@ namespace raktr::render::backend
         return (r << 24) | (g << 16) | (b << 8) | a;
     }
 
+    // Stub implementations for unsupported Device interface methods
+    std::expected<Buffer, std::error_code>
+    FakeDevice::create_uniform_buffer(size_t)
+    {
+        return std::unexpected(make_error_code(std::errc::not_supported));
+    }
+
+    std::expected<void, std::error_code>
+    FakeDevice::update_uniform_buffer(const Buffer&, std::span<const std::byte>)
+    {
+        return std::unexpected(make_error_code(std::errc::not_supported));
+    }
+
+    void FakeDevice::set_uniform_buffer(const Buffer&)
+    {
+        // No-op
+    }
+
+    std::expected<void, std::error_code>
+    FakeDevice::resize(uint32_t, uint32_t)
+    {
+        return {}; // Success, but do nothing
+    }
+
+    void FakeDevice::set_aspect_ratio(AspectRatio, float)
+    {
+        // No-op
+    }
+
+    AspectRatio FakeDevice::aspect_ratio() const
+    {
+        return AspectRatio::Ratio_16_9;
+    }
+
+    const Viewport& FakeDevice::viewport() const
+    {
+        static Viewport default_vp{};
+        return default_vp;
+    }
+
 } // namespace raktr::render::backend

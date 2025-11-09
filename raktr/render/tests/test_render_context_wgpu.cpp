@@ -3,23 +3,14 @@
  * @brief Integration tests for RenderContext with WebGPU backend.
  */
 
+#include "buffer.h"
 #include "render_context.h"
 #include <gtest/gtest.h>
 
 using namespace raktr::render;
 
-class RenderContextWgpuTest : public ::testing::Test
+struct RenderContextWgpuTest : public ::testing::Test
 {
-protected:
-    void SetUp() override
-    {
-        // Tests require WebGPU-capable hardware
-    }
-
-    void TearDown() override
-    {
-        // Cleanup handled by RenderContext destructor
-    }
 };
 
 TEST_F(RenderContextWgpuTest, CreateContext_WithWebGPU_Succeeds)

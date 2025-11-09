@@ -5,43 +5,50 @@
  * This is not an automated test. Run manually to see the rendered triangle.
  * Press ESC or close the window to exit.
  */
-
-#include "backend/wgpu/wgpu_device.h"
+#include "aspect_ratio.h"
+#include "buffer.h"
 #include "input/input_system.h" // From engine module
 #include "math/transform.h"
 #include "math/transform_types.h"
+#include "render_context.h"
 #include "scene/camera.h" // From engine module
 #include "window/window.h"
-#include <chrono>
+
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 #include <thread>
 
-
 using namespace raktr::render;
-using namespace raktr::render::backend;
 
 TEST(VisualTest, DISABLED_ManualRenderTriangle)
 {
     // Create window
-    WindowConfig config;
-    config.width     = 800;
-    config.height    = 600;
-    config.title     = "WebGPU Triangle Test";
-    config.resizable = true;
+    WindowConfig window_config;
+    window_config.width     = 800;
+    window_config.height    = 600;
+    window_config.title     = "WebGPU Triangle Test";
+    window_config.resizable = true;
 
-    auto window_result = create_window(config);
+    RenderConfig render_config;
+    render_config.backend           = BackendType::WebGPU;
+    render_config.enable_validation = false;
+
+    auto render_context = create_render_context();
+    ASSERT_NE(render_context, nullptr);
+
+    auto render_ctx_result = render_context->initialize(render_config);
+    ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext with WebGPU backend";
+
+    auto window_result = create_window(window_config);
     ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
 
     auto& window = window_result.value();
 
     // Create WebGPU device
-    auto device_result = WgpuDevice::create(window.get(), false);
-    ASSERT_TRUE(device_result.has_value()) << "Failed to create WebGPU device";
-
-    auto& device = device_result.value();
+    auto device = render_context->device();
+    ASSERT_NE(device, nullptr) << "Failed to get WebGPU device";
 
     // Create triangle vertex buffer
     // Positions in NDC space: top center, bottom left, bottom right
@@ -91,24 +98,32 @@ TEST(VisualTest, DISABLED_ManualRenderTriangle)
 TEST(VisualTest, DISABLED_SpinningCube)
 {
     // Create window
-    WindowConfig config;
-    config.width     = 800;
-    config.height    = 600;
-    config.title     = "WebGPU Spinning Cube Test";
-    config.resizable = false;
+    WindowConfig window_config;
+    window_config.width     = 800;
+    window_config.height    = 600;
+    window_config.title     = "WebGPU Spinning Cube Test";
+    window_config.resizable = false;
 
-    auto window_result = create_window(config);
+    RenderConfig render_config;
+    render_config.backend           = BackendType::WebGPU;
+    render_config.enable_validation = false;
+
+    auto render_context = create_render_context();
+    ASSERT_NE(render_context, nullptr);
+
+    auto render_ctx_result = render_context->initialize(render_config);
+    ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext with WebGPU backend";
+
+    auto window_result = create_window(window_config);
     ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
 
     auto& window = window_result.value();
 
     // Create WebGPU device
-    auto device_result = WgpuDevice::create(window.get(), false);
-    ASSERT_TRUE(device_result.has_value()) << "Failed to create WebGPU device";
+    auto device = render_context->device();
+    ASSERT_NE(device, nullptr) << "Failed to get WebGPU device";
 
-    auto& device = device_result.value();
-
-    device->set_aspect_ratio(AspectRatio::Ratio_16_9);
+    device->set_aspect_ratio(raktr::render::AspectRatio::Ratio_16_9);
     window->set_resize_callback([&](uint32_t width, uint32_t height)
                                 {
                                     [[maybe_unused]] auto resize_result = device->resize(width, height);
@@ -192,10 +207,10 @@ TEST(VisualTest, DISABLED_SpinningCube)
             glm::vec3(0.0f, 1.0f, 0.0f)  // Up vector
         );
         auto projection = math::create_perspective(
-            glm::radians(45.0f),                              // FOV
-            static_cast<float>(config.width) / config.height, // Aspect ratio
-            0.1f,                                             // Near plane
-            100.0f                                            // Far plane
+            glm::radians(45.0f),                                            // FOV
+            static_cast<float>(window_config.width) / window_config.height, // Aspect ratio
+            0.1f,                                                           // Near plane
+            100.0f                                                          // Far plane
         );
 
         // Compute MVP = projection * view * model
@@ -237,25 +252,33 @@ TEST(VisualTest, DISABLED_SpinningCube)
 TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
 {
     // Create window
-    WindowConfig config;
-    config.width      = 1920;
-    config.height     = 1080;
-    config.title      = "WebGPU Spinning Cube (Type-Safe) Test - WASD + Mouse to control camera, ESC to exit";
-    config.resizable  = true;
-    config.fullscreen = false;
+    WindowConfig window_config;
+    window_config.width      = 1920;
+    window_config.height     = 1080;
+    window_config.title      = "WebGPU Spinning Cube (Type-Safe) Test - WASD + Mouse to control camera, ESC to exit";
+    window_config.resizable  = true;
+    window_config.fullscreen = false;
 
-    auto window_result = create_window(config);
+    RenderConfig render_config;
+    render_config.backend           = BackendType::WebGPU;
+    render_config.enable_validation = false;
+
+    auto render_context = create_render_context();
+    ASSERT_NE(render_context, nullptr);
+
+    auto render_ctx_result = render_context->initialize(render_config);
+    ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext with WebGPU backend";
+
+    auto window_result = create_window(window_config);
     ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
 
     auto& window = window_result.value();
 
     // Create WebGPU device
-    auto device_result = WgpuDevice::create(window.get(), false);
-    ASSERT_TRUE(device_result.has_value()) << "Failed to create WebGPU device";
+    auto device = render_context->device();
+    ASSERT_NE(device, nullptr) << "Failed to get WebGPU device";
 
-    auto& device = device_result.value();
-
-    device->set_aspect_ratio(AspectRatio::Ratio_16_9);
+    device->set_aspect_ratio(raktr::render::AspectRatio::Ratio_16_9);
     window->set_resize_callback([&](uint32_t width, uint32_t height)
                                 {
                                     [[maybe_unused]] auto resize_result = device->resize(width, height);
@@ -268,7 +291,7 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
     raktr::engine::scene::Camera camera(
         glm::vec3(0.0F, 0.0F, 5.0F), // Start 5 units back from origin
         45.0F,                       // 45° FOV
-        static_cast<float>(config.width) / static_cast<float>(config.height),
+        static_cast<float>(window_config.width) / static_cast<float>(window_config.height),
         0.1F,  // Near plane
         100.0F // Far plane
     );

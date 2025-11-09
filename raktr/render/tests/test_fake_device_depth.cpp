@@ -3,7 +3,7 @@
  * @brief Tests for FakeDevice depth buffer and lighting features.
  */
 
-#include "backend/fake_device.h"
+#include "backend/fake/fake_device.h"
 #include "render_context.h"
 #include <array>
 #include <cmath>

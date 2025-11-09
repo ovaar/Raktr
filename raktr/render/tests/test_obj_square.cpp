@@ -3,6 +3,7 @@
  * @brief Unit tests for uploading OBJ square mesh data.
  */
 
+#include "buffer.h"
 #include "render_context.h"
 #include <array>
 #include <gtest/gtest.h>
