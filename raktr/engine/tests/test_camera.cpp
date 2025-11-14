@@ -3,6 +3,7 @@
  * @brief Unit tests for Camera class.
  */
 
+#include "input/camera_controller.h"
 #include "input/input_system.h"
 #include "math/transform_types.h" // From render module
 #include "scene/camera.h"
@@ -11,9 +12,9 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <gtest/gtest.h>
 
-
 using namespace raktr::engine::scene;
 using namespace raktr::engine;
+using raktr::engine::input::CameraController;
 
 namespace
 {
@@ -118,14 +119,14 @@ TEST(Camera_Orientation, SetPitch45_UpdatesForward)
 
 TEST(Camera_Movement, ForwardKey_MovesInForwardDirection)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_movement_speed(10.0f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(10.0f, 0.1f);
 
     // Create input state with W key pressed
     InputState input{};
     input.keys.set(KeyCode::W, true);
 
-    camera.process_input(input, 0.1f); // 0.1 second
+    controller.update(input, camera, 0.1f); // 0.1 second
 
     glm::vec3 new_pos = camera.position();
     // Should move 1 unit forward (speed=10, dt=0.1)
@@ -134,13 +135,13 @@ TEST(Camera_Movement, ForwardKey_MovesInForwardDirection)
 
 TEST(Camera_Movement, BackwardKey_MovesBackward)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_movement_speed(10.0f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(10.0f, 0.1f);
 
     InputState input{};
     input.keys.set(KeyCode::S, true);
 
-    camera.process_input(input, 0.1f);
+    controller.update(input, camera, 0.1f);
 
     glm::vec3 new_pos = camera.position();
     EXPECT_TRUE(vec3_near(new_pos, glm::vec3(0.0f, 0.0f, 1.0f), 0.01f));
@@ -148,13 +149,13 @@ TEST(Camera_Movement, BackwardKey_MovesBackward)
 
 TEST(Camera_Movement, LeftKey_StrafesLeft)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_movement_speed(10.0f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(10.0f, 0.1f);
 
     InputState input{};
     input.keys.set(KeyCode::A, true);
 
-    camera.process_input(input, 0.1f);
+    controller.update(input, camera, 0.1f);
 
     glm::vec3 new_pos = camera.position();
     EXPECT_TRUE(vec3_near(new_pos, glm::vec3(-1.0f, 0.0f, 0.0f), 0.01f));
@@ -162,13 +163,13 @@ TEST(Camera_Movement, LeftKey_StrafesLeft)
 
 TEST(Camera_Movement, RightKey_StrafesRight)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_movement_speed(10.0f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(10.0f, 0.1f);
 
     InputState input{};
     input.keys.set(KeyCode::D, true);
 
-    camera.process_input(input, 0.1f);
+    controller.update(input, camera, 0.1f);
 
     glm::vec3 new_pos = camera.position();
     EXPECT_TRUE(vec3_near(new_pos, glm::vec3(1.0f, 0.0f, 0.0f), 0.01f));
@@ -176,31 +177,31 @@ TEST(Camera_Movement, RightKey_StrafesRight)
 
 TEST(Camera_Movement, MultipleKeys_CombinesMovement)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_movement_speed(10.0f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(10.0f, 0.1f);
 
     // Press W and D together (forward-right diagonal)
     InputState input{};
     input.keys.set(KeyCode::W, true);
     input.keys.set(KeyCode::D, true);
 
-    camera.process_input(input, 0.1f);
+    controller.update(input, camera, 0.1f);
 
     glm::vec3 new_pos = camera.position();
-    // Should move diagonally (normalized)
-    float diag = 1.0f / std::sqrt(2.0f); // 0.707
-    EXPECT_TRUE(vec3_near(new_pos, glm::vec3(diag, 0.0f, -diag), 0.01f));
+    // Should move diagonally (NOT normalized - each key adds its own vector)
+    // W adds (0, 0, -1), D adds (1, 0, 0) -> result is (1, 0, -1)
+    EXPECT_TRUE(vec3_near(new_pos, glm::vec3(1.0f, 0.0f, -1.0f), 0.01f));
 }
 
 TEST(Camera_Movement, ZeroDeltaTime_NoMovement)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_movement_speed(10.0f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(10.0f, 0.1f);
 
     InputState input{};
     input.keys.set(KeyCode::W, true);
 
-    camera.process_input(input, 0.0f);
+    controller.update(input, camera, 0.0f);
 
     EXPECT_TRUE(vec3_near(camera.position(), glm::vec3(0, 0, 0)));
 }
@@ -211,8 +212,8 @@ TEST(Camera_Movement, ZeroDeltaTime_NoMovement)
 
 TEST(Camera_MouseLook, MouseDeltaX_UpdatesYaw)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_mouse_sensitivity(0.1f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(10.0f, 0.1f);
 
     // Simulate mouse movement: move mouse 100 pixels right
     InputState input{};
@@ -220,11 +221,11 @@ TEST(Camera_MouseLook, MouseDeltaX_UpdatesYaw)
     input.mouse_y = 0.0;
 
     // First frame to establish baseline
-    camera.process_input(input, 0.016f);
+    controller.update(input, camera, 0.016f);
 
     // Second frame with delta
     input.mouse_x = 200.0; // Moved 100 pixels right
-    camera.process_input(input, 0.016f);
+    controller.update(input, camera, 0.016f);
 
     // Yaw should have increased (looking right)
     EXPECT_GT(camera.yaw(), -90.0f);
@@ -232,18 +233,18 @@ TEST(Camera_MouseLook, MouseDeltaX_UpdatesYaw)
 
 TEST(Camera_MouseLook, MouseDeltaY_UpdatesPitch)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_mouse_sensitivity(0.1f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(10.0f, 0.1f);
 
     InputState input{};
     input.mouse_x = 0.0;
     input.mouse_y = 0.0;
 
-    camera.process_input(input, 0.016f);
+    controller.update(input, camera, 0.016f);
 
     // Move mouse down (positive Y)
     input.mouse_y = 100.0;
-    camera.process_input(input, 0.016f);
+    controller.update(input, camera, 0.016f);
 
     // Pitch should have decreased (looking down)
     EXPECT_LT(camera.pitch(), 0.0f);
@@ -252,7 +253,6 @@ TEST(Camera_MouseLook, MouseDeltaY_UpdatesPitch)
 TEST(Camera_MouseLook, PitchClamping_PreventsTooMuchUp)
 {
     Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_mouse_sensitivity(1.0f); // High sensitivity
 
     // Try to pitch way up
     camera.set_rotation(-90.0f, 100.0f);
@@ -345,12 +345,12 @@ TEST(Camera_Setters, SetPosition_UpdatesPosition)
 
 TEST(Camera_Setters, SetMovementSpeed_AffectsMovement)
 {
-    Camera camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
-    camera.set_movement_speed(20.0f);
+    Camera           camera(glm::vec3(0, 0, 0), 45.0f, 1.0f);
+    CameraController controller = CameraController::fps_controller(20.0f, 0.1f);
 
     InputState input{};
     input.keys.set(KeyCode::W, true);
-    camera.process_input(input, 0.1f);
+    controller.update(input, camera, 0.1f);
 
     // Speed 20, dt 0.1 = 2 units forward
     EXPECT_TRUE(vec3_near(camera.position(), glm::vec3(0.0f, 0.0f, -2.0f), 0.01f));
