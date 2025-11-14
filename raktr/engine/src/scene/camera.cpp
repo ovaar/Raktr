@@ -9,7 +9,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/trigonometric.hpp>
 
-
 namespace raktr::engine::scene
 {
 
@@ -45,6 +44,14 @@ namespace raktr::engine::scene
         if (input.keys[KeyCode::D])
         {
             movement += _right;
+        }
+        if (input.keys[KeyCode::Q])
+        {
+            movement += _up;
+        }
+        if (input.keys[KeyCode::E])
+        {
+            movement -= _up;
         }
 
         // Normalize and scale by speed and delta time

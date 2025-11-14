@@ -24,12 +24,12 @@ namespace raktr::render::backend
         return view;
     }
 
-    std::expected<std::unique_ptr<WgpuDevice>, std::error_code>
+    std::expected<WgpuDevice, std::error_code>
     WgpuDevice::create(Window* window, bool enable_validation)
     {
-        std::unique_ptr<WgpuDevice> device(new WgpuDevice());
+        WgpuDevice device;
 
-        auto result = device->initialize(window, enable_validation);
+        auto result = device.initialize(window, enable_validation);
         if (!result)
         {
             return std::unexpected(result.error());
@@ -41,6 +41,81 @@ namespace raktr::render::backend
     WgpuDevice::~WgpuDevice()
     {
         cleanup();
+    }
+
+    WgpuDevice::WgpuDevice(WgpuDevice&& other) noexcept
+        : _instance(other._instance)
+        , _adapter(other._adapter)
+        , _device(other._device)
+        , _queue(other._queue)
+        , _surface(other._surface)
+        , _swapchain_width(other._swapchain_width)
+        , _swapchain_height(other._swapchain_height)
+        , _swapchain_format(other._swapchain_format)
+        , _aspect_ratio(other._aspect_ratio)
+        , _custom_aspect_ratio(other._custom_aspect_ratio)
+        , _viewport(other._viewport)
+        , _buffers(std::move(other._buffers))
+        , _shader_module(other._shader_module)
+        , _render_pipeline(other._render_pipeline)
+        , _bind_group_layout(other._bind_group_layout)
+        , _current_bind_group(other._current_bind_group)
+        , _default_uniform_buffer(std::move(other._default_uniform_buffer))
+        , _current_surface_texture(other._current_surface_texture)
+    {
+        // Nullify the moved-from object's handles so cleanup doesn't release them
+        other._instance                = nullptr;
+        other._adapter                 = nullptr;
+        other._device                  = nullptr;
+        other._queue                   = nullptr;
+        other._surface                 = nullptr;
+        other._shader_module           = nullptr;
+        other._render_pipeline         = nullptr;
+        other._bind_group_layout       = nullptr;
+        other._current_bind_group      = nullptr;
+        other._current_surface_texture = nullptr;
+    }
+
+    WgpuDevice& WgpuDevice::operator=(WgpuDevice&& other) noexcept
+    {
+        if (this != &other)
+        {
+            // Clean up our current resources
+            cleanup();
+
+            // Transfer ownership from other
+            _instance                     = other._instance;
+            _adapter                      = other._adapter;
+            _device                       = other._device;
+            _queue                        = other._queue;
+            _surface                      = other._surface;
+            _swapchain_width              = other._swapchain_width;
+            _swapchain_height             = other._swapchain_height;
+            _swapchain_format             = other._swapchain_format;
+            _aspect_ratio                 = other._aspect_ratio;
+            _custom_aspect_ratio          = other._custom_aspect_ratio;
+            _viewport                     = other._viewport;
+            _buffers                      = std::move(other._buffers);
+            _shader_module           = other._shader_module;
+            _render_pipeline         = other._render_pipeline;
+            _bind_group_layout       = other._bind_group_layout;
+            _current_bind_group      = other._current_bind_group;
+            _default_uniform_buffer  = std::move(other._default_uniform_buffer);
+            _current_surface_texture = other._current_surface_texture;
+
+            // Nullify the moved-from object's handles
+            other._instance                = nullptr;
+            other._adapter                 = nullptr;
+            other._device                  = nullptr;
+            other._queue                   = nullptr;
+            other._surface                 = nullptr;
+            other._shader_module           = nullptr;
+            other._render_pipeline         = nullptr;
+            other._bind_group_layout       = nullptr;
+            other._current_bind_group      = nullptr;
+            other._current_surface_texture = nullptr;
+        }
+        return *this;
     }
 
     std::expected<void, std::error_code>

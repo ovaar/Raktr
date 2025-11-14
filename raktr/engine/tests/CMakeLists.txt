@@ -21,4 +21,13 @@ target_link_libraries(raktr_engine_test
         GTest::gtest_main
 )
 
+if (WIN32)
+  # copy runtime dlls to output directory
+  add_custom_command(TARGET raktr_engine_test POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+    $<TARGET_RUNTIME_DLLS:raktr_engine_test>
+    $<TARGET_FILE_DIR:raktr_engine_test>
+    COMMAND_EXPAND_LISTS)
+endif()
+
 gtest_discover_tests(raktr_engine_test DISCOVERY_MODE PRE_TEST)

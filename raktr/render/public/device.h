@@ -1,156 +1,383 @@
 /*!
  * @file device.h
- * @brief GPU device abstraction for creating resources.
+ * @brief Type-erased GPU device abstraction using external polymorphism.
+ *
+ * This implementation uses Klaus Iglberger's type erasure pattern to provide
+ * runtime polymorphism without inheritance. Devices can support different
+ * subsets of capabilities, which can be queried at runtime.
  */
 
 #ifndef RAKTR_RENDER_DEVICE_H
 #define RAKTR_RENDER_DEVICE_H
 
-#include <cstddef>
-#include <expected>
-#include <span>
-#include <system_error>
+#include "aspect_ratio.h"
+#include "buffer.h"
+#include "device_capabilities.h"
+#include <any>
+#include <memory>
+#include <optional>
+#include <typeindex>
+#include <unordered_map>
 
 namespace raktr::render
 {
-    class Buffer;
-    enum class AspectRatio;
-    struct Viewport;
-
     /*!
-     * @brief GPU device abstraction for creating resources.
+     * @brief Type-erased GPU device wrapper with capability-based interface.
+     *
+     * This class wraps any concrete device type (WgpuDevice, FakeDevice, etc.)
+     * and provides capability-based access to device operations. Use supports<T>()
+     * to check if a capability exists, then capability<T>() to access it.
+     *
+     * @example
+     * Device device = create_wgpu_device(window);
+     *
+     * if (device.supports<capabilities::BufferOps>()) {
+     *     auto& buffers = device.capability<capabilities::BufferOps>();
+     *     auto vb = buffers.create_vertex_buffer(vertex_data);
+     * }
+     *
+     * if (device.supports<capabilities::DrawOps>()) {
+     *     auto& draw = device.capability<capabilities::DrawOps>();
+     *     draw.clear();
+     *     draw.draw_indexed(vb, ib, 36);
+     * }
      */
     class Device
     {
     public:
-        Device()          = default;
-        virtual ~Device() = default;
+        /*!
+         * @brief Construct a Device from any concrete device type.
+         * @param device_impl Concrete device instance (WgpuDevice, FakeDevice, etc.).
+         */
+        template <typename T>
+        Device(T device_impl)
+            : _impl(std::make_unique<Model<T>>(std::move(device_impl)))
+        {
+        }
 
-        // Non-copyable, non-moveable (abstract interface)
+        // Non-copyable (some devices like WgpuDevice hold non-copyable resources)
         Device(const Device&)            = delete;
         Device& operator=(const Device&) = delete;
 
-        /*!
-         * @brief Create a vertex buffer.
-         * @param data Vertex data to upload.
-         * @return Buffer handle or error.
-         */
-        virtual std::expected<Buffer, std::error_code>
-        create_vertex_buffer(std::span<const std::byte> data) = 0;
+        // Movable
+        Device(Device&&) noexcept            = default;
+        Device& operator=(Device&&) noexcept = default;
+
+        ~Device() = default;
 
         /*!
-         * @brief Create an index buffer.
-         * @param data Index data to upload.
-         * @return Buffer handle or error.
+         * @brief Check if device supports a specific capability.
+         * @tparam Capability Capability type (e.g., capabilities::BufferOps).
+         * @return True if the device supports this capability.
          */
-        virtual std::expected<Buffer, std::error_code>
-        create_index_buffer(std::span<const std::byte> data) = 0;
+        template <typename Capability>
+        [[nodiscard]] bool supports() const
+        {
+            return _impl && _impl->supports(std::type_index(typeid(Capability)));
+        }
 
         /*!
-         * @brief Submit a simple draw call (for MVP).
-         * @param vertex_buffer Vertex buffer to bind.
-         * @param index_buffer Index buffer to bind.
-         * @param index_count Number of indices to draw.
-         * @return Success or error.
+         * @brief Get a capability interface from the device.
+         * @tparam Capability Capability type to retrieve.
+         * @return Capability interface by value.
+         * @throws std::bad_optional_access if capability is not supported.
          */
-        virtual std::expected<void, std::error_code>
-        draw_indexed(const Buffer& vertex_buffer,
-                     const Buffer& index_buffer,
-                     uint32_t      index_count) = 0;
+        template <typename Capability>
+        [[nodiscard]] Capability capability() const
+        {
+            if (!_impl)
+            {
+                throw std::runtime_error("Device not initialized");
+            }
+
+            auto result = _impl->capability<Capability>(std::type_index(typeid(Capability)));
+            if (!result)
+            {
+                throw std::runtime_error("Capability not supported by this device");
+            }
+            return *std::move(result);
+        }
+
+        // Convenience methods that forward to capabilities (for backward compatibility)
+        [[nodiscard]] std::expected<Buffer, std::error_code>
+        create_vertex_buffer(std::span<const std::byte> data) const
+        {
+            return capability<capabilities::BufferOps>().create_vertex_buffer(data);
+        }
+
+        [[nodiscard]] std::expected<Buffer, std::error_code>
+        create_index_buffer(std::span<const std::byte> data) const
+        {
+            return capability<capabilities::BufferOps>().create_index_buffer(data);
+        }
+
+        [[nodiscard]] std::expected<Buffer, std::error_code>
+        create_uniform_buffer(size_t size) const
+        {
+            return capability<capabilities::BufferOps>().create_uniform_buffer(size);
+        }
+
+        [[nodiscard]] std::expected<void, std::error_code>
+        update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data) const
+        {
+            return capability<capabilities::BufferOps>().update_uniform_buffer(buffer, data);
+        }
+
+        void set_uniform_buffer(const Buffer& buffer) const
+        {
+            capability<capabilities::BufferOps>().set_uniform_buffer(buffer);
+        }
+
+        [[nodiscard]] std::expected<void, std::error_code>
+        draw_indexed(const Buffer& vertex_buffer, const Buffer& index_buffer, uint32_t index_count) const
+        {
+            return capability<capabilities::DrawOps>().draw_indexed(vertex_buffer, index_buffer, index_count);
+        }
+
+        void clear() const
+        {
+            capability<capabilities::DrawOps>().clear();
+        }
+
+        void present() const
+        {
+            capability<capabilities::PresentOps>().present();
+        }
+
+        [[nodiscard]] std::expected<void, std::error_code>
+        resize(uint32_t width, uint32_t height) const
+        {
+            return capability<capabilities::ViewportOps>().resize(width, height);
+        }
+
+        void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f) const
+        {
+            capability<capabilities::ViewportOps>().set_aspect_ratio(ratio, custom_value);
+        }
+
+        [[nodiscard]] AspectRatio aspect_ratio() const
+        {
+            return capability<capabilities::ViewportOps>().aspect_ratio();
+        }
+
+        [[nodiscard]] const Viewport& viewport() const
+        {
+            return capability<capabilities::ViewportOps>().viewport();
+        }
+
+    private:
+        /*!
+         * @brief Concept interface for type-erased device implementation.
+         */
+        struct Concept
+        {
+            virtual ~Concept()                                                                             = default;
+            [[nodiscard]] virtual bool                           supports(std::type_index ti) const        = 0;
+            [[nodiscard]] virtual std::optional<std::type_index> capability_type(std::type_index ti) const = 0;
+
+            template <typename Capability>
+            std::optional<Capability> capability(std::type_index ti) const
+            {
+                return do_capability<Capability>(ti);
+            }
+
+        private:
+            [[nodiscard]] virtual std::optional<capabilities::BufferOps>   do_capability_bufferops() const   = 0;
+            [[nodiscard]] virtual std::optional<capabilities::DrawOps>     do_capability_drawops() const     = 0;
+            [[nodiscard]] virtual std::optional<capabilities::ViewportOps> do_capability_viewportops() const = 0;
+            [[nodiscard]] virtual std::optional<capabilities::PresentOps>  do_capability_presentops() const  = 0;
+
+            template <typename Capability>
+            std::optional<Capability> do_capability(std::type_index /* ti */) const
+            {
+                if constexpr (std::is_same_v<Capability, capabilities::BufferOps>)
+                {
+                    return do_capability_bufferops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::DrawOps>)
+                {
+                    return do_capability_drawops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::ViewportOps>)
+                {
+                    return do_capability_viewportops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::PresentOps>)
+                {
+                    return do_capability_presentops();
+                }
+                return std::nullopt;
+            }
+        };
 
         /*!
-         * @brief Clear the current render target.
+         * @brief Model implementation wrapping concrete device type T.
          */
-        virtual void clear() = 0;
+        template <typename T>
+        struct Model : Concept
+        {
+            explicit Model(T device_impl)
+                : _device(std::move(device_impl))
+            {
+                build_capability_map();
+            }
 
-        /*!
-         * @brief Present the rendered frame (swap buffers).
-         */
-        virtual void present() = 0;
+            bool supports(std::type_index ti) const override
+            {
+                return _capabilities.contains(ti);
+            }
 
-        /*!
-         * @brief Create a uniform buffer for shader constants.
-         * @param size Size of the uniform buffer in bytes.
-         * @return Buffer handle or error code.
-         */
-        [[nodiscard]] virtual std::expected<Buffer, std::error_code>
-        create_uniform_buffer(size_t size) = 0;
+            std::optional<std::type_index> capability_type(std::type_index ti) const override
+            {
+                auto it = _capabilities.find(ti);
+                return it != _capabilities.end() ? std::optional(ti) : std::nullopt;
+            }
 
-        /*!
-         * @brief Update uniform buffer data.
-         * @param buffer Buffer handle from create_uniform_buffer().
-         * @param data Data to upload.
-         * @return Success or error code.
-         */
-        [[nodiscard]] virtual std::expected<void, std::error_code>
-        update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data) = 0;
+        private:
+            mutable T                                     _device;
+            std::unordered_map<std::type_index, std::any> _capabilities;
 
-        /*!
-         * @brief Set uniform buffer for rendering.
-         * Must be called before draw_indexed() to bind uniforms.
-         * @param buffer Uniform buffer to bind.
-         */
-        virtual void set_uniform_buffer(const Buffer& buffer) = 0;
+            void build_capability_map()
+            {
+                // Check for BufferOps capability
+                if constexpr (requires(T& d, std::span<const std::byte> data, size_t sz, const Buffer& buf) {
+                                  { d.create_vertex_buffer(data) } -> std::same_as<std::expected<Buffer, std::error_code>>;
+                                  { d.create_index_buffer(data) } -> std::same_as<std::expected<Buffer, std::error_code>>;
+                                  { d.create_uniform_buffer(sz) } -> std::same_as<std::expected<Buffer, std::error_code>>;
+                                  { d.update_uniform_buffer(buf, data) } -> std::same_as<std::expected<void, std::error_code>>;
+                                  { d.set_uniform_buffer(buf) } -> std::same_as<void>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::BufferOps))] = true;
+                }
 
-        /*!
-         * @brief Resize the surface to new dimensions.
-         *
-         * Reconfigures the WebGPU surface with new width and height.
-         * Should be called when the window is resized.
-         *
-         * @param width New width in pixels (must be > 0).
-         * @param height New height in pixels (must be > 0).
-         * @return Success or error code.
-         *
-         * @example
-         * // In window resize callback:
-         * window->set_resize_callback([&device](uint32_t w, uint32_t h) {
-         *     device->resize(w, h);
-         * });
-         */
-        [[nodiscard]] virtual std::expected<void, std::error_code>
-        resize(uint32_t width, uint32_t height) = 0;
+                // Check for DrawOps capability
+                if constexpr (requires(T& d, const Buffer& vb, const Buffer& ib, uint32_t count) {
+                                  { d.draw_indexed(vb, ib, count) } -> std::same_as<std::expected<void, std::error_code>>;
+                                  { d.clear() } -> std::same_as<void>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::DrawOps))] = true;
+                }
 
-        /*!
-         * @brief Set the aspect ratio for rendering.
-         *
-         * Controls how the viewport maintains proportions when the window is resized.
-         * Uses letterboxing (black bars top/bottom) or pillarboxing (black bars left/right)
-         * to maintain the specified aspect ratio.
-         *
-         * @param ratio Desired aspect ratio (default: Ratio_16_9).
-         * @param custom_value Custom ratio value (only used if ratio == Custom).
-         *
-         * @example
-         * // Use 16:9 aspect ratio (most common)
-         * device->set_aspect_ratio(AspectRatio::Ratio_16_9);
-         *
-         * // Use ultrawide 21:9
-         * device->set_aspect_ratio(AspectRatio::Ratio_21_9);
-         *
-         * // Use custom cinema ratio
-         * device->set_aspect_ratio(AspectRatio::Custom, 2.35f);
-         *
-         * // Allow free stretching (no constraint)
-         * device->set_aspect_ratio(AspectRatio::Auto);
-         */
-        virtual void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f) = 0;
+                // Check for ViewportOps capability
+                if constexpr (requires(T& d, uint32_t w, uint32_t h, AspectRatio ar, float custom) {
+                                  { d.resize(w, h) } -> std::same_as<std::expected<void, std::error_code>>;
+                                  { d.set_aspect_ratio(ar, custom) } -> std::same_as<void>;
+                                  { d.aspect_ratio() } -> std::same_as<AspectRatio>;
+                                  { d.viewport() } -> std::same_as<const Viewport&>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::ViewportOps))] = true;
+                }
 
-        /*!
-         * @brief Get the current aspect ratio setting.
-         * @return Current aspect ratio mode.
-         */
-        [[nodiscard]] virtual AspectRatio aspect_ratio() const = 0;
+                // Check for PresentOps capability
+                if constexpr (requires(T& d) {
+                                  { d.present() } -> std::same_as<void>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::PresentOps))] = true;
+                }
+            }
 
-        /*!
-         * @brief Get the current viewport rectangle.
-         *
-         * Returns the viewport used for rendering, which may be smaller than
-         * the window if aspect ratio preservation is enabled.
-         *
-         * @return Current viewport (x, y, width, height).
-         */
-        [[nodiscard]] virtual const Viewport& viewport() const = 0;
+            std::optional<capabilities::BufferOps> do_capability_bufferops() const override
+            {
+                if constexpr (requires(T& d, std::span<const std::byte> data, size_t sz, const Buffer& buf) {
+                                  { d.create_vertex_buffer(data) } -> std::same_as<std::expected<Buffer, std::error_code>>;
+                              })
+                {
+                    capabilities::BufferOps ops;
+                    ops.create_vertex_buffer = [dev = &_device](std::span<const std::byte> data) mutable
+                    {
+                        return dev->create_vertex_buffer(data);
+                    };
+                    ops.create_index_buffer = [dev = &_device](std::span<const std::byte> data) mutable
+                    {
+                        return dev->create_index_buffer(data);
+                    };
+                    ops.create_uniform_buffer = [dev = &_device](size_t sz) mutable
+                    {
+                        return dev->create_uniform_buffer(sz);
+                    };
+                    ops.update_uniform_buffer = [dev = &_device](const Buffer& buf, std::span<const std::byte> data) mutable
+                    {
+                        return dev->update_uniform_buffer(buf, data);
+                    };
+                    ops.set_uniform_buffer = [dev = &_device](const Buffer& buf) mutable
+                    {
+                        dev->set_uniform_buffer(buf);
+                    };
+                    return ops;
+                }
+                return std::nullopt;
+            }
+
+            std::optional<capabilities::DrawOps> do_capability_drawops() const override
+            {
+                if constexpr (requires(T& d, const Buffer& vb, const Buffer& ib, uint32_t count) {
+                                  { d.draw_indexed(vb, ib, count) } -> std::same_as<std::expected<void, std::error_code>>;
+                              })
+                {
+                    capabilities::DrawOps ops;
+                    ops.draw_indexed = [dev = &_device](const Buffer& vb, const Buffer& ib, uint32_t count) mutable
+                    {
+                        return dev->draw_indexed(vb, ib, count);
+                    };
+                    ops.clear = [dev = &_device]() mutable
+                    {
+                        dev->clear();
+                    };
+                    return ops;
+                }
+                return std::nullopt;
+            }
+
+            std::optional<capabilities::ViewportOps> do_capability_viewportops() const override
+            {
+                if constexpr (requires(T& d, uint32_t w, uint32_t h, AspectRatio ar, float custom) {
+                                  { d.resize(w, h) } -> std::same_as<std::expected<void, std::error_code>>;
+                              })
+                {
+                    capabilities::ViewportOps ops;
+                    ops.resize = [dev = &_device](uint32_t w, uint32_t h) mutable
+                    {
+                        return dev->resize(w, h);
+                    };
+                    ops.set_aspect_ratio = [dev = &_device](AspectRatio ar, float custom) mutable
+                    {
+                        dev->set_aspect_ratio(ar, custom);
+                    };
+                    ops.aspect_ratio = [dev = &_device]() mutable
+                    {
+                        return dev->aspect_ratio();
+                    };
+                    ops.viewport = [dev = &_device]() mutable -> const Viewport&
+                    {
+                        return dev->viewport();
+                    };
+                    return ops;
+                }
+                return std::nullopt;
+            }
+
+            std::optional<capabilities::PresentOps> do_capability_presentops() const override
+            {
+                if constexpr (requires(T& d) {
+                                  { d.present() } -> std::same_as<void>;
+                              })
+                {
+                    capabilities::PresentOps ops;
+                    ops.present = [dev = &_device]() mutable
+                    {
+                        dev->present();
+                    };
+                    return ops;
+                }
+                return std::nullopt;
+            }
+        };
+
+        std::unique_ptr<Concept> _impl;
     };
 
 } // namespace raktr::render

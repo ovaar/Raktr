@@ -44,9 +44,6 @@ TEST_F(WgpuDeviceTest, Create_WithValidWindow_Succeeds)
 {
     auto result = WgpuDevice::create(_window.get(), false);
     ASSERT_TRUE(result.has_value()) << "Failed to create WgpuDevice";
-
-    auto& device = result.value();
-    EXPECT_NE(device, nullptr);
 }
 
 TEST_F(WgpuDeviceTest, Create_WithNullWindow_Fails)
@@ -61,8 +58,8 @@ TEST_F(WgpuDeviceTest, WgpuDevice_HandlesAreValid)
     ASSERT_TRUE(result.has_value());
 
     auto& device = result.value();
-    EXPECT_NE(device->wgpu_device(), nullptr);
-    EXPECT_NE(device->wgpu_queue(), nullptr);
+    EXPECT_NE(device.wgpu_device(), nullptr);
+    EXPECT_NE(device.wgpu_queue(), nullptr);
 }
 
 TEST_F(WgpuDeviceTest, Clear_DoesNotCrash)
@@ -71,7 +68,7 @@ TEST_F(WgpuDeviceTest, Clear_DoesNotCrash)
     ASSERT_TRUE(result.has_value());
 
     auto& device = result.value();
-    EXPECT_NO_THROW(device->clear());
+    EXPECT_NO_THROW(device.clear());
 }
 
 TEST_F(WgpuDeviceTest, Present_DoesNotCrash)
@@ -80,7 +77,7 @@ TEST_F(WgpuDeviceTest, Present_DoesNotCrash)
     ASSERT_TRUE(result.has_value());
 
     auto& device = result.value();
-    EXPECT_NO_THROW(device->present());
+    EXPECT_NO_THROW(device.present());
 }
 
 TEST_F(WgpuDeviceTest, CreateVertexBuffer_WithValidData_Succeeds)
@@ -100,7 +97,7 @@ TEST_F(WgpuDeviceTest, CreateVertexBuffer_WithValidData_Succeeds)
     // clang-format on
     auto data = std::as_bytes(std::span(vertices));
 
-    auto buffer_result = device->create_vertex_buffer(data);
+    auto buffer_result = device.create_vertex_buffer(data);
     EXPECT_TRUE(buffer_result.has_value());
 }
 
@@ -115,7 +112,7 @@ TEST_F(WgpuDeviceTest, CreateIndexBuffer_WithValidData_Succeeds)
     uint32_t indices[] = { 0, 1, 2 };
     auto     data      = std::as_bytes(std::span(indices));
 
-    auto buffer_result = device->create_index_buffer(data);
+    auto buffer_result = device.create_index_buffer(data);
     EXPECT_TRUE(buffer_result.has_value());
 }
 
@@ -128,8 +125,8 @@ TEST_F(WgpuDeviceTest, ClearAndPresent_Sequence_DoesNotCrash)
 
     // Simulate typical frame loop
     EXPECT_NO_THROW({
-        device->clear();
-        device->present();
+        device.clear();
+        device.present();
     });
 }
 
@@ -149,21 +146,21 @@ TEST_F(WgpuDeviceTest, DrawIndexed_WithTriangle_Succeeds)
     };
     // clang-format on
     auto vertex_data   = std::as_bytes(std::span(vertices));
-    auto vertex_buffer = device->create_vertex_buffer(vertex_data);
+    auto vertex_buffer = device.create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
 
     // Create indices
     uint32_t indices[]    = { 0, 1, 2 };
     auto     index_data   = std::as_bytes(std::span(indices));
-    auto     index_buffer = device->create_index_buffer(index_data);
+    auto     index_buffer = device.create_index_buffer(index_data);
     ASSERT_TRUE(index_buffer.has_value());
 
     // Draw the triangle
-    auto draw_result = device->draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
+    auto draw_result = device.draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
     EXPECT_TRUE(draw_result.has_value()) << "Failed to draw indexed triangle";
 
     // Present the result
-    EXPECT_NO_THROW(device->present());
+    EXPECT_NO_THROW(device.present());
 }
 
 TEST_F(WgpuDeviceTest, DrawIndexed_MultipleFrames_Succeeds)
@@ -182,20 +179,20 @@ TEST_F(WgpuDeviceTest, DrawIndexed_MultipleFrames_Succeeds)
     };
     // clang-format on
     auto vertex_data   = std::as_bytes(std::span(vertices));
-    auto vertex_buffer = device->create_vertex_buffer(vertex_data);
+    auto vertex_buffer = device.create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
 
     uint32_t indices[]    = { 0, 1, 2 };
     auto     index_data   = std::as_bytes(std::span(indices));
-    auto     index_buffer = device->create_index_buffer(index_data);
+    auto     index_buffer = device.create_index_buffer(index_data);
     ASSERT_TRUE(index_buffer.has_value());
 
     // Draw multiple frames
     for (int frame = 0; frame < 3; ++frame)
     {
-        auto draw_result = device->draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
+        auto draw_result = device.draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
         EXPECT_TRUE(draw_result.has_value()) << "Failed on frame " << frame;
-        device->present();
+        device.present();
     }
 }
 
@@ -207,7 +204,7 @@ TEST_F(WgpuDeviceTest, Resize_WithValidDimensions_Succeeds)
     auto& device = result.value();
 
     // Resize to new dimensions
-    auto resize_result = device->resize(1024, 768);
+    auto resize_result = device.resize(1024, 768);
     EXPECT_TRUE(resize_result.has_value()) << "Failed to resize surface";
 
     // Verify rendering still works after resize
@@ -219,18 +216,18 @@ TEST_F(WgpuDeviceTest, Resize_WithValidDimensions_Succeeds)
     };
     // clang-format on
     auto vertex_data   = std::as_bytes(std::span(vertices));
-    auto vertex_buffer = device->create_vertex_buffer(vertex_data);
+    auto vertex_buffer = device.create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
 
     uint32_t indices[]    = { 0, 1, 2 };
     auto     index_data   = std::as_bytes(std::span(indices));
-    auto     index_buffer = device->create_index_buffer(index_data);
+    auto     index_buffer = device.create_index_buffer(index_data);
     ASSERT_TRUE(index_buffer.has_value());
 
-    auto draw_result = device->draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
+    auto draw_result = device.draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
     EXPECT_TRUE(draw_result.has_value()) << "Failed to draw after resize";
 
-    EXPECT_NO_THROW(device->present());
+    EXPECT_NO_THROW(device.present());
 }
 
 TEST_F(WgpuDeviceTest, Resize_WithZeroDimensions_Fails)
@@ -241,15 +238,15 @@ TEST_F(WgpuDeviceTest, Resize_WithZeroDimensions_Fails)
     auto& device = result.value();
 
     // Attempt to resize to zero width
-    auto resize_result1 = device->resize(0, 768);
+    auto resize_result1 = device.resize(0, 768);
     EXPECT_FALSE(resize_result1.has_value());
 
     // Attempt to resize to zero height
-    auto resize_result2 = device->resize(1024, 0);
+    auto resize_result2 = device.resize(1024, 0);
     EXPECT_FALSE(resize_result2.has_value());
 
     // Attempt to resize to zero both
-    auto resize_result3 = device->resize(0, 0);
+    auto resize_result3 = device.resize(0, 0);
     EXPECT_FALSE(resize_result3.has_value());
 }
 
@@ -261,13 +258,13 @@ TEST_F(WgpuDeviceTest, Resize_MultipleTimes_Succeeds)
     auto& device = result.value();
 
     // Resize multiple times
-    EXPECT_TRUE(device->resize(640, 480).has_value());
-    EXPECT_TRUE(device->resize(1920, 1080).has_value());
-    EXPECT_TRUE(device->resize(1280, 720).has_value());
+    EXPECT_TRUE(device.resize(640, 480).has_value());
+    EXPECT_TRUE(device.resize(1920, 1080).has_value());
+    EXPECT_TRUE(device.resize(1280, 720).has_value());
 
     // Verify rendering still works
-    device->clear();
-    EXPECT_NO_THROW(device->present());
+    device.clear();
+    EXPECT_NO_THROW(device.present());
 }
 
 // Integration test with NativeWindow to test resize callback
@@ -303,7 +300,7 @@ TEST_F(WgpuNativeWindowTest, ResizeCallback_UpdatesSurfaceDimensions)
     window->set_resize_callback([&](uint32_t width, uint32_t height)
                                 {
                                     callback_invoked   = true;
-                                    auto resize_result = device->resize(width, height);
+                                    auto resize_result = device.resize(width, height);
                                     EXPECT_TRUE(resize_result.has_value());
                                 });
 
@@ -316,8 +313,8 @@ TEST_F(WgpuNativeWindowTest, ResizeCallback_UpdatesSurfaceDimensions)
     EXPECT_TRUE(callback_invoked);
 
     // Verify rendering still works after resize
-    device->clear();
-    EXPECT_NO_THROW(device->present());
+    device.clear();
+    EXPECT_NO_THROW(device.present());
 }
 
 TEST_F(WgpuNativeWindowTest, ResizeCallback_MultipleResizes_AllSucceed)
@@ -334,7 +331,7 @@ TEST_F(WgpuNativeWindowTest, ResizeCallback_MultipleResizes_AllSucceed)
     window->set_resize_callback([&](uint32_t width, uint32_t height)
                                 {
                                     callback_count++;
-                                    auto resize_result = device->resize(width, height);
+                                    auto resize_result = device.resize(width, height);
                                     EXPECT_TRUE(resize_result.has_value());
                                 });
 
@@ -349,8 +346,8 @@ TEST_F(WgpuNativeWindowTest, ResizeCallback_MultipleResizes_AllSucceed)
     EXPECT_EQ(callback_count, 3);
 
     // Verify rendering works after all resizes
-    device->clear();
-    EXPECT_NO_THROW(device->present());
+    device.clear();
+    EXPECT_NO_THROW(device.present());
 }
 
 // ============================================================================
@@ -363,7 +360,7 @@ TEST_F(WgpuDeviceTest, AspectRatio_DefaultIs16_9)
     ASSERT_TRUE(result.has_value());
 
     auto& device = result.value();
-    EXPECT_EQ(device->aspect_ratio(), AspectRatio::Ratio_16_9);
+    EXPECT_EQ(device.aspect_ratio(), AspectRatio::Ratio_16_9);
 }
 
 TEST_F(WgpuDeviceTest, SetAspectRatio_UpdatesAspectRatio)
@@ -374,14 +371,14 @@ TEST_F(WgpuDeviceTest, SetAspectRatio_UpdatesAspectRatio)
     auto& device = result.value();
 
     // Test setting different aspect ratios
-    device->set_aspect_ratio(AspectRatio::Ratio_4_3);
-    EXPECT_EQ(device->aspect_ratio(), AspectRatio::Ratio_4_3);
+    device.set_aspect_ratio(AspectRatio::Ratio_4_3);
+    EXPECT_EQ(device.aspect_ratio(), AspectRatio::Ratio_4_3);
 
-    device->set_aspect_ratio(AspectRatio::Ratio_21_9);
-    EXPECT_EQ(device->aspect_ratio(), AspectRatio::Ratio_21_9);
+    device.set_aspect_ratio(AspectRatio::Ratio_21_9);
+    EXPECT_EQ(device.aspect_ratio(), AspectRatio::Ratio_21_9);
 
-    device->set_aspect_ratio(AspectRatio::Auto);
-    EXPECT_EQ(device->aspect_ratio(), AspectRatio::Auto);
+    device.set_aspect_ratio(AspectRatio::Auto);
+    EXPECT_EQ(device.aspect_ratio(), AspectRatio::Auto);
 }
 
 TEST_F(WgpuDeviceTest, SetAspectRatio_RecalculatesViewport)
@@ -393,11 +390,11 @@ TEST_F(WgpuDeviceTest, SetAspectRatio_RecalculatesViewport)
 
     // Get initial viewport (16:9 default with 800x600 window)
     // Note: 800x600 is 4:3, so 16:9 will be letterboxed
-    auto initial_vp = device->viewport();
+    auto initial_vp = device.viewport();
 
     // Change to 21:9 (ultrawide - even more letterboxed)
-    device->set_aspect_ratio(AspectRatio::Ratio_21_9);
-    auto new_vp = device->viewport();
+    device.set_aspect_ratio(AspectRatio::Ratio_21_9);
+    auto new_vp = device.viewport();
 
     // 21:9 should produce a more narrow viewport (more letterboxing)
     EXPECT_EQ(new_vp.width, 800u);               // Width stays same
@@ -420,7 +417,7 @@ TEST_F(WgpuDeviceTest, Viewport_16_9_WithWideWindow_MatchesWindow)
     ASSERT_TRUE(device_result.has_value());
 
     auto& device = device_result.value();
-    auto  vp     = device->viewport();
+    auto  vp     = device.viewport();
 
     // Should use full window (exact match)
     EXPECT_EQ(vp.x, 0u);
@@ -444,7 +441,7 @@ TEST_F(WgpuDeviceTest, Viewport_16_9_WithTallWindow_Letterboxes)
     ASSERT_TRUE(device_result.has_value());
 
     auto& device = device_result.value();
-    auto  vp     = device->viewport();
+    auto  vp     = device.viewport();
 
     // Should letterbox (black bars top/bottom)
     EXPECT_EQ(vp.width, 1920u);
@@ -459,9 +456,9 @@ TEST_F(WgpuDeviceTest, Viewport_Auto_UsesFullWindow)
     ASSERT_TRUE(result.has_value());
 
     auto& device = result.value();
-    device->set_aspect_ratio(AspectRatio::Auto);
+    device.set_aspect_ratio(AspectRatio::Auto);
 
-    auto vp = device->viewport();
+    auto vp = device.viewport();
 
     // Auto mode uses full window
     EXPECT_EQ(vp.x, 0u);
@@ -478,10 +475,10 @@ TEST_F(WgpuDeviceTest, ResizeWithAspectRatio_UpdatesViewport)
     auto& device = result.value();
 
     // Resize window
-    auto resize_result = device->resize(1600, 900);
+    auto resize_result = device.resize(1600, 900);
     ASSERT_TRUE(resize_result.has_value());
 
-    auto vp = device->viewport();
+    auto vp = device.viewport();
 
     // Should calculate viewport for 16:9 aspect ratio
     // 1600x900 is exactly 16:9, so should use full window
@@ -497,9 +494,9 @@ TEST_F(WgpuDeviceTest, CustomAspectRatio_UsesCustomValue)
     auto& device = result.value();
 
     // Set custom cinemascope ratio (2.35:1)
-    device->set_aspect_ratio(AspectRatio::Custom, 2.35f);
+    device.set_aspect_ratio(AspectRatio::Custom, 2.35f);
 
-    auto vp = device->viewport();
+    auto vp = device.viewport();
 
     // With 800x600 window and 2.35:1 ratio, should letterbox heavily
     EXPECT_EQ(vp.width, 800u);

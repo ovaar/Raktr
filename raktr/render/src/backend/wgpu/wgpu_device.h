@@ -25,9 +25,9 @@ namespace raktr::render::backend
     /*!
      * @brief WebGPU device implementation using wgpu-native.
      *
-     * Wraps WGPUDevice, WGPUQueue, and WGPUSwapChain to implement the Device interface.
+     * Wraps WGPUDevice, WGPUQueue, and WGPUSwapChain. Supports all device capabilities.
      */
-    class WgpuDevice : public Device
+    class WgpuDevice
     {
     public:
         /*!
@@ -36,33 +36,41 @@ namespace raktr::render::backend
          * @param enable_validation Enable validation layers for debugging.
          * @return Device instance or error code.
          */
-        static std::expected<std::unique_ptr<WgpuDevice>, std::error_code>
+        [[nodiscard]] static std::expected<WgpuDevice, std::error_code>
         create(Window* window, bool enable_validation = false);
 
-        ~WgpuDevice() override;
+        ~WgpuDevice();
 
-        // Device interface implementation
-        std::expected<Buffer, std::error_code>
-        create_vertex_buffer(std::span<const std::byte> data) override;
+        // Disable copy (WebGPU handles cannot be safely copied)
+        WgpuDevice(const WgpuDevice&)            = delete;
+        WgpuDevice& operator=(const WgpuDevice&) = delete;
 
-        std::expected<Buffer, std::error_code>
-        create_index_buffer(std::span<const std::byte> data) override;
+        // Custom move operations to properly transfer ownership
+        WgpuDevice(WgpuDevice&& other) noexcept;
+        WgpuDevice& operator=(WgpuDevice&& other) noexcept;
 
-        std::expected<void, std::error_code>
+        // Buffer operations
+        [[nodiscard]] std::expected<Buffer, std::error_code>
+        create_vertex_buffer(std::span<const std::byte> data);
+
+        [[nodiscard]] std::expected<Buffer, std::error_code>
+        create_index_buffer(std::span<const std::byte> data);
+
+        [[nodiscard]] std::expected<void, std::error_code>
         draw_indexed(const Buffer& vertex_buffer,
                      const Buffer& index_buffer,
-                     uint32_t      index_count) override;
+                     uint32_t      index_count);
 
-        void clear() override;
-        void present() override;
+        void clear();
+        void present();
 
         /*!
          * @brief Create a uniform buffer for shader constants.
          * @param size Size of the uniform buffer in bytes.
          * @return Buffer handle or error code.
          */
-        std::expected<Buffer, std::error_code>
-        create_uniform_buffer(size_t size) override;
+        [[nodiscard]] std::expected<Buffer, std::error_code>
+        create_uniform_buffer(size_t size);
 
         /*!
          * @brief Update uniform buffer data.
@@ -70,15 +78,15 @@ namespace raktr::render::backend
          * @param data Data to upload.
          * @return Success or error code.
          */
-        std::expected<void, std::error_code>
-        update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data) override;
+        [[nodiscard]] std::expected<void, std::error_code>
+        update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data);
 
         /*!
          * @brief Set uniform buffer for rendering.
          * Must be called before draw_indexed() to bind uniforms.
          * @param buffer Uniform buffer to bind.
          */
-        void set_uniform_buffer(const Buffer& buffer) override;
+        void set_uniform_buffer(const Buffer& buffer);
 
         /*!
          * @brief Resize the surface to new dimensions.
@@ -96,8 +104,8 @@ namespace raktr::render::backend
          *     device->resize(w, h);
          * });
          */
-        std::expected<void, std::error_code>
-        resize(uint32_t width, uint32_t height) override;
+        [[nodiscard]] std::expected<void, std::error_code>
+        resize(uint32_t width, uint32_t height);
 
         /*!
          * @brief Set the aspect ratio for rendering.
@@ -122,13 +130,13 @@ namespace raktr::render::backend
          * // Allow free stretching (no constraint)
          * device->set_aspect_ratio(AspectRatio::Auto);
          */
-        void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f) override;
+        void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f);
 
         /*!
          * @brief Get the current aspect ratio setting.
          * @return Current aspect ratio mode.
          */
-        AspectRatio aspect_ratio() const override
+        [[nodiscard]] AspectRatio aspect_ratio() const
         {
             return _aspect_ratio;
         }
@@ -141,7 +149,7 @@ namespace raktr::render::backend
          *
          * @return Current viewport (x, y, width, height).
          */
-        const Viewport& viewport() const override
+        const Viewport& viewport() const
         {
             return _viewport;
         }
@@ -150,7 +158,7 @@ namespace raktr::render::backend
          * @brief Get the underlying WGPUDevice handle.
          * @return WGPUDevice handle (may be null if not initialized).
          */
-        WGPUDevice wgpu_device() const
+        [[nodiscard]] WGPUDevice wgpu_device() const
         {
             return _device;
         }
@@ -159,7 +167,7 @@ namespace raktr::render::backend
          * @brief Get the underlying WGPUQueue handle.
          * @return WGPUQueue handle (may be null if not initialized).
          */
-        WGPUQueue wgpu_queue() const
+        [[nodiscard]] WGPUQueue wgpu_queue() const
         {
             return _queue;
         }

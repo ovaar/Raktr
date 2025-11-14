@@ -37,25 +37,31 @@ namespace raktr::render::backend
      * - Simple directional lighting (ambient + diffuse)
      * - Normals and UV coordinate support
      */
-    class FakeDevice : public Device
+    class FakeDevice
     {
     public:
         FakeDevice(uint32_t width = 800, uint32_t height = 600);
-        ~FakeDevice() override = default;
+        ~FakeDevice() = default;
+
+        // Copyable and movable (framebuffer data can be safely copied)
+        FakeDevice(const FakeDevice&)            = default;
+        FakeDevice& operator=(const FakeDevice&) = default;
+        FakeDevice(FakeDevice&&) noexcept            = default;
+        FakeDevice& operator=(FakeDevice&&) noexcept = default;
 
         std::expected<Buffer, std::error_code>
-        create_vertex_buffer(std::span<const std::byte> data) override;
+        create_vertex_buffer(std::span<const std::byte> data);
 
         std::expected<Buffer, std::error_code>
-        create_index_buffer(std::span<const std::byte> data) override;
+        create_index_buffer(std::span<const std::byte> data);
 
         std::expected<void, std::error_code>
         draw_indexed(const Buffer& vertex_buffer,
                      const Buffer& index_buffer,
-                     uint32_t      index_count) override;
+                     uint32_t      index_count);
 
-        void clear() override;
-        void present() override;
+        void clear();
+        void present();
 
         /*!
          * @brief Get pixel color at (x, y) for testing.
@@ -95,21 +101,21 @@ namespace raktr::render::backend
 
         // Stub implementations for interface completeness (not supported in fake device)
         std::expected<Buffer, std::error_code>
-        create_uniform_buffer(size_t size) override;
+        create_uniform_buffer(size_t size);
 
         std::expected<void, std::error_code>
-        update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data) override;
+        update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data);
 
-        void set_uniform_buffer(const Buffer& buffer) override;
+        void set_uniform_buffer(const Buffer& buffer);
 
         std::expected<void, std::error_code>
-        resize(uint32_t width, uint32_t height) override;
+        resize(uint32_t width, uint32_t height);
 
-        void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f) override;
+        void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f);
 
-        AspectRatio aspect_ratio() const override;
+        AspectRatio aspect_ratio() const;
 
-        const Viewport& viewport() const override;
+        const Viewport& viewport() const;
 
     private:
         // Buffer storage

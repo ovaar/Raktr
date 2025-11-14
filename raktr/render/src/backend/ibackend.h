@@ -8,9 +8,10 @@
 
 #include "device.h"
 #include "render_context.h"
-#include <memory>
 #include <expected>
+#include <memory>
 #include <system_error>
+
 
 namespace raktr::render::backend
 {
@@ -24,9 +25,23 @@ namespace raktr::render::backend
         virtual ~IBackend() = default;
 
         /*!
-         * @brief Initialize the backend.
+         * @brief Initialize with default window (backend owns window).
          */
         virtual std::expected<void, std::error_code> initialize(const RenderConfig& config) = 0;
+
+        /*!
+         * @brief Initialize with custom window config (backend owns window).
+         */
+        virtual std::expected<void, std::error_code> initialize(
+            const RenderConfig& config,
+            const WindowConfig& window_config) = 0;
+
+        /*!
+         * @brief Initialize with existing window (caller owns window).
+         */
+        virtual std::expected<void, std::error_code> initialize(
+            const RenderConfig& config,
+            Window*             window) = 0;
 
         /*!
          * @brief Shutdown the backend.

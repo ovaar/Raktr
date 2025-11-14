@@ -11,7 +11,7 @@ namespace raktr::render::backend
 {
 
     WgpuBackend::WgpuBackend()
-        : _window(nullptr), _device(nullptr)
+        : _window(nullptr), _device(std::nullopt)
     {
     }
 
@@ -22,14 +22,22 @@ namespace raktr::render::backend
 
     std::expected<void, std::error_code> WgpuBackend::initialize(const RenderConfig& config)
     {
-        // Create window
-        WindowConfig window_config;
-        window_config.width      = 1280;
-        window_config.height     = 720;
-        window_config.title      = "Raktr - WebGPU";
-        window_config.resizable  = true;
-        window_config.fullscreen = false;
+        // Default window configuration
+        WindowConfig default_config;
+        default_config.width      = 1280;
+        default_config.height     = 720;
+        default_config.title      = "Raktr - WebGPU";
+        default_config.resizable  = true;
+        default_config.fullscreen = false;
 
+        return initialize(config, default_config);
+    }
+
+    std::expected<void, std::error_code> WgpuBackend::initialize(
+        const RenderConfig& config,
+        const WindowConfig& window_config)
+    {
+        // Backend owns window
         auto window_result = create_window(window_config);
         if (!window_result)
         {
@@ -37,16 +45,35 @@ namespace raktr::render::backend
             return std::unexpected(window_result.error());
         }
         _window = std::move(window_result.value());
+        return initialize_device(config, _window.get());
+    }
 
-        // Create WebGPU device
-        auto device_result = WgpuDevice::create(_window.get(), config.enable_validation);
+    std::expected<void, std::error_code> WgpuBackend::initialize(
+        const RenderConfig& config,
+        Window*             window)
+    {
+        // Caller owns window
+        if (!window)
+        {
+            spdlog::error("Provided window pointer is null");
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+        return initialize_device(config, window);
+    }
+
+    std::expected<void, std::error_code> WgpuBackend::initialize_device(
+        const RenderConfig& config,
+        Window*             window)
+    {
+        // Shared device creation logic
+        auto device_result = WgpuDevice::create(window, config.enable_validation);
         if (!device_result)
         {
             spdlog::error("Failed to create WebGPU device");
-            _window.reset();
+            _window.reset(); // Safe - only affects owned window
             return std::unexpected(device_result.error());
         }
-        _device = std::move(device_result.value());
+        _device = Device(std::move(device_result.value()));
 
         spdlog::info("WebGPU backend initialized successfully");
         return {};
@@ -54,13 +81,13 @@ namespace raktr::render::backend
 
     void WgpuBackend::shutdown()
     {
-        _device.reset();
+        _device = std::nullopt;
         _window.reset();
     }
 
     Device* WgpuBackend::device()
     {
-        return _device.get();
+        return _device.has_value() ? &_device.value() : nullptr;
     }
 
 } // namespace raktr::render::backend

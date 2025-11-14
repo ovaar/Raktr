@@ -8,7 +8,6 @@
 #include "window/window.h"
 #include <gtest/gtest.h>
 
-
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -72,8 +71,8 @@ TEST_F(WgpuNativeWindowTest, CreateDevice_WithNativeWindow_Succeeds)
     auto& device = device_result.value();
 
     // Verify device is functional
-    EXPECT_NE(device->wgpu_device(), nullptr);
-    EXPECT_NE(device->wgpu_queue(), nullptr);
+    EXPECT_NE(device.wgpu_device(), nullptr);
+    EXPECT_NE(device.wgpu_queue(), nullptr);
 #else
     // On other platforms without proper setup, we just verify it doesn't crash
     // Device creation might fail without proper platform support
@@ -105,20 +104,20 @@ TEST_F(WgpuNativeWindowTest, RenderToNativeWindow_Succeeds)
     };
     // clang-format on
     auto vertex_data   = std::as_bytes(std::span(vertices));
-    auto vertex_buffer = device->create_vertex_buffer(vertex_data);
+    auto vertex_buffer = device.create_vertex_buffer(vertex_data);
     ASSERT_TRUE(vertex_buffer.has_value());
 
     uint32_t indices[]    = { 0, 1, 2 };
     auto     index_data   = std::as_bytes(std::span(indices));
-    auto     index_buffer = device->create_index_buffer(index_data);
+    auto     index_buffer = device.create_index_buffer(index_data);
     ASSERT_TRUE(index_buffer.has_value());
 
     // Render to the native window
-    auto draw_result = device->draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
+    auto draw_result = device.draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
     EXPECT_TRUE(draw_result.has_value()) << "Failed to draw to native window";
 
     // Present
-    EXPECT_NO_THROW(device->present());
+    EXPECT_NO_THROW(device.present());
 #else
     SUCCEED() << "Test skipped on non-Windows platforms";
 #endif
@@ -144,19 +143,19 @@ TEST_F(WgpuNativeWindowTest, MultipleFrames_WithNativeWindow_Succeeds)
         0.5f, -0.5f, 0.0f
     };
     // clang-format on
-    auto vertex_buffer = device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    auto vertex_buffer = device.create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vertex_buffer.has_value());
 
     uint32_t indices[]    = { 0, 1, 2 };
-    auto     index_buffer = device->create_index_buffer(std::as_bytes(std::span(indices)));
+    auto     index_buffer = device.create_index_buffer(std::as_bytes(std::span(indices)));
     ASSERT_TRUE(index_buffer.has_value());
 
     // Render multiple frames
     for (int i = 0; i < 3; ++i)
     {
-        auto draw_result = device->draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
+        auto draw_result = device.draw_indexed(vertex_buffer.value(), index_buffer.value(), 3);
         EXPECT_TRUE(draw_result.has_value()) << "Failed on frame " << i;
-        device->present();
+        device.present();
     }
 #else
     SUCCEED() << "Test skipped on non-Windows platforms";

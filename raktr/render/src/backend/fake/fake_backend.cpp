@@ -10,7 +10,7 @@ namespace raktr::render::backend
 {
 
     FakeBackend::FakeBackend()
-        : _device(nullptr)
+        : _device(std::nullopt)
     {
     }
 
@@ -21,18 +21,36 @@ namespace raktr::render::backend
 
     std::expected<void, std::error_code> FakeBackend::initialize(const RenderConfig& /* config */)
     {
-        _device = std::make_unique<FakeDevice>();
+        _device = Device(FakeDevice());
+        return {};
+    }
+
+    std::expected<void, std::error_code> FakeBackend::initialize(
+        const RenderConfig& /* config */,
+        const WindowConfig& /* window_config */)
+    {
+        // FakeBackend is software rendering - doesn't use window
+        _device = Device(FakeDevice());
+        return {};
+    }
+
+    std::expected<void, std::error_code> FakeBackend::initialize(
+        const RenderConfig& /* config */,
+        Window* /* window */)
+    {
+        // FakeBackend is software rendering - doesn't use window
+        _device = Device(FakeDevice());
         return {};
     }
 
     void FakeBackend::shutdown()
     {
-        _device.reset();
+        _device = std::nullopt;
     }
 
     Device* FakeBackend::device()
     {
-        return _device.get();
+        return _device.has_value() ? &_device.value() : nullptr;
     }
 
 } // namespace raktr::render::backend

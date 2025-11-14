@@ -8,19 +8,23 @@
 
 #include "device.h"
 #include "render_error.h"
-#include <memory>
 #include <expected>
+#include <memory>
 #include <system_error>
+
 
 namespace raktr::render
 {
+    class Window;        // Forward declaration
+    struct WindowConfig; // Forward declaration
+
     /*!
      * @brief Supported graphics API backends.
      */
     enum class BackendType
     {
-        Fake,        // Software renderer for testing
-        WebGPU,      // WebGPU via wgpu-native
+        Fake,   // Software renderer for testing
+        WebGPU, // WebGPU via wgpu-native
         OpenGL,
         Vulkan,
         DirectX12
@@ -31,9 +35,9 @@ namespace raktr::render
      */
     struct RenderConfig
     {
-        BackendType backend = BackendType::Fake;
-        bool enable_validation = false;  // Debug layers/validation
-        bool enable_vsync = true;
+        BackendType backend           = BackendType::Fake;
+        bool        enable_validation = false; // Debug layers/validation
+        bool        enable_vsync      = true;
     };
 
     /*!
@@ -46,17 +50,37 @@ namespace raktr::render
         ~RenderContext();
 
         // Non-copyable, moveable
-        RenderContext(const RenderContext&) = delete;
+        RenderContext(const RenderContext&)            = delete;
         RenderContext& operator=(const RenderContext&) = delete;
         RenderContext(RenderContext&&) noexcept;
         RenderContext& operator=(RenderContext&&) noexcept;
 
         /*!
-         * @brief Initialize the render context with given configuration.
+         * @brief Initialize with default window (backend owns window).
          * @param config Rendering configuration.
          * @return Success or error code.
          */
         [[nodiscard]] std::expected<void, std::error_code> initialize(const RenderConfig& config);
+
+        /*!
+         * @brief Initialize with custom window config (backend owns window).
+         * @param config Rendering configuration.
+         * @param window_config Window creation parameters.
+         * @return Success or error code.
+         */
+        [[nodiscard]] std::expected<void, std::error_code> initialize(
+            const RenderConfig& config,
+            const WindowConfig& window_config);
+
+        /*!
+         * @brief Initialize with existing window (caller owns window).
+         * @param config Rendering configuration.
+         * @param window Externally-owned window (must outlive RenderContext).
+         * @return Success or error code.
+         */
+        [[nodiscard]] std::expected<void, std::error_code> initialize(
+            const RenderConfig& config,
+            Window*             window);
 
         /*!
          * @brief Shutdown the render context and free resources.

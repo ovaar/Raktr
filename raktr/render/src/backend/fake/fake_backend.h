@@ -9,6 +9,7 @@
 #include "backend/ibackend.h"
 #include "fake_device.h"
 #include <memory>
+#include <optional>
 
 namespace raktr::render::backend
 {
@@ -21,12 +22,19 @@ namespace raktr::render::backend
         FakeBackend();
         ~FakeBackend() override;
 
-        std::expected<void, std::error_code> initialize(const RenderConfig& config) override;
-        void                                 shutdown() override;
-        Device*                              device() override;
+        [[nodiscard]] std::expected<void, std::error_code> initialize(const RenderConfig& config) override;
+        [[nodiscard]] std::expected<void, std::error_code> initialize(
+            const RenderConfig& config,
+            const WindowConfig& window_config) override;
+        [[nodiscard]] std::expected<void, std::error_code> initialize(
+            const RenderConfig& config,
+            Window*             window) override;
+
+        void                  shutdown() override;
+        [[nodiscard]] Device* device() override;
 
     private:
-        std::unique_ptr<FakeDevice> _device;
+        std::optional<Device> _device;
     };
 
 } // namespace raktr::render::backend

@@ -24,13 +24,19 @@ using namespace raktr::render;
 
 TEST(VisualTest, DISABLED_ManualRenderTriangle)
 {
-    // Create window
+    // Create window FIRST
     WindowConfig window_config;
     window_config.width     = 800;
     window_config.height    = 600;
     window_config.title     = "WebGPU Triangle Test";
     window_config.resizable = true;
 
+    auto window_result = create_window(window_config);
+    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
+
+    auto& window = window_result.value();
+
+    // Create render context with the window (caller owns window)
     RenderConfig render_config;
     render_config.backend           = BackendType::WebGPU;
     render_config.enable_validation = false;
@@ -38,13 +44,8 @@ TEST(VisualTest, DISABLED_ManualRenderTriangle)
     auto render_context = create_render_context();
     ASSERT_NE(render_context, nullptr);
 
-    auto render_ctx_result = render_context->initialize(render_config);
+    auto render_ctx_result = render_context->initialize(render_config, window.get());
     ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext with WebGPU backend";
-
-    auto window_result = create_window(window_config);
-    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
-
-    auto& window = window_result.value();
 
     // Create WebGPU device
     auto device = render_context->device();
@@ -97,13 +98,19 @@ TEST(VisualTest, DISABLED_ManualRenderTriangle)
 
 TEST(VisualTest, DISABLED_SpinningCube)
 {
-    // Create window
+    // Create window FIRST
     WindowConfig window_config;
     window_config.width     = 800;
     window_config.height    = 600;
     window_config.title     = "WebGPU Spinning Cube Test";
     window_config.resizable = false;
 
+    auto window_result = create_window(window_config);
+    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
+
+    auto& window = window_result.value();
+
+    // Create render context with the window (caller owns window)
     RenderConfig render_config;
     render_config.backend           = BackendType::WebGPU;
     render_config.enable_validation = false;
@@ -111,13 +118,8 @@ TEST(VisualTest, DISABLED_SpinningCube)
     auto render_context = create_render_context();
     ASSERT_NE(render_context, nullptr);
 
-    auto render_ctx_result = render_context->initialize(render_config);
+    auto render_ctx_result = render_context->initialize(render_config, window.get());
     ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext with WebGPU backend";
-
-    auto window_result = create_window(window_config);
-    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
-
-    auto& window = window_result.value();
 
     // Create WebGPU device
     auto device = render_context->device();
@@ -251,7 +253,7 @@ TEST(VisualTest, DISABLED_SpinningCube)
 
 TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
 {
-    // Create window
+    // Create window FIRST
     WindowConfig window_config;
     window_config.width      = 1920;
     window_config.height     = 1080;
@@ -259,6 +261,12 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
     window_config.resizable  = true;
     window_config.fullscreen = false;
 
+    auto window_result = create_window(window_config);
+    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
+
+    auto& window = window_result.value();
+
+    // Create render context with the window (caller owns window)
     RenderConfig render_config;
     render_config.backend           = BackendType::WebGPU;
     render_config.enable_validation = false;
@@ -266,13 +274,8 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
     auto render_context = create_render_context();
     ASSERT_NE(render_context, nullptr);
 
-    auto render_ctx_result = render_context->initialize(render_config);
+    auto render_ctx_result = render_context->initialize(render_config, window.get());
     ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext with WebGPU backend";
-
-    auto window_result = create_window(window_config);
-    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
-
-    auto& window = window_result.value();
 
     // Create WebGPU device
     auto device = render_context->device();
