@@ -89,6 +89,39 @@ namespace raktr::render::backend
         void set_uniform_buffer(const Buffer& buffer);
 
         /*!
+         * @brief Create an instance buffer for per-instance data.
+         * @param data Instance data to upload (typically array of InstanceData).
+         * @return Buffer handle or error code.
+         */
+        [[nodiscard]] std::expected<Buffer, std::error_code>
+        create_instance_buffer(std::span<const std::byte> data);
+
+        /*!
+         * @brief Update instance buffer data.
+         * @param buffer Buffer handle from create_instance_buffer().
+         * @param data New instance data to upload.
+         * @return Success or error code.
+         */
+        [[nodiscard]] std::expected<void, std::error_code>
+        update_instance_buffer(const Buffer& buffer, std::span<const std::byte> data);
+
+        /*!
+         * @brief Draw indexed geometry with instancing.
+         * @param vertex_buffer Vertex buffer handle.
+         * @param index_buffer Index buffer handle.
+         * @param instance_buffer Instance buffer handle.
+         * @param index_count Number of indices to draw.
+         * @param instance_count Number of instances to render.
+         * @return Success or error code.
+         */
+        [[nodiscard]] std::expected<void, std::error_code>
+        draw_indexed_instanced(const Buffer& vertex_buffer,
+                               const Buffer& index_buffer,
+                               const Buffer& instance_buffer,
+                               uint32_t      index_count,
+                               uint32_t      instance_count);
+
+        /*!
          * @brief Resize the surface to new dimensions.
          *
          * Reconfigures the WebGPU surface with new width and height.

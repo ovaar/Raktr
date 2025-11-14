@@ -165,6 +165,30 @@ namespace raktr::render
             return capability<capabilities::ViewportOps>().viewport();
         }
 
+        // Instancing operations (if supported)
+        [[nodiscard]] std::expected<Buffer, std::error_code>
+        create_instance_buffer(std::span<const std::byte> data) const
+        {
+            return capability<capabilities::InstancingOps>().create_instance_buffer(data);
+        }
+
+        [[nodiscard]] std::expected<void, std::error_code>
+        update_instance_buffer(const Buffer& buffer, std::span<const std::byte> data) const
+        {
+            return capability<capabilities::InstancingOps>().update_instance_buffer(buffer, data);
+        }
+
+        [[nodiscard]] std::expected<void, std::error_code>
+        draw_indexed_instanced(const Buffer& vertex_buffer,
+                               const Buffer& index_buffer,
+                               const Buffer& instance_buffer,
+                               uint32_t      index_count,
+                               uint32_t      instance_count) const
+        {
+            return capability<capabilities::InstancingOps>().draw_indexed_instanced(
+                vertex_buffer, index_buffer, instance_buffer, index_count, instance_count);
+        }
+
     private:
         /*!
          * @brief Concept interface for type-erased device implementation.
@@ -182,10 +206,11 @@ namespace raktr::render
             }
 
         private:
-            [[nodiscard]] virtual std::optional<capabilities::BufferOps>   do_capability_bufferops() const   = 0;
-            [[nodiscard]] virtual std::optional<capabilities::DrawOps>     do_capability_drawops() const     = 0;
-            [[nodiscard]] virtual std::optional<capabilities::ViewportOps> do_capability_viewportops() const = 0;
-            [[nodiscard]] virtual std::optional<capabilities::PresentOps>  do_capability_presentops() const  = 0;
+            [[nodiscard]] virtual std::optional<capabilities::BufferOps>     do_capability_bufferops() const     = 0;
+            [[nodiscard]] virtual std::optional<capabilities::DrawOps>       do_capability_drawops() const       = 0;
+            [[nodiscard]] virtual std::optional<capabilities::ViewportOps>   do_capability_viewportops() const   = 0;
+            [[nodiscard]] virtual std::optional<capabilities::PresentOps>    do_capability_presentops() const    = 0;
+            [[nodiscard]] virtual std::optional<capabilities::InstancingOps> do_capability_instancingops() const = 0;
 
             template <typename Capability>
             std::optional<Capability> do_capability(std::type_index /* ti */) const
@@ -205,6 +230,10 @@ namespace raktr::render
                 else if constexpr (std::is_same_v<Capability, capabilities::PresentOps>)
                 {
                     return do_capability_presentops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::InstancingOps>)
+                {
+                    return do_capability_instancingops();
                 }
                 return std::nullopt;
             }
@@ -370,6 +399,36 @@ namespace raktr::render
                     ops.present = [dev = &_device]() mutable
                     {
                         dev->present();
+                    };
+                    return ops;
+                }
+                return std::nullopt;
+            }
+
+            std::optional<capabilities::InstancingOps> do_capability_instancingops() const override
+            {
+                if constexpr (requires(T& device, std::span<const std::byte> data, const Buffer& buffer, uint32_t count) {
+                                  { device.create_instance_buffer(data) } -> std::same_as<std::expected<Buffer, std::error_code>>;
+                                  { device.update_instance_buffer(buffer, data) } -> std::same_as<std::expected<void, std::error_code>>;
+                                  { device.draw_indexed_instanced(buffer, buffer, buffer, count, count) } -> std::same_as<std::expected<void, std::error_code>>;
+                              })
+                {
+                    capabilities::InstancingOps ops;
+                    ops.create_instance_buffer = [dev = &_device](std::span<const std::byte> data) mutable
+                    {
+                        return dev->create_instance_buffer(data);
+                    };
+                    ops.update_instance_buffer = [dev = &_device](const Buffer& buffer, std::span<const std::byte> data) mutable
+                    {
+                        return dev->update_instance_buffer(buffer, data);
+                    };
+                    ops.draw_indexed_instanced = [dev = &_device](const Buffer& vertex_buffer,
+                                                                  const Buffer& index_buffer,
+                                                                  const Buffer& instance_buffer,
+                                                                  uint32_t      index_count,
+                                                                  uint32_t      instance_count) mutable
+                    {
+                        return dev->draw_indexed_instanced(vertex_buffer, index_buffer, instance_buffer, index_count, instance_count);
                     };
                     return ops;
                 }

@@ -97,6 +97,25 @@ namespace raktr::render
                 present;
         };
 
+        /*!
+         * @brief Instanced rendering capability.
+         *
+         * Provides functions for creating instance buffers and drawing multiple
+         * instances of geometry in a single draw call.
+         * GPU devices with instancing support should have this capability.
+         */
+        struct InstancingOps
+        {
+            std::function<std::expected<Buffer, std::error_code>(std::span<const std::byte>)>
+                create_instance_buffer;
+
+            std::function<std::expected<void, std::error_code>(const Buffer&, std::span<const std::byte>)>
+                update_instance_buffer;
+
+            std::function<std::expected<void, std::error_code>(const Buffer&, const Buffer&, const Buffer&, uint32_t, uint32_t)>
+                draw_indexed_instanced;
+        };
+
     } // namespace capabilities
 
 } // namespace raktr::render

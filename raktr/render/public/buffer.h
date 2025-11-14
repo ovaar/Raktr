@@ -17,12 +17,13 @@ namespace raktr::render
     {
         Vertex,
         Index,
-        Uniform
+        Uniform,
+        Instance // Per-instance data for instanced rendering
     };
 
     /*!
      * @brief Handle to a GPU buffer resource.
-     * 
+     *
      * This is a lightweight handle that can be copied.
      * The underlying resource is managed by the backend.
      */
@@ -32,33 +33,46 @@ namespace raktr::render
         /*!
          * @brief Construct an invalid buffer handle.
          */
-        Buffer() : _id(0), _type(BufferType::Vertex) {}
+        Buffer() : _id(0), _type(BufferType::Vertex)
+        {
+        }
 
         /*!
          * @brief Construct a buffer handle.
          * @param id Backend-specific buffer identifier.
          * @param type Type of buffer (vertex or index).
          */
-        Buffer(uint64_t id, BufferType type) 
-            : _id(id), _type(type) {}
+        Buffer(uint64_t id, BufferType type)
+            : _id(id), _type(type)
+        {
+        }
 
         /*!
          * @brief Check if buffer handle is valid.
          */
-        bool is_valid() const { return _id != 0; }
+        bool is_valid() const
+        {
+            return _id != 0;
+        }
 
         /*!
          * @brief Get the buffer identifier.
          */
-        uint64_t id() const { return _id; }
+        uint64_t id() const
+        {
+            return _id;
+        }
 
         /*!
          * @brief Get the buffer type.
          */
-        BufferType type() const { return _type; }
+        BufferType type() const
+        {
+            return _type;
+        }
 
     private:
-        uint64_t _id;
+        uint64_t   _id;
         BufferType _type;
     };
 
