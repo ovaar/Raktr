@@ -44,24 +44,7 @@ namespace raktr::render::backend
     }
 
     WgpuDevice::WgpuDevice(WgpuDevice&& other) noexcept
-        : _instance(other._instance)
-        , _adapter(other._adapter)
-        , _device(other._device)
-        , _queue(other._queue)
-        , _surface(other._surface)
-        , _swapchain_width(other._swapchain_width)
-        , _swapchain_height(other._swapchain_height)
-        , _swapchain_format(other._swapchain_format)
-        , _aspect_ratio(other._aspect_ratio)
-        , _custom_aspect_ratio(other._custom_aspect_ratio)
-        , _viewport(other._viewport)
-        , _buffers(std::move(other._buffers))
-        , _shader_module(other._shader_module)
-        , _render_pipeline(other._render_pipeline)
-        , _bind_group_layout(other._bind_group_layout)
-        , _current_bind_group(other._current_bind_group)
-        , _default_uniform_buffer(std::move(other._default_uniform_buffer))
-        , _current_surface_texture(other._current_surface_texture)
+        : _instance(other._instance), _adapter(other._adapter), _device(other._device), _queue(other._queue), _surface(other._surface), _swapchain_width(other._swapchain_width), _swapchain_height(other._swapchain_height), _swapchain_format(other._swapchain_format), _aspect_ratio(other._aspect_ratio), _custom_aspect_ratio(other._custom_aspect_ratio), _viewport(other._viewport), _buffers(std::move(other._buffers)), _shader_module(other._shader_module), _render_pipeline(other._render_pipeline), _bind_group_layout(other._bind_group_layout), _current_bind_group(other._current_bind_group), _default_uniform_buffer(std::move(other._default_uniform_buffer)), _current_surface_texture(other._current_surface_texture)
     {
         // Nullify the moved-from object's handles so cleanup doesn't release them
         other._instance                = nullptr;
@@ -84,18 +67,18 @@ namespace raktr::render::backend
             cleanup();
 
             // Transfer ownership from other
-            _instance                     = other._instance;
-            _adapter                      = other._adapter;
-            _device                       = other._device;
-            _queue                        = other._queue;
-            _surface                      = other._surface;
-            _swapchain_width              = other._swapchain_width;
-            _swapchain_height             = other._swapchain_height;
-            _swapchain_format             = other._swapchain_format;
-            _aspect_ratio                 = other._aspect_ratio;
-            _custom_aspect_ratio          = other._custom_aspect_ratio;
-            _viewport                     = other._viewport;
-            _buffers                      = std::move(other._buffers);
+            _instance                = other._instance;
+            _adapter                 = other._adapter;
+            _device                  = other._device;
+            _queue                   = other._queue;
+            _surface                 = other._surface;
+            _swapchain_width         = other._swapchain_width;
+            _swapchain_height        = other._swapchain_height;
+            _swapchain_format        = other._swapchain_format;
+            _aspect_ratio            = other._aspect_ratio;
+            _custom_aspect_ratio     = other._custom_aspect_ratio;
+            _viewport                = other._viewport;
+            _buffers                 = std::move(other._buffers);
             _shader_module           = other._shader_module;
             _render_pipeline         = other._render_pipeline;
             _bind_group_layout       = other._bind_group_layout;
@@ -265,9 +248,18 @@ struct Uniforms {
 @group(0) @binding(0)
 var<uniform> uniforms: Uniforms;
 
-// Vertex shader
+// Vertex input (per-vertex geometry data)
 struct VertexInput {
     @location(0) position: vec3<f32>,
+};
+
+// Instance input (per-instance data)
+struct InstanceInput {
+    @location(1) model_matrix_0: vec4<f32>,  // First column of model matrix
+    @location(2) model_matrix_1: vec4<f32>,  // Second column
+    @location(3) model_matrix_2: vec4<f32>,  // Third column
+    @location(4) model_matrix_3: vec4<f32>,  // Fourth column
+    @location(5) color: vec4<f32>,           // Per-instance color
 };
 
 struct VertexOutput {
@@ -275,11 +267,21 @@ struct VertexOutput {
     @location(0) color: vec3<f32>,
 };
 
+// Vertex shader with instancing support
 @vertex
-fn vs_main(input: VertexInput) -> VertexOutput {
+fn vs_main(vertex: VertexInput, instance: InstanceInput) -> VertexOutput {
+    // Reconstruct model matrix from 4 vec4 columns
+    let model_matrix = mat4x4<f32>(
+        instance.model_matrix_0,
+        instance.model_matrix_1,
+        instance.model_matrix_2,
+        instance.model_matrix_3
+    );
+    
     var output: VertexOutput;
-    output.position = uniforms.mvp * vec4<f32>(input.position, 1.0);
-    output.color = input.position * 0.5 + 0.5;
+    // Apply model matrix per-instance, then MVP from uniform (which should be VP only for instancing)
+    output.position = uniforms.mvp * model_matrix * vec4<f32>(vertex.position, 1.0);
+    output.color = instance.color.rgb;  // Use per-instance color
     return output;
 }
 
@@ -407,7 +409,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             return std::unexpected(make_error_code(RenderError::InitializationFailed));
         }
 
-        // Vertex buffer layout
+        // Vertex buffer layout (slot 0 - geometry)
         WGPUVertexAttribute vertex_attribute = {};
         vertex_attribute.format              = WGPUVertexFormat_Float32x3;
         vertex_attribute.offset              = 0;
@@ -418,6 +420,44 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         vertex_buffer_layout.stepMode               = WGPUVertexStepMode_Vertex;
         vertex_buffer_layout.attributeCount         = 1;
         vertex_buffer_layout.attributes             = &vertex_attribute;
+
+        // Instance buffer layout (slot 1 - per-instance data)
+        // Layout: mat4 (16 floats = 4 vec4) + vec4 (4 floats) = 80 bytes total
+        WGPUVertexAttribute instance_attributes[5] = {};
+
+        // Model matrix column 0 (@location 1)
+        instance_attributes[0].format         = WGPUVertexFormat_Float32x4;
+        instance_attributes[0].offset         = 0;
+        instance_attributes[0].shaderLocation = 1;
+
+        // Model matrix column 1 (@location 2)
+        instance_attributes[1].format         = WGPUVertexFormat_Float32x4;
+        instance_attributes[1].offset         = 16;
+        instance_attributes[1].shaderLocation = 2;
+
+        // Model matrix column 2 (@location 3)
+        instance_attributes[2].format         = WGPUVertexFormat_Float32x4;
+        instance_attributes[2].offset         = 32;
+        instance_attributes[2].shaderLocation = 3;
+
+        // Model matrix column 3 (@location 4)
+        instance_attributes[3].format         = WGPUVertexFormat_Float32x4;
+        instance_attributes[3].offset         = 48;
+        instance_attributes[3].shaderLocation = 4;
+
+        // Per-instance color (@location 5)
+        instance_attributes[4].format         = WGPUVertexFormat_Float32x4;
+        instance_attributes[4].offset         = 64;
+        instance_attributes[4].shaderLocation = 5;
+
+        WGPUVertexBufferLayout instance_buffer_layout = {};
+        instance_buffer_layout.arrayStride            = 80; // sizeof(InstanceData)
+        instance_buffer_layout.stepMode               = WGPUVertexStepMode_Instance;
+        instance_buffer_layout.attributeCount         = 5;
+        instance_buffer_layout.attributes             = instance_attributes;
+
+        // Combine both buffer layouts
+        WGPUVertexBufferLayout buffer_layouts[2] = { vertex_buffer_layout, instance_buffer_layout };
 
         // Color target state
         WGPUColorTargetState color_target = {};
@@ -440,11 +480,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         pipeline_desc.label                        = make_string_view("Basic Render Pipeline");
         pipeline_desc.layout                       = pipeline_layout;
 
-        // Vertex state
+        // Vertex state (supports both geometry and instance buffers)
         pipeline_desc.vertex.module        = _shader_module;
         pipeline_desc.vertex.entryPoint    = make_string_view("vs_main");
-        pipeline_desc.vertex.bufferCount   = 1;
-        pipeline_desc.vertex.buffers       = &vertex_buffer_layout;
+        pipeline_desc.vertex.bufferCount   = 2; // Both geometry and instance layouts
+        pipeline_desc.vertex.buffers       = buffer_layouts;
         pipeline_desc.vertex.constantCount = 0;
         pipeline_desc.vertex.constants     = nullptr;
 
@@ -705,6 +745,199 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
 
         _current_bind_group = wgpuDeviceCreateBindGroup(_device, &bind_group_desc);
+    }
+
+    std::expected<Buffer, std::error_code>
+    WgpuDevice::create_instance_buffer(std::span<const std::byte> data)
+    {
+        if (data.empty() || !_device)
+        {
+            return std::unexpected(make_error_code(RenderError::BufferCreationFailed));
+        }
+
+        WGPUBufferDescriptor buffer_desc = {};
+        buffer_desc.nextInChain          = nullptr;
+        buffer_desc.label                = make_string_view("Instance Buffer");
+        buffer_desc.usage                = WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst;
+        buffer_desc.size                 = data.size();
+        buffer_desc.mappedAtCreation     = false;
+
+        WGPUBuffer wgpu_buffer = wgpuDeviceCreateBuffer(_device, &buffer_desc);
+        if (!wgpu_buffer)
+        {
+            return std::unexpected(make_error_code(RenderError::BufferCreationFailed));
+        }
+
+        // Upload data
+        wgpuQueueWriteBuffer(_queue, wgpu_buffer, 0, data.data(), data.size());
+
+        // Store buffer for cleanup
+        _buffers.push_back(wgpu_buffer);
+
+        // Return handle (use buffer index as ID)
+        return Buffer(static_cast<uint64_t>(_buffers.size() - 1), BufferType::Instance);
+    }
+
+    std::expected<void, std::error_code>
+    WgpuDevice::update_instance_buffer(const Buffer& buffer, std::span<const std::byte> data)
+    {
+        if (data.empty() || !_queue)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Validate buffer ID
+        if (buffer.id() >= _buffers.size())
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        WGPUBuffer wgpu_buffer = _buffers[buffer.id()];
+        if (!wgpu_buffer)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Update buffer data
+        wgpuQueueWriteBuffer(_queue, wgpu_buffer, 0, data.data(), data.size());
+        return {};
+    }
+
+    std::expected<void, std::error_code>
+    WgpuDevice::draw_indexed_instanced(const Buffer& vertex_buffer,
+                                       const Buffer& index_buffer,
+                                       const Buffer& instance_buffer,
+                                       uint32_t      index_count,
+                                       uint32_t      instance_count)
+    {
+        if (!_surface || !_queue || !_render_pipeline)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Validate buffer IDs
+        if (vertex_buffer.id() >= _buffers.size() || index_buffer.id() >= _buffers.size() ||
+            instance_buffer.id() >= _buffers.size())
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        WGPUBuffer wgpu_vertex_buffer   = _buffers[vertex_buffer.id()];
+        WGPUBuffer wgpu_index_buffer    = _buffers[index_buffer.id()];
+        WGPUBuffer wgpu_instance_buffer = _buffers[instance_buffer.id()];
+
+        if (!wgpu_vertex_buffer || !wgpu_index_buffer || !wgpu_instance_buffer)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Get current texture from surface
+        WGPUSurfaceTexture surface_texture;
+        wgpuSurfaceGetCurrentTexture(_surface, &surface_texture);
+
+        if (surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+            surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
+        {
+            spdlog::error("Failed to get surface texture for drawing: {}",
+                          static_cast<int>(surface_texture.status));
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Create texture view
+        WGPUTextureViewDescriptor view_desc = {};
+        view_desc.nextInChain               = nullptr;
+        view_desc.label                     = make_string_view("Surface Texture View");
+        view_desc.format                    = _swapchain_format;
+        view_desc.dimension                 = WGPUTextureViewDimension_2D;
+        view_desc.baseMipLevel              = 0;
+        view_desc.mipLevelCount             = 1;
+        view_desc.baseArrayLayer            = 0;
+        view_desc.arrayLayerCount           = 1;
+        view_desc.aspect                    = WGPUTextureAspect_All;
+
+        WGPUTextureView backbuffer_view = wgpuTextureCreateView(surface_texture.texture, &view_desc);
+
+        // Create command encoder
+        WGPUCommandEncoderDescriptor encoder_desc = {};
+        encoder_desc.nextInChain                  = nullptr;
+        encoder_desc.label                        = make_string_view("Draw Instanced Command Encoder");
+        WGPUCommandEncoder encoder                = wgpuDeviceCreateCommandEncoder(_device, &encoder_desc);
+
+        // Create render pass
+        WGPURenderPassColorAttachment color_attachment = {};
+        color_attachment.view                          = backbuffer_view;
+        color_attachment.depthSlice                    = WGPU_DEPTH_SLICE_UNDEFINED;
+        color_attachment.resolveTarget                 = nullptr;
+        color_attachment.loadOp                        = WGPULoadOp_Clear;
+        color_attachment.storeOp                       = WGPUStoreOp_Store;
+        color_attachment.clearValue                    = { 0.1, 0.2, 0.3, 1.0 }; // Clear to dark blue-gray
+
+        WGPURenderPassDescriptor render_pass_desc = {};
+        render_pass_desc.nextInChain              = nullptr;
+        render_pass_desc.label                    = make_string_view("Draw Instanced Render Pass");
+        render_pass_desc.colorAttachmentCount     = 1;
+        render_pass_desc.colorAttachments         = &color_attachment;
+        render_pass_desc.depthStencilAttachment   = nullptr;
+
+        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &render_pass_desc);
+
+        // Set pipeline
+        wgpuRenderPassEncoderSetPipeline(pass, _render_pipeline);
+
+        // Set viewport to maintain aspect ratio
+        wgpuRenderPassEncoderSetViewport(pass,
+                                         static_cast<float>(_viewport.x),
+                                         static_cast<float>(_viewport.y),
+                                         static_cast<float>(_viewport.width),
+                                         static_cast<float>(_viewport.height),
+                                         0.0f,  // minDepth
+                                         1.0f); // maxDepth
+
+        // Set scissor rect to match viewport
+        wgpuRenderPassEncoderSetScissorRect(pass,
+                                            _viewport.x,
+                                            _viewport.y,
+                                            _viewport.width,
+                                            _viewport.height);
+
+        // Bind uniform buffer if set
+        if (_current_bind_group)
+        {
+            wgpuRenderPassEncoderSetBindGroup(pass, 0, _current_bind_group, 0, nullptr);
+        }
+
+        // Bind geometry vertex buffer to slot 0
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, wgpu_vertex_buffer, 0, WGPU_WHOLE_SIZE);
+
+        // Bind instance buffer to slot 1
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 1, wgpu_instance_buffer, 0, WGPU_WHOLE_SIZE);
+
+        // Set index buffer
+        wgpuRenderPassEncoderSetIndexBuffer(pass, wgpu_index_buffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
+
+        // Draw indexed geometry with instancing
+        wgpuRenderPassEncoderDrawIndexed(pass, index_count, instance_count, 0, 0, 0);
+
+        // End render pass
+        wgpuRenderPassEncoderEnd(pass);
+        wgpuRenderPassEncoderRelease(pass);
+
+        // Submit commands
+        WGPUCommandBufferDescriptor cmd_buffer_desc = {};
+        cmd_buffer_desc.nextInChain                 = nullptr;
+        cmd_buffer_desc.label                       = make_string_view("Draw Instanced Command Buffer");
+        WGPUCommandBuffer command                   = wgpuCommandEncoderFinish(encoder, &cmd_buffer_desc);
+        wgpuQueueSubmit(_queue, 1, &command);
+
+        // Cleanup command resources
+        wgpuCommandBufferRelease(command);
+        wgpuCommandEncoderRelease(encoder);
+        wgpuTextureViewRelease(backbuffer_view);
+
+        // Store surface texture to release after present
+        _current_surface_texture = surface_texture.texture;
+
+        return {};
     }
 
     std::expected<void, std::error_code>
