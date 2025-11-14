@@ -217,6 +217,9 @@ namespace raktr::render::backend
         std::expected<void, std::error_code>
         create_render_pipeline();
 
+        std::expected<void, std::error_code>
+        create_depth_texture();
+
         void cleanup();
 
         // WebGPU handles
@@ -248,6 +251,10 @@ namespace raktr::render::backend
         WGPUBindGroup       _current_bind_group = nullptr;
         Buffer              _default_uniform_buffer;  // Identity matrix for backward compatibility
         Buffer              _default_instance_buffer; // Single identity instance for non-instanced rendering
+
+        // Depth buffer
+        WGPUTexture     _depth_texture      = nullptr;
+        WGPUTextureView _depth_texture_view = nullptr;
 
         // Current frame surface texture (needs to be released after present)
         WGPUTexture _current_surface_texture = nullptr;

@@ -62,6 +62,8 @@ namespace raktr::render::backend
           _current_bind_group(other._current_bind_group),
           _default_uniform_buffer(std::move(other._default_uniform_buffer)),
           _default_instance_buffer(std::move(other._default_instance_buffer)),
+          _depth_texture(other._depth_texture),
+          _depth_texture_view(other._depth_texture_view),
           _current_surface_texture(other._current_surface_texture)
     {
         // Nullify the moved-from object's handles so cleanup doesn't release them
@@ -74,6 +76,8 @@ namespace raktr::render::backend
         other._render_pipeline         = nullptr;
         other._bind_group_layout       = nullptr;
         other._current_bind_group      = nullptr;
+        other._depth_texture           = nullptr;
+        other._depth_texture_view      = nullptr;
         other._current_surface_texture = nullptr;
     }
 
@@ -103,6 +107,8 @@ namespace raktr::render::backend
             _current_bind_group      = other._current_bind_group;
             _default_uniform_buffer  = std::move(other._default_uniform_buffer);
             _default_instance_buffer = std::move(other._default_instance_buffer);
+            _depth_texture           = other._depth_texture;
+            _depth_texture_view      = other._depth_texture_view;
             _current_surface_texture = other._current_surface_texture;
 
             // Nullify the moved-from object's handles
@@ -115,6 +121,8 @@ namespace raktr::render::backend
             other._render_pipeline         = nullptr;
             other._bind_group_layout       = nullptr;
             other._current_bind_group      = nullptr;
+            other._depth_texture           = nullptr;
+            other._depth_texture_view      = nullptr;
             other._current_surface_texture = nullptr;
         }
         return *this;
@@ -383,6 +391,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
         _default_instance_buffer = instance_buffer_result.value();
 
+        // Create depth texture
+        auto depth_result = create_depth_texture();
+        if (!depth_result)
+        {
+            spdlog::error("Failed to create depth texture");
+            return std::unexpected(depth_result.error());
+        }
+
         spdlog::info("WebGPU device initialized successfully ({}x{})", _swapchain_width, _swapchain_height);
         return {};
     }
@@ -549,8 +565,26 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // Fragment state
         pipeline_desc.fragment = &fragment_state;
 
-        // No depth/stencil for now
-        pipeline_desc.depthStencil = nullptr;
+        // Depth/stencil state (enable depth testing)
+        WGPUDepthStencilState depth_stencil_state    = {};
+        depth_stencil_state.format                   = WGPUTextureFormat_Depth24Plus;
+        depth_stencil_state.depthWriteEnabled        = WGPUOptionalBool_True;
+        depth_stencil_state.depthCompare             = WGPUCompareFunction_Less;
+        depth_stencil_state.stencilFront.compare     = WGPUCompareFunction_Always;
+        depth_stencil_state.stencilFront.failOp      = WGPUStencilOperation_Keep;
+        depth_stencil_state.stencilFront.depthFailOp = WGPUStencilOperation_Keep;
+        depth_stencil_state.stencilFront.passOp      = WGPUStencilOperation_Keep;
+        depth_stencil_state.stencilBack.compare      = WGPUCompareFunction_Always;
+        depth_stencil_state.stencilBack.failOp       = WGPUStencilOperation_Keep;
+        depth_stencil_state.stencilBack.depthFailOp  = WGPUStencilOperation_Keep;
+        depth_stencil_state.stencilBack.passOp       = WGPUStencilOperation_Keep;
+        depth_stencil_state.stencilReadMask          = 0xFFFFFFFF;
+        depth_stencil_state.stencilWriteMask         = 0xFFFFFFFF;
+        depth_stencil_state.depthBias                = 0;
+        depth_stencil_state.depthBiasSlopeScale      = 0.0f;
+        depth_stencil_state.depthBiasClamp           = 0.0f;
+
+        pipeline_desc.depthStencil = &depth_stencil_state;
 
         _render_pipeline = wgpuDeviceCreateRenderPipeline(_device, &pipeline_desc);
 
@@ -567,8 +601,83 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         return {};
     }
 
+    std::expected<void, std::error_code>
+    WgpuDevice::create_depth_texture()
+    {
+        if (!_device)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Release old depth texture if exists
+        if (_depth_texture_view)
+        {
+            wgpuTextureViewRelease(_depth_texture_view);
+            _depth_texture_view = nullptr;
+        }
+        if (_depth_texture)
+        {
+            wgpuTextureRelease(_depth_texture);
+            _depth_texture = nullptr;
+        }
+
+        // Create depth texture
+        WGPUTextureDescriptor depth_texture_desc   = {};
+        depth_texture_desc.usage                   = WGPUTextureUsage_RenderAttachment;
+        depth_texture_desc.dimension               = WGPUTextureDimension_2D;
+        depth_texture_desc.size.width              = _swapchain_width;
+        depth_texture_desc.size.height             = _swapchain_height;
+        depth_texture_desc.size.depthOrArrayLayers = 1;
+        depth_texture_desc.format                  = WGPUTextureFormat_Depth24Plus;
+        depth_texture_desc.mipLevelCount           = 1;
+        depth_texture_desc.sampleCount             = 1;
+        depth_texture_desc.viewFormatCount         = 0;
+        depth_texture_desc.viewFormats             = nullptr;
+
+        _depth_texture = wgpuDeviceCreateTexture(_device, &depth_texture_desc);
+        if (!_depth_texture)
+        {
+            spdlog::error("Failed to create depth texture");
+            return std::unexpected(make_error_code(RenderError::InitializationFailed));
+        }
+
+        // Create depth texture view
+        WGPUTextureViewDescriptor depth_view_desc = {};
+        depth_view_desc.format                    = WGPUTextureFormat_Depth24Plus;
+        depth_view_desc.dimension                 = WGPUTextureViewDimension_2D;
+        depth_view_desc.baseMipLevel              = 0;
+        depth_view_desc.mipLevelCount             = 1;
+        depth_view_desc.baseArrayLayer            = 0;
+        depth_view_desc.arrayLayerCount           = 1;
+        depth_view_desc.aspect                    = WGPUTextureAspect_DepthOnly;
+
+        _depth_texture_view = wgpuTextureCreateView(_depth_texture, &depth_view_desc);
+        if (!_depth_texture_view)
+        {
+            wgpuTextureRelease(_depth_texture);
+            _depth_texture = nullptr;
+            spdlog::error("Failed to create depth texture view");
+            return std::unexpected(make_error_code(RenderError::InitializationFailed));
+        }
+
+        spdlog::info("Depth texture created: {}x{}", _swapchain_width, _swapchain_height);
+        return {};
+    }
+
     void WgpuDevice::cleanup()
     {
+        // Release depth resources
+        if (_depth_texture_view)
+        {
+            wgpuTextureViewRelease(_depth_texture_view);
+            _depth_texture_view = nullptr;
+        }
+        if (_depth_texture)
+        {
+            wgpuTextureRelease(_depth_texture);
+            _depth_texture = nullptr;
+        }
+
         // Release buffers
         for (auto buffer : _buffers)
         {
@@ -919,12 +1028,24 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         color_attachment.storeOp                       = WGPUStoreOp_Store;
         color_attachment.clearValue                    = { 0.1, 0.2, 0.3, 1.0 }; // Clear to dark blue-gray
 
+        // Depth stencil attachment
+        WGPURenderPassDepthStencilAttachment depth_attachment = {};
+        depth_attachment.view                                 = _depth_texture_view;
+        depth_attachment.depthLoadOp                          = WGPULoadOp_Clear;
+        depth_attachment.depthStoreOp                         = WGPUStoreOp_Store;
+        depth_attachment.depthClearValue                      = 1.0f; // Clear to far plane
+        depth_attachment.depthReadOnly                        = false;
+        // No stencil operations (depth-only format)
+        depth_attachment.stencilLoadOp   = WGPULoadOp_Undefined;
+        depth_attachment.stencilStoreOp  = WGPUStoreOp_Undefined;
+        depth_attachment.stencilReadOnly = true;
+
         WGPURenderPassDescriptor render_pass_desc = {};
         render_pass_desc.nextInChain              = nullptr;
         render_pass_desc.label                    = make_string_view("Draw Instanced Render Pass");
         render_pass_desc.colorAttachmentCount     = 1;
         render_pass_desc.colorAttachments         = &color_attachment;
-        render_pass_desc.depthStencilAttachment   = nullptr;
+        render_pass_desc.depthStencilAttachment   = &depth_attachment;
 
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &render_pass_desc);
 
@@ -1051,12 +1172,24 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         color_attachment.storeOp                       = WGPUStoreOp_Store;
         color_attachment.clearValue                    = { 0.1, 0.2, 0.3, 1.0 }; // Clear to dark blue-gray
 
+        // Depth stencil attachment
+        WGPURenderPassDepthStencilAttachment depth_attachment = {};
+        depth_attachment.view                                 = _depth_texture_view;
+        depth_attachment.depthLoadOp                          = WGPULoadOp_Clear;
+        depth_attachment.depthStoreOp                         = WGPUStoreOp_Store;
+        depth_attachment.depthClearValue                      = 1.0f; // Clear to far plane
+        depth_attachment.depthReadOnly                        = false;
+        // No stencil operations (depth-only format)
+        depth_attachment.stencilLoadOp   = WGPULoadOp_Undefined;
+        depth_attachment.stencilStoreOp  = WGPUStoreOp_Undefined;
+        depth_attachment.stencilReadOnly = true;
+
         WGPURenderPassDescriptor render_pass_desc = {};
         render_pass_desc.nextInChain              = nullptr;
         render_pass_desc.label                    = make_string_view("Draw Render Pass");
         render_pass_desc.colorAttachmentCount     = 1;
         render_pass_desc.colorAttachments         = &color_attachment;
-        render_pass_desc.depthStencilAttachment   = nullptr;
+        render_pass_desc.depthStencilAttachment   = &depth_attachment;
 
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &render_pass_desc);
 
@@ -1172,12 +1305,24 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         color_attachment.storeOp                       = WGPUStoreOp_Store;
         color_attachment.clearValue                    = { 0.1, 0.2, 0.3, 1.0 }; // Dark blue-gray
 
+        // Depth stencil attachment
+        WGPURenderPassDepthStencilAttachment depth_attachment = {};
+        depth_attachment.view                                 = _depth_texture_view;
+        depth_attachment.depthLoadOp                          = WGPULoadOp_Clear;
+        depth_attachment.depthStoreOp                         = WGPUStoreOp_Store;
+        depth_attachment.depthClearValue                      = 1.0f; // Clear to far plane
+        depth_attachment.depthReadOnly                        = false;
+        // No stencil operations (depth-only format)
+        depth_attachment.stencilLoadOp   = WGPULoadOp_Undefined;
+        depth_attachment.stencilStoreOp  = WGPUStoreOp_Undefined;
+        depth_attachment.stencilReadOnly = true;
+
         WGPURenderPassDescriptor render_pass_desc = {};
         render_pass_desc.nextInChain              = nullptr;
         render_pass_desc.label                    = make_string_view("Clear Render Pass");
         render_pass_desc.colorAttachmentCount     = 1;
         render_pass_desc.colorAttachments         = &color_attachment;
-        render_pass_desc.depthStencilAttachment   = nullptr;
+        render_pass_desc.depthStencilAttachment   = &depth_attachment;
 
         WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(encoder, &render_pass_desc);
         wgpuRenderPassEncoderEnd(pass);
@@ -1251,6 +1396,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         surface_config.alphaMode                = WGPUCompositeAlphaMode_Auto;
 
         wgpuSurfaceConfigure(_surface, &surface_config);
+
+        // Recreate depth texture with new dimensions
+        auto depth_result = create_depth_texture();
+        if (!depth_result)
+        {
+            spdlog::error("Failed to recreate depth texture after resize");
+            return std::unexpected(depth_result.error());
+        }
 
         spdlog::info("Surface resized to {}x{}, viewport {}x{}",
                      width,
