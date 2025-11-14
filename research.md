@@ -3252,3 +3252,451 @@ gpu_context->initialize(gpu_config);
 3. Implement WgpuDevice wrapper around existing Device interface
 4. Create window with GPU surface
 5. Render first triangle using WebGPU API
+
+## 2025-01-XX — Multithreaded Octree for Spatial Partitioning
+
+### Context
+
+We need a high-performance spatial partitioning structure for the scene graph to enable efficient culling (frustum, occlusion) and spatial queries. The Octree will manage game objects and their transforms, supporting concurrent queries from multiple threads (e.g., rendering thread queries for visible objects while game thread updates positions).
+
+Existing architecture:
+- Camera class with view/projection matrices in 
+aktr/engine/public/scene/camera.h
+- Strongly-typed transform system with GLM in 
+aktr/render/public/math/transform_types.h
+- C++23 with modern synchronization primitives available
+- TDD workflow: tests first, then implementation
+
+### Requirements
+
+1. **Thread Safety**: Multiple threads must be able to query the Octree concurrently while one thread updates it
+2. **Performance**: Cache-friendly memory layout, minimal allocations, fast queries
+3. **Dynamic**: Support insertion, removal, and updates of objects as they move
+4. **Spatial Queries**: Point queries, ray intersection, frustum culling
+5. **Integration**: Work with existing Camera and transform system
+6. **Bounded**: Finite world space (not infinite, simpler implementation)
+
+### Design Decisions
+
+#### 1. Node Structure
+
+`cpp
+struct OctreeNode {
+    // Spatial bounds
+    glm::vec3 center;
+    float half_size;  // Half of side length
+    
+    // Children (8 octants: -x-y-z, +x-y-z, -x+y-z, ..., +x+y+z)
+    // Use std::array for cache locality
+    std::array<std::unique_ptr<OctreeNode>, 8> children;
+    
+    // Objects in this node (stored at leaf or when subdivision threshold not met)
+    std::vector<ObjectId> objects;
+    
+    // Metadata
+    uint8_t depth;
+    bool is_leaf;
+};
+`
+
+**Rationale**:
+- glm::vec3 for center aligns with existing math types
+- half_size instead of min/max simplifies octant calculations
+- std::array for children is cache-friendly and fixed size
+- std::unique_ptr for child ownership avoids copying
+- Store object IDs (not pointers) for stability during updates
+- Depth tracking for recursion control
+
+#### 2. Subdivision Strategy
+
+**Threshold-based subdivision**:
+- Split when objects.size() > MAX_OBJECTS_PER_NODE (e.g., 8)
+- Don't split beyond MAX_DEPTH (e.g., 8 levels = 256^3 smallest cells)
+- Objects at node boundaries remain in parent (avoid duplication)
+
+**Rationale**:
+- Simple heuristic, predictable behavior
+- Max depth prevents degenerate cases (clustered objects)
+- Parent storage for boundary objects avoids complex multi-node membership
+
+#### 3. Threading Strategy
+
+**Read-Write Lock Approach** (simpler than lock-free for MVP):
+
+`cpp
+class Octree {
+    std::shared_mutex _mutex;
+    std::unique_ptr<OctreeNode> _root;
+    
+    // Query operations take shared_lock (multiple concurrent readers)
+    std::vector<ObjectId> query_frustum(const Frustum& f) const {
+        std::shared_lock lock(_mutex);
+        // ...
+    }
+    
+    // Update operations take unique_lock (exclusive writer)
+    void insert(ObjectId id, const glm::vec3& pos) {
+        std::unique_lock lock(_mutex);
+        // ...
+    }
+};
+`
+
+**Rationale**:
+- std::shared_mutex (C++17) allows multiple readers or one writer
+- Queries are read-only and can run concurrently (common case)
+- Updates are exclusive but less frequent
+- Simple to reason about, hard to get wrong
+- **Future optimization**: Per-node locking for finer granularity if profiling shows contention
+
+**Alternative considered**: Lock-free with epoch-based reclamation (hazard pointers)
+- **Pros**: Better scalability for write-heavy workloads
+- **Cons**: Much more complex, error-prone, overkill for typical game scene (queries >> updates)
+- **Decision**: Start with read-write lock, profile, optimize if needed
+
+#### 4. Object Representation
+
+`cpp
+struct OctreeObject {
+    glm::vec3 position;     // World position
+    float radius;            // Bounding sphere radius
+    // Optional: AABB for tighter bounds
+};
+
+// Octree stores:
+std::unordered_map<ObjectId, OctreeObject> _objects;
+`
+
+**Rationale**:
+- Bounding sphere is simplest for point-in-octant tests
+- Radius allows for objects larger than a single cell
+- Separate storage allows updates without traversing tree
+- Object positions are cached for fast re-insertion after movement
+
+#### 5. Query Operations
+
+**Frustum Culling**:
+`cpp
+struct Frustum {
+    std::array<glm::vec4, 6> planes;  // Left, right, top, bottom, near, far
+};
+
+std::vector<ObjectId> query_frustum(const Frustum& frustum) const;
+`
+- Test AABB vs frustum at each node
+- Skip entire subtrees if AABB is outside frustum
+- Collect all objects in visible nodes
+
+**Point Query**:
+`cpp
+std::optional<ObjectId> query_point(const glm::vec3& point, float radius) const;
+`
+- Find node containing point
+- Return nearest object within radius
+
+**Ray Query**:
+`cpp
+std::optional<RayHit> query_ray(const glm::vec3& origin, const glm::vec3& direction, float max_dist) const;
+`
+- Traverse nodes intersected by ray (DDA-like)
+- Test objects in each node for intersection
+- Return nearest hit
+
+#### 6. Memory Management
+
+**Pool Allocation** for nodes:
+`cpp
+class NodePool {
+    std::vector<std::array<OctreeNode, 64>> _chunks;  // 64 nodes per chunk
+    std::vector<OctreeNode*> _free_list;
+    
+    OctreeNode* allocate();
+    void deallocate(OctreeNode* node);
+};
+`
+
+**Rationale**:
+- Reduces allocator pressure (bulk allocation)
+- Better cache locality (nodes allocated together)
+- Reuse nodes instead of constant new/delete
+- **Trade-off**: More complex than std::unique_ptr, but significant perf gain
+
+**Alternative**: Start with std::unique_ptr, add pool later if profiling shows allocation hotspot
+
+#### 7. Integration with Existing Systems
+
+**Camera Integration**:
+`cpp
+// Extract frustum from Camera
+Frustum Camera::frustum() const {
+    // Extract planes from view * projection matrix
+    // See Gribb & Hartmann method
+}
+
+// Usage:
+Camera camera(...);
+Octree octree(...);
+auto visible = octree.query_frustum(camera.frustum());
+`
+
+**Transform Integration**:
+`cpp
+// Update object position when transform changes
+void update_object_transform(ObjectId id, const glm::vec3& new_pos) {
+    octree.remove(id);
+    octree.insert(id, new_pos);
+}
+`
+
+**Rationale**:
+- Camera already has view + projection matrices
+- Extract frustum planes once per frame
+- Transform updates are explicit (no automatic tracking yet)
+
+### API Design
+
+Public API in 
+aktr/engine/public/scene/octree.h:
+
+`cpp
+namespace raktr::engine::scene {
+
+/*!
+ * @brief Thread-safe Octree for spatial partitioning and culling.
+ * 
+ * Supports concurrent queries from multiple threads while allowing
+ * updates from a single writer thread. Objects are identified by
+ * ObjectId (uint64_t) and stored with position + radius.
+ * 
+ * @example
+ * Octree octree(glm::vec3(0), 1000.0f, 8);  // 1000 unit radius, 8 max depth
+ * 
+ * // Insert objects
+ * octree.insert(ObjectId{1}, glm::vec3(10, 0, 0), 5.0f);
+ * 
+ * // Query from render thread (thread-safe)
+ * Frustum frustum = camera.frustum();
+ * auto visible = octree.query_frustum(frustum);
+ * 
+ * // Update from game thread (exclusive access)
+ * octree.update(ObjectId{1}, glm::vec3(15, 0, 0));
+ */
+class Octree {
+public:
+    using ObjectId = uint64_t;
+    
+    /*!
+     * @brief Construct empty Octree.
+     * @param center World-space center of root node.
+     * @param half_size Half-size of root node (world units).
+     * @param max_depth Maximum subdivision depth (default 8).
+     * @param max_objects_per_node Split threshold (default 8).
+     */
+    Octree(const glm::vec3& center, float half_size, 
+           uint8_t max_depth = 8, size_t max_objects_per_node = 8);
+    
+    ~Octree();
+    
+    // Non-copyable, movable
+    Octree(const Octree&) = delete;
+    Octree& operator=(const Octree&) = delete;
+    Octree(Octree&&) noexcept;
+    Octree& operator=(Octree&&) noexcept;
+    
+    /*!
+     * @brief Insert object into Octree.
+     * @param id Unique object identifier.
+     * @param position World-space position.
+     * @param radius Bounding sphere radius.
+     * @return true if inserted, false if already exists.
+     */
+    bool insert(ObjectId id, const glm::vec3& position, float radius = 0.0f);
+    
+    /*!
+     * @brief Remove object from Octree.
+     * @param id Object identifier.
+     * @return true if removed, false if not found.
+     */
+    bool remove(ObjectId id);
+    
+    /*!
+     * @brief Update object position (remove + reinsert).
+     * @param id Object identifier.
+     * @param new_position New world-space position.
+     * @return true if updated, false if not found.
+     */
+    bool update(ObjectId id, const glm::vec3& new_position);
+    
+    /*!
+     * @brief Query objects inside frustum (thread-safe).
+     * @param frustum View frustum from camera.
+     * @return Vector of visible object IDs.
+     */
+    std::vector<ObjectId> query_frustum(const Frustum& frustum) const;
+    
+    /*!
+     * @brief Query objects near point (thread-safe).
+     * @param point Query center.
+     * @param radius Search radius.
+     * @return Vector of object IDs within radius.
+     */
+    std::vector<ObjectId> query_sphere(const glm::vec3& point, float radius) const;
+    
+    /*!
+     * @brief Query nearest object along ray (thread-safe).
+     * @param origin Ray origin.
+     * @param direction Ray direction (normalized).
+     * @param max_distance Maximum ray distance.
+     * @return ObjectId and hit distance, or std::nullopt if no hit.
+     */
+    std::optional<std::pair<ObjectId, float>> 
+        query_ray(const glm::vec3& origin, const glm::vec3& direction, 
+                  float max_distance = 1000.0f) const;
+    
+    /*!
+     * @brief Clear all objects from Octree.
+     */
+    void clear();
+    
+    /*!
+     * @brief Get total number of objects.
+     */
+    [[nodiscard]] size_t size() const;
+    
+    /*!
+     * @brief Get statistics (nodes, depth, objects per node).
+     */
+    struct Stats {
+        size_t total_nodes;
+        size_t leaf_nodes;
+        size_t total_objects;
+        uint8_t max_depth_used;
+        size_t max_objects_in_node;
+    };
+    [[nodiscard]] Stats stats() const;
+};
+
+/*!
+ * @brief View frustum for culling queries.
+ */
+struct Frustum {
+    std::array<glm::vec4, 6> planes;  // Left, right, top, bottom, near, far
+    
+    /*!
+     * @brief Extract frustum from view-projection matrix.
+     * @param vp Combined view * projection matrix.
+     * @return Frustum with normalized plane equations.
+     */
+    static Frustum from_matrix(const glm::mat4& vp);
+    
+    /*!
+     * @brief Test if AABB intersects frustum.
+     * @param center AABB center.
+     * @param half_size AABB half-extents.
+     * @return true if AABB is fully or partially inside frustum.
+     */
+    [[nodiscard]] bool intersects_aabb(const glm::vec3& center, 
+                                       float half_size) const;
+};
+
+} // namespace raktr::engine::scene
+`
+
+### Testing Strategy
+
+Follow TDD with Triple-A (Arrange / Act / Assert):
+
+1. **test_octree_construction.cpp**:
+   - Construct Octree with various sizes
+   - Verify root node bounds
+   - Test empty Octree state
+
+2. **test_octree_insertion.cpp**:
+   - Insert single object
+   - Insert multiple objects
+   - Trigger subdivision when threshold exceeded
+   - Insert object outside root bounds (should fail or expand)
+   - Insert duplicate ID (should fail)
+
+3. **test_octree_removal.cpp**:
+   - Remove existing object
+   - Remove non-existent object
+   - Remove all objects from subdivided node (should merge?)
+
+4. **test_octree_queries.cpp**:
+   - Query frustum with no objects
+   - Query frustum with objects inside/outside
+   - Query sphere with objects at various distances
+   - Query ray hitting object vs missing
+
+5. **test_octree_threading.cpp**:
+   - Concurrent queries from multiple threads
+   - Concurrent query + update (should not deadlock)
+   - Stress test with many objects and queries
+
+6. **test_frustum.cpp**:
+   - Extract frustum from Camera
+   - Test AABB intersection (inside, outside, intersecting)
+   - Test sphere intersection
+
+### Implementation Plan
+
+1. **Phase 1**: Basic structure (single-threaded)
+   - Implement OctreeNode, Octree class
+   - Implement insert/remove
+   - Implement subdivision logic
+   - Write tests for construction and insertion
+
+2. **Phase 2**: Query operations
+   - Implement Frustum extraction from matrix
+   - Implement frustum culling query
+   - Implement sphere and ray queries
+   - Write tests for all query types
+
+3. **Phase 3**: Thread safety
+   - Add std::shared_mutex
+   - Verify lock granularity
+   - Write threading tests (use std::thread, not FakeDevice)
+
+4. **Phase 4**: Optimization (if profiling shows need)
+   - Pool allocation for nodes
+   - Per-node locking (if contention detected)
+   - SIMD for frustum plane tests (AVX2 / NEON)
+
+### Open Questions
+
+1. **Object size handling**: How to handle objects larger than octree cells?
+   - **Answer**: Store in parent node if object spans multiple children
+   - Test with objects of various radii
+
+2. **Dynamic world bounds**: What if objects move outside initial bounds?
+   - **Option A**: Fail insertion (simpler, requires world bounds known up-front)
+   - **Option B**: Expand root node (complex, requires rebuilding tree)
+   - **Decision**: Option A for MVP, document world bounds requirement
+
+3. **Update frequency**: Should updates be batched?
+   - **Answer**: Not initially. Profile first, batch if update contention is high
+
+4. **Integration with ECS**: How does ObjectId map to entities?
+   - **Answer**: ObjectId is opaque uint64_t. Caller manages mapping (e.g., ECS entity ID)
+   - Octree doesn't know about entity components
+
+### References
+
+- "Octrees for Faster Isosurface Generation" (Wilhelms & Van Gelder, 1992)
+- "Real-Time Collision Detection" (Christer Ericson, 2004) - Chapter 7
+- "Game Engine Architecture" (Jason Gregory, 2018) - Chapter 14.5
+- Frustum extraction: Gribb & Hartmann, "Fast Extraction of Viewing Frustum Planes from the WorldView-Projection Matrix" (2001)
+- C++23 synchronization: std::shared_mutex, std::shared_lock, std::unique_lock
+
+### Deliverables
+
+- 
+aktr/engine/public/scene/octree.h - Public API
+- 
+aktr/engine/src/scene/octree.cpp - Implementation
+- 
+aktr/engine/tests/scene/test_octree_*.cpp - Test suite
+- Updated glossary.md with Octree terminology
+- This research document
+
