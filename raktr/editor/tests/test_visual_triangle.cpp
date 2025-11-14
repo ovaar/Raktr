@@ -9,12 +9,12 @@
 #include "buffer.h"
 #include "input/camera_controller.h" // From engine module
 #include "input/input_system.h"      // From engine module
+#include "instance_data.h"
 #include "math/transform.h"
 #include "math/transform_types.h"
 #include "render_context.h"
 #include "scene/camera.h" // From engine module
 #include "window/window.h"
-
 
 #include <cstdlib>
 #include <glm/glm.hpp>
@@ -534,6 +534,24 @@ TEST(VisualTest, DISABLED_FrustumCullingDemo)
 
     spdlog::info("Created {} cubes in octree", cubes.size());
 
+    // Create instance buffer (will be updated each frame with visible cubes)
+    std::vector<InstanceData> instance_data;
+    instance_data.reserve(cubes.size());
+
+    // Initialize with all cubes (will be filtered by frustum culling)
+    for (const auto& cube : cubes)
+    {
+        InstanceData inst;
+        inst.model_matrix = glm::translate(glm::mat4(1.0f), cube.position);
+        inst.color        = glm::vec4(1.0f, 1.0f, 1.0f, 1.0f); // White
+        instance_data.push_back(inst);
+    }
+
+    auto instance_buffer_result = device->create_instance_buffer(
+        std::as_bytes(std::span(instance_data)));
+    ASSERT_TRUE(instance_buffer_result.has_value()) << "Failed to create instance buffer";
+    auto instance_buffer = instance_buffer_result.value();
+
     // Frame timing
     auto  last_frame_time = std::chrono::high_resolution_clock::now();
     float total_time      = 0.0f;
@@ -564,28 +582,59 @@ TEST(VisualTest, DISABLED_FrustumCullingDemo)
         std::unordered_set<raktr::engine::scene::Octree::ObjectId> visible_set(
             visible_ids.begin(), visible_ids.end());
 
-        // Get camera matrices
+        // Build instance data for visible cubes only
+        instance_data.clear();
+        for (const auto& cube : cubes)
+        {
+            if (visible_set.count(cube.id) > 0)
+            {
+                InstanceData inst;
+                // Apply per-instance rotation based on time and speed
+                float     angle    = total_time * cube.rotation_speed;
+                glm::mat4 rotation = glm::rotate(glm::mat4(1.0f), angle, glm::vec3(0.0f, 1.0f, 0.0f));
+                inst.model_matrix  = glm::translate(glm::mat4(1.0f), cube.position) * rotation;
+
+                // Color based on Y position for visual variety
+                float t    = (cube.position.y + 7.5f) / 15.0f; // Normalize to 0-1
+                inst.color = glm::vec4(0.3f + t * 0.7f, 0.5f, 1.0f - t * 0.5f, 1.0f);
+                instance_data.push_back(inst);
+            }
+        }
+
+        size_t visible_count = instance_data.size();
+
+        // Get camera matrices (View-Projection only, model is per-instance)
         math::View        view       = camera.view();
         math::Perspective projection = camera.projection();
 
-        // Count visible cubes
-        size_t visible_count = visible_ids.size();
-
-        // For now, just draw a single representative cube at origin
-        // (Full multi-object rendering requires instanced rendering support)
-        math::Rotation            rotation(total_time * 0.5f, math::Axis::Y());
-        math::ModelViewProjection mvp = projection * view * rotation;
-
-        auto update_result = device->update_uniform_buffer(uniform_buffer.value(), mvp.to_bytes());
+        // Update uniform with VP matrix (not MVP, since model is per-instance)
+        math::ModelViewProjection vp(projection.matrix() * view.matrix());
+        auto                      update_result = device->update_uniform_buffer(uniform_buffer.value(), vp.to_bytes());
         ASSERT_TRUE(update_result.has_value());
 
         device->set_uniform_buffer(uniform_buffer.value());
 
-        auto draw_result = device->draw_indexed(vertex_buffer.value(), index_buffer.value(), 36);
-        if (!draw_result.has_value())
+        // Update instance buffer with visible cubes
+        if (!instance_data.empty())
         {
-            FAIL() << "Failed to draw cube";
-            break;
+            auto update_inst_result = device->update_instance_buffer(
+                instance_buffer,
+                std::as_bytes(std::span(instance_data)));
+            ASSERT_TRUE(update_inst_result.has_value());
+
+            // Draw all visible cubes with one instanced draw call
+            auto draw_result = device->draw_indexed_instanced(
+                vertex_buffer.value(),
+                index_buffer.value(),
+                instance_buffer,
+                36,                                           // index count
+                static_cast<uint32_t>(instance_data.size())); // instance count
+
+            if (!draw_result.has_value())
+            {
+                FAIL() << "Failed to draw instanced cubes";
+                break;
+            }
         }
 
         device->present();
