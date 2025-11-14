@@ -77,22 +77,6 @@ namespace raktr::engine::scene
                float            near_plane = 0.1f,
                float            far_plane  = 1000.0f);
 
-        /*!
-         * @brief Process input and update camera state.
-         *
-         * Controls:
-         * - W: Move forward
-         * - S: Move backward
-         * - A: Strafe left
-         * - D: Strafe right
-         * - Mouse X: Yaw (horizontal look)
-         * - Mouse Y: Pitch (vertical look, clamped)
-         *
-         * @param input Current input state from InputSystem.
-         * @param delta_time Time since last frame in seconds.
-         */
-        void process_input(const InputState& input, float delta_time);
-
         // ====================================================================
         // Camera Control
         // ====================================================================
@@ -111,19 +95,6 @@ namespace raktr::engine::scene
          *              Clamped to [-89°, 89°] to prevent gimbal lock.
          */
         void set_rotation(float yaw, float pitch);
-
-        /*!
-         * @brief Set movement speed in units per second.
-         */
-        void set_movement_speed(float speed);
-
-        /*!
-         * @brief Set mouse sensitivity for look controls.
-         *
-         * Higher values = faster rotation.
-         * Typical range: [0.05, 0.5]
-         */
-        void set_mouse_sensitivity(float sensitivity);
 
         // ====================================================================
         // Getters
@@ -225,15 +196,6 @@ namespace raktr::engine::scene
         float _aspect_ratio;
         float _near_plane;
         float _far_plane;
-
-        // Control parameters
-        float _movement_speed    = 5.0f; // Units per second
-        float _mouse_sensitivity = 0.1f; // Rotation speed
-
-        // Mouse tracking
-        double _last_mouse_x = 0.0;
-        double _last_mouse_y = 0.0;
-        bool   _first_mouse  = true;
 
         /*!
          * @brief Recompute forward/right/up vectors from yaw/pitch.

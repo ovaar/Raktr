@@ -7,7 +7,8 @@
  */
 #include "aspect_ratio.h"
 #include "buffer.h"
-#include "input/input_system.h" // From engine module
+#include "input/camera_controller.h" // From engine module
+#include "input/input_system.h"      // From engine module
 #include "math/transform.h"
 #include "math/transform_types.h"
 #include "render_context.h"
@@ -298,8 +299,10 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
         0.1F,  // Near plane
         100.0F // Far plane
     );
-    camera.set_movement_speed(5.0F);
-    camera.set_mouse_sensitivity(0.1F);
+
+    // Create camera controller with FPS controls (WASD + QE + mouse look)
+    raktr::engine::input::CameraController camera_controller =
+        raktr::engine::input::CameraController::fps_controller(5.0F, 0.1F);
 
     // Create cube vertex buffer - 8 vertices at corners (scaled down to 0.5 units)
     // clang-format off
@@ -375,7 +378,7 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
 
         // Process input and update camera
         auto input_state = input_system.process_events();
-        camera.process_input(input_state, delta_time);
+        camera_controller.update(input_state, camera, delta_time);
 
         // Check for ESC to exit
         if (input_state.keys[raktr::engine::KeyCode::Escape])

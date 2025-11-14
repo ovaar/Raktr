@@ -24,79 +24,6 @@ namespace raktr::engine::scene
         update_camera_vectors();
     }
 
-    void Camera::process_input(const InputState& input, float delta_time)
-    {
-        // Handle movement (WASD)
-        glm::vec3 movement(0.0F);
-
-        if (input.keys[KeyCode::W])
-        {
-            movement += _forward;
-        }
-        if (input.keys[KeyCode::S])
-        {
-            movement -= _forward;
-        }
-        if (input.keys[KeyCode::A])
-        {
-            movement -= _right;
-        }
-        if (input.keys[KeyCode::D])
-        {
-            movement += _right;
-        }
-        if (input.keys[KeyCode::Q])
-        {
-            movement += _up;
-        }
-        if (input.keys[KeyCode::E])
-        {
-            movement -= _up;
-        }
-
-        // Normalize and scale by speed and delta time
-        if (glm::length(movement) > 0.0F)
-        {
-            _position += glm::normalize(movement) * _movement_speed * delta_time;
-        }
-
-        // Handle mouse look
-        if (_first_mouse)
-        {
-            _last_mouse_x = input.mouse_x;
-            _last_mouse_y = input.mouse_y;
-            _first_mouse  = false;
-        }
-
-        double xoffset = input.mouse_x - _last_mouse_x;
-        double yoffset = _last_mouse_y - input.mouse_y; // Reversed: y-coordinates go from bottom to top
-
-        _last_mouse_x = input.mouse_x;
-        _last_mouse_y = input.mouse_y;
-
-        // Only update if mouse actually moved
-        if (std::abs(xoffset) > 0.001 || std::abs(yoffset) > 0.001)
-        {
-            xoffset *= static_cast<double>(_mouse_sensitivity);
-            yoffset *= static_cast<double>(_mouse_sensitivity);
-
-            _yaw += static_cast<float>(xoffset);
-            _pitch += static_cast<float>(yoffset);
-
-            // Clamp pitch to prevent gimbal lock
-            if (_pitch > 89.0F)
-            {
-                _pitch = 89.0F;
-            }
-            if (_pitch < -89.0F)
-            {
-                _pitch = -89.0F;
-            }
-
-            update_camera_vectors();
-        }
-    }
-
     void Camera::set_position(const glm::vec3& pos)
     {
         _position = pos;
@@ -118,16 +45,6 @@ namespace raktr::engine::scene
         }
 
         update_camera_vectors();
-    }
-
-    void Camera::set_movement_speed(float speed)
-    {
-        _movement_speed = speed;
-    }
-
-    void Camera::set_mouse_sensitivity(float sensitivity)
-    {
-        _mouse_sensitivity = sensitivity;
     }
 
     glm::vec3 Camera::position() const
