@@ -40,6 +40,7 @@ namespace raktr::render::math
 
 namespace raktr::engine::scene
 {
+    struct Frustum; // Forward declare Frustum from octree.h
 
     /*!
      * @brief First-person camera with perspective projection.
@@ -161,6 +162,21 @@ namespace raktr::engine::scene
          * @return Type-safe Perspective transformation.
          */
         [[nodiscard]] raktr::render::math::Perspective projection() const;
+
+        /*!
+         * @brief Get view frustum for culling.
+         *
+         * Extracts frustum planes from view-projection matrix for use with
+         * Octree spatial queries.
+         *
+         * @return Frustum structure with 6 planes (left, right, top, bottom, near, far).
+         *
+         * @example
+         * Camera camera(...);
+         * Octree octree(...);
+         * auto visible = octree.query_frustum(camera.frustum());
+         */
+        [[nodiscard]] Frustum frustum() const;
 
         // ====================================================================
         // Projection Updates

@@ -15,11 +15,16 @@
 #include "scene/camera.h" // From engine module
 #include "window/window.h"
 
+#include <cstdlib>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
 #include <thread>
+#include <unordered_set>
+
+// For frustum culling demo
+#include "scene/octree.h"
 
 using namespace raktr::render;
 
@@ -283,10 +288,6 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
     ASSERT_NE(device, nullptr) << "Failed to get WebGPU device";
 
     device->set_aspect_ratio(raktr::render::AspectRatio::Ratio_16_9);
-    window->set_resize_callback([&](uint32_t width, uint32_t height)
-                                {
-                                    [[maybe_unused]] auto resize_result = device->resize(width, height);
-                                });
 
     // Create input system
     raktr::engine::InputSystem input_system(*window);
@@ -299,6 +300,13 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
         0.1F,  // Near plane
         100.0F // Far plane
     );
+
+    // Set resize callback to update both device and camera
+    window->set_resize_callback([&](uint32_t width, uint32_t height)
+                                {
+                                    camera.set_aspect_ratio(static_cast<float>(width) / static_cast<float>(height));
+                                    [[maybe_unused]] auto resize_result = device->resize(width, height);
+                                });
 
     // Create camera controller with FPS controls (WASD + QE + mouse look)
     raktr::engine::input::CameraController camera_controller =
@@ -422,6 +430,182 @@ TEST(VisualTest, DISABLED_SpinningCubeTypeSafe)
         frame_count++;
 
         // Limit to ~60 FPS
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+}
+
+TEST(VisualTest, DISABLED_FrustumCullingDemo)
+{
+    // Create window
+    WindowConfig window_config;
+    window_config.width      = 1920;
+    window_config.height     = 1080;
+    window_config.title      = "Frustum Culling Demo - WASD + Mouse to move, ESC to exit";
+    window_config.resizable  = true;
+    window_config.fullscreen = false;
+
+    auto window_result = create_window(window_config);
+    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
+    auto& window = window_result.value();
+
+    // Create render context
+    RenderConfig render_config;
+    render_config.backend           = BackendType::WebGPU;
+    render_config.enable_validation = false;
+
+    auto render_context = create_render_context();
+    ASSERT_NE(render_context, nullptr);
+
+    auto render_ctx_result = render_context->initialize(render_config, window.get());
+    ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext";
+
+    auto device = render_context->device();
+    ASSERT_NE(device, nullptr);
+    device->set_aspect_ratio(raktr::render::AspectRatio::Ratio_16_9);
+
+    // Create input system and camera
+    raktr::engine::InputSystem   input_system(*window);
+    raktr::engine::scene::Camera camera(
+        glm::vec3(0.0F, 5.0F, 15.0F), // Start above and back
+        45.0F,
+        static_cast<float>(window_config.width) / static_cast<float>(window_config.height),
+        0.1F,
+        100.0F);
+
+    window->set_resize_callback([&](uint32_t width, uint32_t height)
+                                {
+                                    camera.set_aspect_ratio(static_cast<float>(width) / static_cast<float>(height));
+                                    [[maybe_unused]] auto resize_result = device->resize(width, height);
+                                });
+
+    raktr::engine::input::CameraController camera_controller =
+        raktr::engine::input::CameraController::fps_controller(10.0F, 0.1F);
+
+    // Create cube geometry (same as spinning cube)
+    float vertices[] = {
+        -0.5f, -0.5f, -0.5f, 0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, -0.5f, 0.5f, -0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f
+    };
+    auto vertex_buffer = device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    ASSERT_TRUE(vertex_buffer.has_value());
+
+    uint32_t indices[] = {
+        0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 4, 7, 3, 4, 3, 0, 1, 2, 6, 1, 6, 5, 0, 1, 5, 0, 5, 4, 3, 6, 2, 3, 7, 6
+    };
+    auto index_buffer = device->create_index_buffer(std::as_bytes(std::span(indices)));
+    ASSERT_TRUE(index_buffer.has_value());
+
+    auto uniform_buffer = device->create_uniform_buffer(16 * sizeof(float));
+    ASSERT_TRUE(uniform_buffer.has_value());
+
+    math::ModelViewProjection identity(glm::mat4(1.0f));
+    auto                      init_result = device->update_uniform_buffer(uniform_buffer.value(), identity.to_bytes());
+    ASSERT_TRUE(init_result.has_value());
+
+    // Create octree and grid of cubes
+    raktr::engine::scene::Octree octree(glm::vec3(0, 0, 0), 50.0f, 4);
+
+    struct CubeInstance
+    {
+        raktr::engine::scene::Octree::ObjectId id;
+        glm::vec3                              position;
+        float                                  rotation_speed;
+    };
+
+    std::vector<CubeInstance>              cubes;
+    raktr::engine::scene::Octree::ObjectId next_id = 1;
+
+    // Create 10x5x10 grid of cubes (500 cubes)
+    for (int x = -5; x < 5; ++x)
+    {
+        for (int y = 0; y < 5; ++y)
+        {
+            for (int z = -5; z < 5; ++z)
+            {
+                glm::vec3 pos(x * 3.0f, y * 3.0f, z * 3.0f);
+                float     rotation_speed = 0.5f + (rand() % 100) / 100.0f;
+
+                cubes.push_back({ next_id, pos, rotation_speed });
+                octree.insert(next_id, pos, 0.7f); // Slightly larger than 0.5 cube half-size
+                next_id++;
+            }
+        }
+    }
+
+    spdlog::info("Created {} cubes in octree", cubes.size());
+
+    // Frame timing
+    auto  last_frame_time = std::chrono::high_resolution_clock::now();
+    float total_time      = 0.0f;
+
+    // Render loop
+    while (!window->should_close())
+    {
+        auto  current_frame_time = std::chrono::high_resolution_clock::now();
+        float delta_time         = std::chrono::duration<float>(current_frame_time - last_frame_time).count();
+        last_frame_time          = current_frame_time;
+        total_time += delta_time;
+
+        window->poll_events();
+
+        auto input_state = input_system.process_events();
+        camera_controller.update(input_state, camera, delta_time);
+
+        if (input_state.keys[raktr::engine::KeyCode::Escape])
+        {
+            break;
+        }
+
+        // Query visible cubes using frustum culling
+        auto frustum     = camera.frustum();
+        auto visible_ids = octree.query_frustum(frustum);
+
+        // Create set for fast lookup
+        std::unordered_set<raktr::engine::scene::Octree::ObjectId> visible_set(
+            visible_ids.begin(), visible_ids.end());
+
+        // Get camera matrices
+        math::View        view       = camera.view();
+        math::Perspective projection = camera.projection();
+
+        // Count visible cubes
+        size_t visible_count = visible_ids.size();
+
+        // For now, just draw a single representative cube at origin
+        // (Full multi-object rendering requires instanced rendering support)
+        math::Rotation            rotation(total_time * 0.5f, math::Axis::Y());
+        math::ModelViewProjection mvp = projection * view * rotation;
+
+        auto update_result = device->update_uniform_buffer(uniform_buffer.value(), mvp.to_bytes());
+        ASSERT_TRUE(update_result.has_value());
+
+        device->set_uniform_buffer(uniform_buffer.value());
+
+        auto draw_result = device->draw_indexed(vertex_buffer.value(), index_buffer.value(), 36);
+        if (!draw_result.has_value())
+        {
+            FAIL() << "Failed to draw cube";
+            break;
+        }
+
+        device->present();
+
+        // Log culling stats every second
+        static auto                  last_log_time = std::chrono::high_resolution_clock::now();
+        auto                         now           = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float> elapsed       = now - last_log_time;
+
+        if (elapsed.count() >= 1.0f)
+        {
+            spdlog::info("Frustum Culling: Visible {} / Total {} (Culled {}) - Camera pos: ({:.1f}, {:.1f}, {:.1f})",
+                         visible_count,
+                         cubes.size(),
+                         cubes.size() - visible_count,
+                         camera.position().x,
+                         camera.position().y,
+                         camera.position().z);
+            last_log_time = now;
+        }
+
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 }

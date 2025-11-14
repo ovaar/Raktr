@@ -5,9 +5,11 @@
 
 #include "scene/camera.h"
 #include "math/transform_types.h" // From render module
+#include "scene/octree.h"         // For Frustum
 #include <cmath>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/trigonometric.hpp>
+
 
 namespace raktr::engine::scene
 {
@@ -89,6 +91,15 @@ namespace raktr::engine::scene
             _aspect_ratio,
             _near_plane,
             _far_plane);
+    }
+
+    Frustum Camera::frustum() const
+    {
+        // Combine view and projection matrices
+        glm::mat4 vp = projection().matrix() * view().matrix();
+
+        // Extract frustum planes from combined matrix
+        return Frustum::from_matrix(vp);
     }
 
     void Camera::set_aspect_ratio(float aspect)

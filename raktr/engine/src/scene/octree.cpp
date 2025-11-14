@@ -4,11 +4,12 @@
  */
 
 #include "scene/octree.h"
-#include <shared_mutex>
-#include <memory>
-#include <unordered_map>
 #include <algorithm>
+#include <memory>
+#include <shared_mutex>
+#include <unordered_map>
 #include <utility>
+
 
 namespace raktr::engine::scene
 {
@@ -21,9 +22,9 @@ namespace raktr::engine::scene
      */
     struct OctreeNode
     {
-        glm::vec3 center;       //!< World-space center
-        float     half_size;    //!< Half the side length (radius)
-        uint8_t   depth;        //!< Depth in tree (0 = root)
+        glm::vec3 center;    //!< World-space center
+        float     half_size; //!< Half the side length (radius)
+        uint8_t   depth;     //!< Depth in tree (0 = root)
 
         std::array<std::unique_ptr<OctreeNode>, 8> children; //!< 8 octants (nullptr if leaf)
         std::vector<Octree::ObjectId>              objects;  //!< Objects in this node
@@ -53,14 +54,13 @@ namespace raktr::engine::scene
     {
     public:
         Impl(const glm::vec3& center, float half_size, uint8_t max_depth, size_t max_objects)
-            : _max_depth(max_depth)
-            , _max_objects_per_node(max_objects)
+            : _max_depth(max_depth), _max_objects_per_node(max_objects)
         {
             // Create root node
-            _root             = std::make_unique<OctreeNode>();
-            _root->center     = center;
-            _root->half_size  = half_size;
-            _root->depth      = 0;
+            _root            = std::make_unique<OctreeNode>();
+            _root->center    = center;
+            _root->half_size = half_size;
+            _root->depth     = 0;
         }
 
         // Non-copyable, non-movable (contains std::shared_mutex)
@@ -92,7 +92,7 @@ namespace raktr::engine::scene
             }
 
             // Store object data
-            _objects[id] = OctreeObject{position, radius};
+            _objects[id] = OctreeObject{ position, radius };
 
             // Insert into tree
             insert_into_node(_root.get(), id);
@@ -223,7 +223,7 @@ namespace raktr::engine::scene
         size_t  _max_objects_per_node;
 
         // Data
-        std::unique_ptr<OctreeNode>                         _root;
+        std::unique_ptr<OctreeNode>                        _root;
         std::unordered_map<Octree::ObjectId, OctreeObject> _objects;
 
         // Synchronization
@@ -240,9 +240,7 @@ namespace raktr::engine::scene
                                        const glm::vec3& center,
                                        float            half_size)
         {
-            return (point.x >= center.x - half_size && point.x <= center.x + half_size)
-                && (point.y >= center.y - half_size && point.y <= center.y + half_size)
-                && (point.z >= center.z - half_size && point.z <= center.z + half_size);
+            return (point.x >= center.x - half_size && point.x <= center.x + half_size) && (point.y >= center.y - half_size && point.y <= center.y + half_size) && (point.z >= center.z - half_size && point.z <= center.z + half_size);
         }
 
         /*!
@@ -264,7 +262,7 @@ namespace raktr::engine::scene
             else
             {
                 // Node has children, find appropriate octant
-                int octant        = get_octant(node, _objects[id].position);
+                int octant = get_octant(node, _objects[id].position);
                 insert_into_node(node->children[octant].get(), id);
             }
         }
@@ -300,8 +298,8 @@ namespace raktr::engine::scene
          */
         void subdivide(OctreeNode* node)
         {
-            float child_half_size = node->half_size * 0.5f;
-            uint8_t child_depth   = node->depth + 1;
+            float   child_half_size = node->half_size * 0.5f;
+            uint8_t child_depth     = node->depth + 1;
 
             // Create 8 children
             for (int i = 0; i < 8; ++i)
@@ -316,7 +314,7 @@ namespace raktr::engine::scene
             std::vector<Octree::ObjectId> remaining_objects;
             for (Octree::ObjectId id : node->objects)
             {
-                const glm::vec3& pos = _objects[id].position;
+                const glm::vec3& pos    = _objects[id].position;
                 int              octant = get_octant(node, pos);
                 node->children[octant]->objects.push_back(id);
             }
@@ -372,10 +370,14 @@ namespace raktr::engine::scene
                 return; // Cull entire subtree
             }
 
-            // Add objects in this node
+            // Test each object's bounding sphere against frustum
             for (Octree::ObjectId id : node->objects)
             {
-                result.push_back(id);
+                const auto& obj = _objects.at(id);
+                if (frustum.intersects_sphere(obj.position, obj.radius))
+                {
+                    result.push_back(id);
+                }
             }
 
             // Recurse into children
@@ -397,9 +399,8 @@ namespace raktr::engine::scene
                                     std::vector<Octree::ObjectId>& result) const
         {
             // Test if node AABB intersects query sphere (simple box-sphere test)
-            glm::vec3 closest = glm::clamp(point, node->center - node->half_size,
-                                           node->center + node->half_size);
-            float dist_sq     = glm::dot(closest - point, closest - point);
+            glm::vec3 closest = glm::clamp(point, node->center - node->half_size, node->center + node->half_size);
+            float     dist_sq = glm::dot(closest - point, closest - point);
 
             if (dist_sq > radius * radius)
             {
@@ -445,9 +446,9 @@ namespace raktr::engine::scene
                 const OctreeObject& obj = _objects.at(id);
 
                 // Ray-sphere intersection
-                glm::vec3 oc         = origin - obj.position;
-                float     b          = glm::dot(oc, direction);
-                float     c          = glm::dot(oc, oc) - obj.radius * obj.radius;
+                glm::vec3 oc           = origin - obj.position;
+                float     b            = glm::dot(oc, direction);
+                float     c            = glm::dot(oc, oc) - obj.radius * obj.radius;
                 float     discriminant = b * b - c;
 
                 if (discriminant >= 0.0f)
@@ -595,28 +596,22 @@ namespace raktr::engine::scene
         // Plane equations are in form: Ax + By + Cz + D = 0
 
         // Left plane: row4 + row1
-        frustum.planes[0] = glm::vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0],
-                                      vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
+        frustum.planes[0] = glm::vec4(vp[0][3] + vp[0][0], vp[1][3] + vp[1][0], vp[2][3] + vp[2][0], vp[3][3] + vp[3][0]);
 
         // Right plane: row4 - row1
-        frustum.planes[1] = glm::vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0],
-                                      vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
+        frustum.planes[1] = glm::vec4(vp[0][3] - vp[0][0], vp[1][3] - vp[1][0], vp[2][3] - vp[2][0], vp[3][3] - vp[3][0]);
 
         // Top plane: row4 - row2
-        frustum.planes[2] = glm::vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1],
-                                      vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
+        frustum.planes[2] = glm::vec4(vp[0][3] - vp[0][1], vp[1][3] - vp[1][1], vp[2][3] - vp[2][1], vp[3][3] - vp[3][1]);
 
         // Bottom plane: row4 + row2
-        frustum.planes[3] = glm::vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1],
-                                      vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
+        frustum.planes[3] = glm::vec4(vp[0][3] + vp[0][1], vp[1][3] + vp[1][1], vp[2][3] + vp[2][1], vp[3][3] + vp[3][1]);
 
         // Near plane: row4 + row3
-        frustum.planes[4] = glm::vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2],
-                                      vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
+        frustum.planes[4] = glm::vec4(vp[0][3] + vp[0][2], vp[1][3] + vp[1][2], vp[2][3] + vp[2][2], vp[3][3] + vp[3][2]);
 
         // Far plane: row4 - row3
-        frustum.planes[5] = glm::vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2],
-                                      vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
+        frustum.planes[5] = glm::vec4(vp[0][3] - vp[0][2], vp[1][3] - vp[1][2], vp[2][3] - vp[2][2], vp[3][3] - vp[3][2]);
 
         // Normalize planes
         for (auto& plane : frustum.planes)
@@ -647,6 +642,25 @@ namespace raktr::engine::scene
         }
 
         return true; // AABB is inside or intersecting frustum
+    }
+
+    bool Frustum::intersects_sphere(const glm::vec3& center, float radius) const
+    {
+        // Test sphere against all six planes
+        for (const auto& plane : planes)
+        {
+            // Distance from sphere center to plane
+            glm::vec3 normal(plane.x, plane.y, plane.z);
+            float     distance = glm::dot(normal, center) + plane.w;
+
+            // If sphere is completely outside any plane, it's culled
+            if (distance < -radius)
+            {
+                return false;
+            }
+        }
+
+        return true; // Sphere is inside or intersecting frustum
     }
 
 } // namespace raktr::engine::scene

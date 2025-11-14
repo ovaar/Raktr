@@ -39,13 +39,14 @@
 #ifndef RAKTR_ENGINE_SCENE_OCTREE_H
 #define RAKTR_ENGINE_SCENE_OCTREE_H
 
-#include <glm/glm.hpp>
-#include <cstdint>
+#include <array>
 #include <cstddef>
-#include <vector>
+#include <cstdint>
+#include <glm/glm.hpp>
 #include <optional>
 #include <utility>
-#include <array>
+#include <vector>
+
 
 namespace raktr::engine::scene
 {
@@ -114,8 +115,8 @@ namespace raktr::engine::scene
          */
         Octree(const glm::vec3& center,
                float            half_size,
-               uint8_t          max_depth             = 8,
-               size_t           max_objects_per_node  = 8);
+               uint8_t          max_depth            = 8,
+               size_t           max_objects_per_node = 8);
 
         /*!
          * @brief Destructor.
@@ -289,11 +290,11 @@ namespace raktr::engine::scene
          */
         struct Stats
         {
-            size_t  total_nodes;           //!< Total nodes (including root and leaves)
-            size_t  leaf_nodes;            //!< Nodes with no children
-            size_t  total_objects;         //!< Total objects across all nodes
-            uint8_t max_depth_used;        //!< Maximum depth reached (0 = root only)
-            size_t  max_objects_in_node;   //!< Largest number of objects in a single node
+            size_t  total_nodes;         //!< Total nodes (including root and leaves)
+            size_t  leaf_nodes;          //!< Nodes with no children
+            size_t  total_objects;       //!< Total objects across all nodes
+            uint8_t max_depth_used;      //!< Maximum depth reached (0 = root only)
+            size_t  max_objects_in_node; //!< Largest number of objects in a single node
         };
 
         /*!
@@ -377,6 +378,26 @@ namespace raktr::engine::scene
          * }
          */
         [[nodiscard]] bool intersects_aabb(const glm::vec3& center, float half_size) const;
+
+        /*!
+         * @brief Test if bounding sphere intersects frustum.
+         *
+         * Tests if a bounding sphere (defined by center and radius)
+         * is fully outside, fully inside, or intersects the frustum.
+         *
+         * Returns true if sphere is fully or partially inside (visible).
+         * Returns false if sphere is completely outside (culled).
+         *
+         * @param center Sphere center point.
+         * @param radius Sphere radius.
+         * @return true if sphere should be rendered (visible or intersecting).
+         *
+         * @example
+         * if (frustum.intersects_sphere(object_position, object_radius)) {
+         *     // Object is visible, render it
+         * }
+         */
+        [[nodiscard]] bool intersects_sphere(const glm::vec3& center, float radius) const;
     };
 
 } // namespace raktr::engine::scene
