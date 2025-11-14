@@ -300,7 +300,13 @@ fn vs_main(vertex: VertexInput, instance: InstanceInput) -> VertexOutput {
     var output: VertexOutput;
     // Apply model matrix per-instance, then MVP from uniform (which should be VP only for instancing)
     output.position = uniforms.mvp * model_matrix * vec4<f32>(vertex.position, 1.0);
-    output.color = instance.color.rgb;  // Use per-instance color
+    
+    // Use per-instance color if alpha > 0, otherwise compute from vertex position (backward compatibility)
+    if (instance.color.a > 0.0) {
+        output.color = instance.color.rgb;
+    } else {
+        output.color = vertex.position * 0.5 + 0.5;
+    }
     return output;
 }
 
@@ -364,8 +370,8 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             0.0f, 1.0f, 0.0f, 0.0f, // Column 1
             0.0f, 0.0f, 1.0f, 0.0f, // Column 2
             0.0f, 0.0f, 0.0f, 1.0f, // Column 3
-            // Color (white)
-            1.0f, 1.0f, 1.0f, 1.0f  // RGBA
+            // Color (alpha = 0.0 signals "use vertex-based color")
+            0.0f, 0.0f, 0.0f, 0.0f  // RGBA
         };
         // clang-format on
         auto instance_data          = std::as_bytes(std::span(identity_instance));
