@@ -44,7 +44,25 @@ namespace raktr::render::backend
     }
 
     WgpuDevice::WgpuDevice(WgpuDevice&& other) noexcept
-        : _instance(other._instance), _adapter(other._adapter), _device(other._device), _queue(other._queue), _surface(other._surface), _swapchain_width(other._swapchain_width), _swapchain_height(other._swapchain_height), _swapchain_format(other._swapchain_format), _aspect_ratio(other._aspect_ratio), _custom_aspect_ratio(other._custom_aspect_ratio), _viewport(other._viewport), _buffers(std::move(other._buffers)), _shader_module(other._shader_module), _render_pipeline(other._render_pipeline), _bind_group_layout(other._bind_group_layout), _current_bind_group(other._current_bind_group), _default_uniform_buffer(std::move(other._default_uniform_buffer)), _current_surface_texture(other._current_surface_texture)
+        : _instance(other._instance),
+          _adapter(other._adapter),
+          _device(other._device),
+          _queue(other._queue),
+          _surface(other._surface),
+          _swapchain_width(other._swapchain_width),
+          _swapchain_height(other._swapchain_height),
+          _swapchain_format(other._swapchain_format),
+          _aspect_ratio(other._aspect_ratio),
+          _custom_aspect_ratio(other._custom_aspect_ratio),
+          _viewport(other._viewport),
+          _buffers(std::move(other._buffers)),
+          _shader_module(other._shader_module),
+          _render_pipeline(other._render_pipeline),
+          _bind_group_layout(other._bind_group_layout),
+          _current_bind_group(other._current_bind_group),
+          _default_uniform_buffer(std::move(other._default_uniform_buffer)),
+          _default_instance_buffer(std::move(other._default_instance_buffer)),
+          _current_surface_texture(other._current_surface_texture)
     {
         // Nullify the moved-from object's handles so cleanup doesn't release them
         other._instance                = nullptr;
@@ -84,6 +102,7 @@ namespace raktr::render::backend
             _bind_group_layout       = other._bind_group_layout;
             _current_bind_group      = other._current_bind_group;
             _default_uniform_buffer  = std::move(other._default_uniform_buffer);
+            _default_instance_buffer = std::move(other._default_instance_buffer);
             _current_surface_texture = other._current_surface_texture;
 
             // Nullify the moved-from object's handles
@@ -335,6 +354,28 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         // Set as current uniform buffer
         set_uniform_buffer(_default_uniform_buffer);
+
+        // clang-format off
+        // Create default instance buffer with single identity instance
+        // This allows non-instanced rendering to work with the instancing-enabled pipeline
+        float identity_instance[20] = {
+            // Model matrix (identity)
+            1.0f, 0.0f, 0.0f, 0.0f, // Column 0
+            0.0f, 1.0f, 0.0f, 0.0f, // Column 1
+            0.0f, 0.0f, 1.0f, 0.0f, // Column 2
+            0.0f, 0.0f, 0.0f, 1.0f, // Column 3
+            // Color (white)
+            1.0f, 1.0f, 1.0f, 1.0f  // RGBA
+        };
+        // clang-format on
+        auto instance_data          = std::as_bytes(std::span(identity_instance));
+        auto instance_buffer_result = create_instance_buffer(instance_data);
+        if (!instance_buffer_result)
+        {
+            spdlog::error("Failed to create default instance buffer");
+            return std::unexpected(instance_buffer_result.error());
+        }
+        _default_instance_buffer = instance_buffer_result.value();
 
         spdlog::info("WebGPU device initialized successfully ({}x{})", _swapchain_width, _swapchain_height);
         return {};
@@ -1038,10 +1079,22 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             wgpuRenderPassEncoderSetBindGroup(pass, 0, _current_bind_group, 0, nullptr);
         }
 
+        // Bind geometry vertex buffer to slot 0
         wgpuRenderPassEncoderSetVertexBuffer(pass, 0, wgpu_vertex_buffer, 0, WGPU_WHOLE_SIZE);
+
+        // Bind default instance buffer to slot 1 (for non-instanced rendering compatibility)
+        if (_default_instance_buffer.is_valid() && _default_instance_buffer.id() < _buffers.size())
+        {
+            WGPUBuffer default_instance = _buffers[_default_instance_buffer.id()];
+            if (default_instance)
+            {
+                wgpuRenderPassEncoderSetVertexBuffer(pass, 1, default_instance, 0, WGPU_WHOLE_SIZE);
+            }
+        }
+
         wgpuRenderPassEncoderSetIndexBuffer(pass, wgpu_index_buffer, WGPUIndexFormat_Uint32, 0, WGPU_WHOLE_SIZE);
 
-        // Draw indexed geometry
+        // Draw indexed geometry (single instance)
         wgpuRenderPassEncoderDrawIndexed(pass, index_count, 1, 0, 0, 0);
 
         // End render pass

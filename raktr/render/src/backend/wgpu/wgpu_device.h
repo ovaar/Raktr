@@ -246,7 +246,8 @@ namespace raktr::render::backend
         // Uniform buffer and bind group management
         WGPUBindGroupLayout _bind_group_layout  = nullptr;
         WGPUBindGroup       _current_bind_group = nullptr;
-        Buffer              _default_uniform_buffer; // Identity matrix for backward compatibility
+        Buffer              _default_uniform_buffer;  // Identity matrix for backward compatibility
+        Buffer              _default_instance_buffer; // Single identity instance for non-instanced rendering
 
         // Current frame surface texture (needs to be released after present)
         WGPUTexture _current_surface_texture = nullptr;
