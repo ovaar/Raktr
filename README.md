@@ -32,22 +32,23 @@ uv sync
 conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Release
 conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Debug
 
-cd ./raktr/
 
 # Install
-conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_cl.profile -o:a='&:with_tests=True' --build=missing
+cd ./raktr/; conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_cl.profile -o:a='&:with_tests=True' --build=missing
 
 # Configure
-cmake --preset conan-release -DENABLE_IWYU=ON
+cd ./raktr/; cmake --preset conan-release
 
 # Build
-cmake --build --preset conan-release
+cd ./raktr/; cmake --build --preset conan-release
 
 # Build tests
-cmake --build ..\build --target render_tests --config Release
+cd build\Release; cmake --build . --target raktr_render
 
 # Clean
-cmake --build --preset conan-release --clean
+cd ./raktr/; cmake --build --preset conan-release --clean
+
+ctest
 ```
 
 

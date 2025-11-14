@@ -52,15 +52,26 @@ namespace raktr::render::backend
         std::expected<Buffer, std::error_code>
         create_vertex_buffer(std::span<const std::byte> data);
 
-        std::expected<Buffer, std::error_code>
-        create_index_buffer(std::span<const std::byte> data);
+    std::expected<Buffer, std::error_code>
+    create_index_buffer(std::span<const std::byte> data);
 
-        std::expected<void, std::error_code>
-        draw_indexed(const Buffer& vertex_buffer,
-                     const Buffer& index_buffer,
-                     uint32_t      index_count);
+    std::expected<Buffer, std::error_code>
+    create_instance_buffer(std::span<const std::byte> data);
 
-        void clear();
+    std::expected<void, std::error_code>
+    update_instance_buffer(const Buffer& buffer, std::span<const std::byte> data);
+
+    std::expected<void, std::error_code>
+    draw_indexed(const Buffer& vertex_buffer,
+                 const Buffer& index_buffer,
+                 uint32_t      index_count);
+
+    std::expected<void, std::error_code>
+    draw_indexed_instanced(const Buffer& vertex_buffer,
+                           const Buffer& index_buffer,
+                           const Buffer& instance_buffer,
+                           uint32_t      index_count,
+                           uint32_t      instance_count);        void clear();
         void present();
 
         /*!

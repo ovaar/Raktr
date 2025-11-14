@@ -54,6 +54,44 @@ namespace raktr::render::backend
         return Buffer(id, BufferType::Index);
     }
 
+    std::expected<Buffer, std::error_code>
+    FakeDevice::create_instance_buffer(std::span<const std::byte> data)
+    {
+        if (data.empty())
+        {
+            return std::unexpected(make_error_code(RenderError::BufferCreationFailed));
+        }
+
+        const uint64_t id = _next_buffer_id++;
+
+        // Store the actual buffer data
+        _buffers[id] = BufferData{
+            .data = std::vector<std::byte>(data.begin(), data.end()),
+            .type = BufferType::Instance
+        };
+
+        return Buffer(id, BufferType::Instance);
+    }
+
+    std::expected<void, std::error_code>
+    FakeDevice::update_instance_buffer(const Buffer& buffer, std::span<const std::byte> data)
+    {
+        if (!buffer.is_valid() || buffer.type() != BufferType::Instance)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        auto it = _buffers.find(buffer.id());
+        if (it == _buffers.end())
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Update buffer data
+        it->second.data.assign(data.begin(), data.end());
+        return {};
+    }
+
     std::expected<void, std::error_code>
     FakeDevice::draw_indexed(const Buffer& vertex_buffer,
                              const Buffer& index_buffer,
@@ -403,6 +441,47 @@ namespace raktr::render::backend
     {
         static Viewport default_vp{};
         return default_vp;
+    }
+
+    std::expected<void, std::error_code>
+    FakeDevice::draw_indexed_instanced(const Buffer& vertex_buffer,
+                                       const Buffer& index_buffer,
+                                       const Buffer& instance_buffer,
+                                       uint32_t      index_count,
+                                       uint32_t      instance_count)
+    {
+        if (!vertex_buffer.is_valid() || !index_buffer.is_valid() || !instance_buffer.is_valid())
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+        if (index_count == 0 || instance_count == 0)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Verify buffers exist
+        auto vb_it = _buffers.find(vertex_buffer.id());
+        auto ib_it = _buffers.find(index_buffer.id());
+        auto inst_it = _buffers.find(instance_buffer.id());
+
+        if (vb_it == _buffers.end() || ib_it == _buffers.end() || inst_it == _buffers.end())
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // For FakeDevice, we'll just draw each instance using draw_indexed
+        // This is a simplified implementation that validates the API works
+        // A full implementation would apply per-instance transforms
+        for (uint32_t i = 0; i < instance_count; ++i)
+        {
+            auto result = draw_indexed(vertex_buffer, index_buffer, index_count);
+            if (!result)
+            {
+                return result;
+            }
+        }
+
+        return {};
     }
 
 } // namespace raktr::render::backend
