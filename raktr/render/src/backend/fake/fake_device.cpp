@@ -460,8 +460,8 @@ namespace raktr::render::backend
         }
 
         // Verify buffers exist
-        auto vb_it = _buffers.find(vertex_buffer.id());
-        auto ib_it = _buffers.find(index_buffer.id());
+        auto vb_it   = _buffers.find(vertex_buffer.id());
+        auto ib_it   = _buffers.find(index_buffer.id());
         auto inst_it = _buffers.find(instance_buffer.id());
 
         if (vb_it == _buffers.end() || ib_it == _buffers.end() || inst_it == _buffers.end())

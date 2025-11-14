@@ -23,14 +23,14 @@ protected:
     {
         // Create fake render context
         _ctx = create_render_context();
-        RenderConfig config{.backend = BackendType::Fake};
-        auto result = _ctx->initialize(config);
+        RenderConfig config{ .backend = BackendType::Fake };
+        auto         result = _ctx->initialize(config);
         ASSERT_TRUE(result.has_value()) << "Failed to initialize render context";
         _device = _ctx->device();
     }
 
     std::unique_ptr<RenderContext> _ctx;
-    Device* _device = nullptr;
+    Device*                        _device = nullptr;
 };
 
 // ============================================================================
@@ -42,7 +42,7 @@ TEST_F(InstanceRenderingTest, CreateInstanceBuffer_WithValidData_ReturnsValidBuf
     // Arrange: Prepare instance data
     std::vector<InstanceData> instances;
     instances.push_back({
-        glm::mat4(1.0f), // Identity matrix
+        glm::mat4(1.0f),                  // Identity matrix
         glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) // Red color
     });
 
@@ -64,10 +64,10 @@ TEST_F(InstanceRenderingTest, CreateInstanceBuffer_WithMultipleInstances_Returns
     for (int i = 0; i < 100; ++i)
     {
         float offset = static_cast<float>(i) * 2.0f;
-        auto model = glm::translate(glm::mat4(1.0f), glm::vec3(offset, 0.0f, 0.0f));
-        float t = static_cast<float>(i) / 99.0f;
-        auto color = glm::vec4(t, 1.0f - t, 0.5f, 1.0f);
-        instances.push_back({model, color});
+        auto  model  = glm::translate(glm::mat4(1.0f), glm::vec3(offset, 0.0f, 0.0f));
+        float t      = static_cast<float>(i) / 99.0f;
+        auto  color  = glm::vec4(t, 1.0f - t, 0.5f, 1.0f);
+        instances.push_back({ model, color });
     }
 
     auto data_span = std::as_bytes(std::span(instances));
@@ -85,7 +85,7 @@ TEST_F(InstanceRenderingTest, CreateInstanceBuffer_WithEmptyData_ReturnsError)
 {
     // Arrange: Empty data span
     std::vector<std::byte> empty_data;
-    auto data_span = std::span(empty_data);
+    auto                   data_span = std::span(empty_data);
 
     // Act: Attempt to create instance buffer
     auto result = _device->create_instance_buffer(data_span);
@@ -102,10 +102,8 @@ TEST_F(InstanceRenderingTest, UpdateInstanceBuffer_WithValidData_Succeeds)
 {
     // Arrange: Create initial instance buffer
     std::vector<InstanceData> instances;
-    instances.push_back({
-        glm::mat4(1.0f),
-        glm::vec4(1.0f, 0.0f, 0.0f, 1.0f)
-    });
+    instances.push_back({ glm::mat4(1.0f),
+                          glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) });
 
     auto buffer_result = _device->create_instance_buffer(std::as_bytes(std::span(instances)));
     ASSERT_TRUE(buffer_result.has_value());
@@ -113,7 +111,7 @@ TEST_F(InstanceRenderingTest, UpdateInstanceBuffer_WithValidData_Succeeds)
 
     // Modify instance data
     instances[0].model_matrix = glm::translate(glm::mat4(1.0f), glm::vec3(5.0f, 0.0f, 0.0f));
-    instances[0].color = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
+    instances[0].color        = glm::vec4(0.0f, 1.0f, 0.0f, 1.0f);
 
     // Act: Update instance buffer
     auto update_result = _device->update_instance_buffer(buffer, std::as_bytes(std::span(instances)));
@@ -125,9 +123,9 @@ TEST_F(InstanceRenderingTest, UpdateInstanceBuffer_WithValidData_Succeeds)
 TEST_F(InstanceRenderingTest, UpdateInstanceBuffer_WithInvalidBuffer_ReturnsError)
 {
     // Arrange: Invalid buffer + valid data
-    Buffer invalid_buffer;
+    Buffer                    invalid_buffer;
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f) });
 
     // Act: Attempt to update invalid buffer
     auto result = _device->update_instance_buffer(invalid_buffer, std::as_bytes(std::span(instances)));
@@ -139,13 +137,13 @@ TEST_F(InstanceRenderingTest, UpdateInstanceBuffer_WithInvalidBuffer_ReturnsErro
 TEST_F(InstanceRenderingTest, UpdateInstanceBuffer_WithWrongBufferType_ReturnsError)
 {
     // Arrange: Create vertex buffer (wrong type)
-    float vertices[] = {0.0f, 0.0f, 0.0f};
-    auto vertex_buffer_result = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    float vertices[]           = { 0.0f, 0.0f, 0.0f };
+    auto  vertex_buffer_result = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vertex_buffer_result.has_value());
     auto vertex_buffer = vertex_buffer_result.value();
 
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f) });
 
     // Act: Attempt to update vertex buffer as instance buffer
     auto result = _device->update_instance_buffer(vertex_buffer, std::as_bytes(std::span(instances)));
@@ -162,11 +160,9 @@ TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithValidBuffers_Succeeds)
 {
     // Arrange: Create geometry buffers (triangle)
     float vertices[] = {
-        0.0f,  0.5f, 0.0f,
-       -0.5f, -0.5f, 0.0f,
-        0.5f, -0.5f, 0.0f
+        0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f
     };
-    uint32_t indices[] = {0, 1, 2};
+    uint32_t indices[] = { 0, 1, 2 };
 
     auto vb_result = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vb_result.has_value());
@@ -181,8 +177,8 @@ TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithValidBuffers_Succeeds)
     for (int i = 0; i < 10; ++i)
     {
         float offset = static_cast<float>(i) * 0.2f;
-        auto model = glm::translate(glm::mat4(1.0f), glm::vec3(offset, 0.0f, 0.0f));
-        instances.push_back({model, glm::vec4(1.0f)});
+        auto  model  = glm::translate(glm::mat4(1.0f), glm::vec3(offset, 0.0f, 0.0f));
+        instances.push_back({ model, glm::vec4(1.0f) });
     }
 
     auto inst_result = _device->create_instance_buffer(std::as_bytes(std::span(instances)));
@@ -194,8 +190,8 @@ TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithValidBuffers_Succeeds)
         vertex_buffer,
         index_buffer,
         instance_buffer,
-        3,  // 3 indices (triangle)
-        10  // 10 instances
+        3, // 3 indices (triangle)
+        10 // 10 instances
     );
 
     // Assert: Draw succeeded
@@ -207,13 +203,13 @@ TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithInvalidVertexBuffer_Retur
     // Arrange: Invalid vertex buffer, valid index and instance buffers
     Buffer invalid_vb;
 
-    uint32_t indices[] = {0, 1, 2};
-    auto ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
+    uint32_t indices[] = { 0, 1, 2 };
+    auto     ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
     ASSERT_TRUE(ib_result.has_value());
     auto index_buffer = ib_result.value();
 
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f) });
     auto inst_result = _device->create_instance_buffer(std::as_bytes(std::span(instances)));
     ASSERT_TRUE(inst_result.has_value());
     auto instance_buffer = inst_result.value();
@@ -228,15 +224,15 @@ TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithInvalidVertexBuffer_Retur
 TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithInvalidIndexBuffer_ReturnsError)
 {
     // Arrange: Valid vertex buffer, invalid index buffer, valid instance buffer
-    float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
-    auto vb_result = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    float vertices[] = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
+    auto  vb_result  = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vb_result.has_value());
     auto vertex_buffer = vb_result.value();
 
     Buffer invalid_ib;
 
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f) });
     auto inst_result = _device->create_instance_buffer(std::as_bytes(std::span(instances)));
     ASSERT_TRUE(inst_result.has_value());
     auto instance_buffer = inst_result.value();
@@ -251,13 +247,13 @@ TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithInvalidIndexBuffer_Return
 TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithInvalidInstanceBuffer_ReturnsError)
 {
     // Arrange: Valid geometry buffers, invalid instance buffer
-    float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
-    auto vb_result = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    float vertices[] = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
+    auto  vb_result  = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vb_result.has_value());
     auto vertex_buffer = vb_result.value();
 
-    uint32_t indices[] = {0, 1, 2};
-    auto ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
+    uint32_t indices[] = { 0, 1, 2 };
+    auto     ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
     ASSERT_TRUE(ib_result.has_value());
     auto index_buffer = ib_result.value();
 
@@ -273,18 +269,18 @@ TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithInvalidInstanceBuffer_Ret
 TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithZeroIndexCount_ReturnsError)
 {
     // Arrange: Valid buffers but zero index count
-    float vertices[] = {0.0f, 0.5f, 0.0f};
-    auto vb_result = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    float vertices[] = { 0.0f, 0.5f, 0.0f };
+    auto  vb_result  = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vb_result.has_value());
     auto vertex_buffer = vb_result.value();
 
-    uint32_t indices[] = {0};
-    auto ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
+    uint32_t indices[] = { 0 };
+    auto     ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
     ASSERT_TRUE(ib_result.has_value());
     auto index_buffer = ib_result.value();
 
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f) });
     auto inst_result = _device->create_instance_buffer(std::as_bytes(std::span(instances)));
     ASSERT_TRUE(inst_result.has_value());
     auto instance_buffer = inst_result.value();
@@ -299,18 +295,18 @@ TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithZeroIndexCount_ReturnsErr
 TEST_F(InstanceRenderingTest, DrawIndexedInstanced_WithZeroInstanceCount_ReturnsError)
 {
     // Arrange: Valid buffers but zero instance count
-    float vertices[] = {0.0f, 0.5f, 0.0f};
-    auto vb_result = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    float vertices[] = { 0.0f, 0.5f, 0.0f };
+    auto  vb_result  = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vb_result.has_value());
     auto vertex_buffer = vb_result.value();
 
-    uint32_t indices[] = {0, 1, 2};
-    auto ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
+    uint32_t indices[] = { 0, 1, 2 };
+    auto     ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
     ASSERT_TRUE(ib_result.has_value());
     auto index_buffer = ib_result.value();
 
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f) });
     auto inst_result = _device->create_instance_buffer(std::as_bytes(std::span(instances)));
     ASSERT_TRUE(inst_result.has_value());
     auto instance_buffer = inst_result.value();
@@ -340,7 +336,7 @@ TEST_F(InstanceRenderingTest, InstancingOpsCapability_CreateInstanceBufferWorks)
     auto capability = _device->capability<capabilities::InstancingOps>();
 
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) });
 
     // Act: Create buffer via capability
     auto result = capability.create_instance_buffer(std::as_bytes(std::span(instances)));
@@ -357,7 +353,7 @@ TEST_F(InstanceRenderingTest, InstancingOpsCapability_UpdateInstanceBufferWorks)
     auto capability = _device->capability<capabilities::InstancingOps>();
 
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f, 0.0f, 0.0f, 1.0f) });
     auto buffer_result = capability.create_instance_buffer(std::as_bytes(std::span(instances)));
     ASSERT_TRUE(buffer_result.has_value());
     auto buffer = buffer_result.value();
@@ -377,26 +373,25 @@ TEST_F(InstanceRenderingTest, InstancingOpsCapability_DrawIndexedInstancedWorks)
     // Arrange: Get capability and create all buffers
     auto capability = _device->capability<capabilities::InstancingOps>();
 
-    float vertices[] = {0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f};
-    auto vb_result = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    float vertices[] = { 0.0f, 0.5f, 0.0f, -0.5f, -0.5f, 0.0f, 0.5f, -0.5f, 0.0f };
+    auto  vb_result  = _device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
     ASSERT_TRUE(vb_result.has_value());
     auto vertex_buffer = vb_result.value();
 
-    uint32_t indices[] = {0, 1, 2};
-    auto ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
+    uint32_t indices[] = { 0, 1, 2 };
+    auto     ib_result = _device->create_index_buffer(std::as_bytes(std::span(indices)));
     ASSERT_TRUE(ib_result.has_value());
     auto index_buffer = ib_result.value();
 
     std::vector<InstanceData> instances;
-    instances.push_back({glm::mat4(1.0f), glm::vec4(1.0f)});
+    instances.push_back({ glm::mat4(1.0f), glm::vec4(1.0f) });
     auto inst_result = capability.create_instance_buffer(std::as_bytes(std::span(instances)));
     ASSERT_TRUE(inst_result.has_value());
     auto instance_buffer = inst_result.value();
 
     // Act: Draw via capability
     auto result = capability.draw_indexed_instanced(
-        vertex_buffer, index_buffer, instance_buffer, 3, 1
-    );
+        vertex_buffer, index_buffer, instance_buffer, 3, 1);
 
     // Assert: Draw succeeded
     EXPECT_TRUE(result.has_value());
@@ -424,8 +419,8 @@ TEST_F(InstanceRenderingTest, InstanceData_ToBytes_ReturnsCorrectSize)
 TEST_F(InstanceRenderingTest, InstanceData_ToBytes_PreservesMatrixData)
 {
     // Arrange: Create instance with specific matrix
-    auto model = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, 3.0f));
-    InstanceData instance{model, glm::vec4(1.0f)};
+    auto         model = glm::translate(glm::mat4(1.0f), glm::vec3(1.0f, 2.0f, 3.0f));
+    InstanceData instance{ model, glm::vec4(1.0f) };
 
     // Act: Convert to bytes
     auto bytes = instance.to_bytes();
