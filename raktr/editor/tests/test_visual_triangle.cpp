@@ -7,8 +7,7 @@
  */
 #include "aspect_ratio.h"
 #include "buffer.h"
-#include "input/camera_controller.h" // From engine module
-#include "input/input_system.h"      // From engine module
+#include "input/input_system.h" // From engine module
 #include "math/transform.h"
 #include "math/transform_types.h"
 #include "render_context.h"
