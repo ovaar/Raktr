@@ -16,6 +16,7 @@
 #include "scene/camera.h" // From engine module
 #include "window/window.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <glm/glm.hpp>
 #include <glm/gtc/constants.hpp>
@@ -23,6 +24,7 @@
 #include <spdlog/spdlog.h>
 #include <thread>
 #include <unordered_set>
+
 
 // For frustum culling demo
 #include "scene/octree.h"
@@ -653,6 +655,338 @@ TEST(VisualTest, DISABLED_FrustumCullingDemo)
                          camera.position().x,
                          camera.position().y,
                          camera.position().z);
+            last_log_time = now;
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(16));
+    }
+}
+
+TEST(VisualTest, DISABLED_OcclusionCullingDemo)
+{
+    // Create window
+    WindowConfig window_config;
+    window_config.width      = 1920;
+    window_config.height     = 1080;
+    window_config.title      = "Occlusion Culling Demo - WASD+QE+Mouse, O to toggle culling, ESC to exit";
+    window_config.resizable  = true;
+    window_config.fullscreen = false;
+
+    auto window_result = create_window(window_config);
+    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
+    auto& window = window_result.value();
+
+    // Create render context
+    RenderConfig render_config;
+    render_config.backend           = BackendType::WebGPU;
+    render_config.enable_validation = false;
+
+    auto render_context = create_render_context();
+    ASSERT_NE(render_context, nullptr);
+
+    auto render_ctx_result = render_context->initialize(render_config, window.get());
+    ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext";
+
+    auto device = render_context->device();
+    ASSERT_NE(device, nullptr);
+    device->set_aspect_ratio(raktr::render::AspectRatio::Ratio_16_9);
+
+    // Create input system and camera
+    raktr::engine::InputSystem   input_system(*window);
+    raktr::engine::scene::Camera camera(
+        glm::vec3(0.0F, 5.0F, 30.0F), // Start further back to see the scene
+        45.0F,
+        static_cast<float>(window_config.width) / static_cast<float>(window_config.height),
+        0.1F,
+        200.0F);
+
+    window->set_resize_callback([&](uint32_t width, uint32_t height)
+                                {
+                                    camera.set_aspect_ratio(static_cast<float>(width) / static_cast<float>(height));
+                                    [[maybe_unused]] auto resize_result = device->resize(width, height);
+                                });
+
+    raktr::engine::input::CameraController camera_controller =
+        raktr::engine::input::CameraController::fps_controller(15.0F, 0.1F);
+
+    // Create cube geometry
+    float vertices[] = {
+        -0.5f, -0.5f, -0.5f, 0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, -0.5f, 0.5f, -0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f
+    };
+    auto vertex_buffer = device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    ASSERT_TRUE(vertex_buffer.has_value());
+
+    uint32_t indices[] = {
+        0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 4, 7, 3, 4, 3, 0, 1, 2, 6, 1, 6, 5, 0, 1, 5, 0, 5, 4, 3, 6, 2, 3, 7, 6
+    };
+    auto index_buffer = device->create_index_buffer(std::as_bytes(std::span(indices)));
+    ASSERT_TRUE(index_buffer.has_value());
+
+    auto uniform_buffer = device->create_uniform_buffer(16 * sizeof(float));
+    ASSERT_TRUE(uniform_buffer.has_value());
+
+    math::ModelViewProjection identity(glm::mat4(1.0f));
+    auto                      init_result = device->update_uniform_buffer(uniform_buffer.value(), identity.to_bytes());
+    ASSERT_TRUE(init_result.has_value());
+
+    // Create scene: Large occluders (walls) and small objects behind them
+    struct SceneObject
+    {
+        glm::vec3 position;
+        glm::vec3 scale;
+        glm::vec4 color;
+        bool      is_occluder; // Large walls that block visibility
+        bool      is_occluded; // Objects that should be occluded
+    };
+
+    std::vector<SceneObject> scene_objects;
+
+    // Central occluder wall (large, at z = 0)
+    scene_objects.push_back({
+        glm::vec3(0.0f, 5.0f, 0.0f),       // position
+        glm::vec3(15.0f, 10.0f, 1.0f),     // scale (wide and tall wall)
+        glm::vec4(0.8f, 0.2f, 0.2f, 1.0f), // red
+        true,                              // is_occluder
+        false                              // not occluded
+    });
+
+    // Left occluder wall
+    scene_objects.push_back({ glm::vec3(-20.0f, 5.0f, -10.0f),
+                              glm::vec3(1.0f, 10.0f, 15.0f),
+                              glm::vec4(0.2f, 0.8f, 0.2f, 1.0f), // green
+                              true,
+                              false });
+
+    // Right occluder wall
+    scene_objects.push_back({ glm::vec3(20.0f, 5.0f, -10.0f),
+                              glm::vec3(1.0f, 10.0f, 15.0f),
+                              glm::vec4(0.2f, 0.2f, 0.8f, 1.0f), // blue
+                              true,
+                              false });
+
+    // Objects behind the central wall (should be occluded)
+    for (int x = -3; x <= 3; ++x)
+    {
+        for (int y = 0; y < 5; ++y)
+        {
+            scene_objects.push_back({
+                glm::vec3(x * 3.0f, y * 2.0f + 1.0f, -10.0f), // behind wall
+                glm::vec3(0.8f, 0.8f, 0.8f),
+                glm::vec4(1.0f, 1.0f, 0.0f, 1.0f), // yellow
+                false,                             // not occluder
+                true                               // should be occluded
+            });
+        }
+    }
+
+    // Objects behind left wall
+    for (int z = -5; z < 5; ++z)
+    {
+        for (int y = 0; y < 3; ++y)
+        {
+            scene_objects.push_back({ glm::vec3(-25.0f, y * 3.0f + 1.0f, z * 2.0f),
+                                      glm::vec3(0.8f, 0.8f, 0.8f),
+                                      glm::vec4(1.0f, 0.5f, 0.0f, 1.0f), // orange
+                                      false,
+                                      true });
+        }
+    }
+
+    // Objects behind right wall
+    for (int z = -5; z < 5; ++z)
+    {
+        for (int y = 0; y < 3; ++y)
+        {
+            scene_objects.push_back({ glm::vec3(25.0f, y * 3.0f + 1.0f, z * 2.0f),
+                                      glm::vec3(0.8f, 0.8f, 0.8f),
+                                      glm::vec4(0.5f, 0.0f, 1.0f, 1.0f), // purple
+                                      false,
+                                      true });
+        }
+    }
+
+    // Some visible objects in front
+    for (int x = -2; x <= 2; ++x)
+    {
+        scene_objects.push_back({ glm::vec3(x * 5.0f, 2.0f, 15.0f), // in front
+                                  glm::vec3(1.0f, 1.0f, 1.0f),
+                                  glm::vec4(0.0f, 1.0f, 1.0f, 1.0f), // cyan
+                                  false,
+                                  false });
+    }
+
+    spdlog::info("Created {} objects in scene (3 occluders, {} potentially occluded)",
+                 scene_objects.size(),
+                 std::count_if(scene_objects.begin(), scene_objects.end(), [](const SceneObject& obj)
+                               {
+                                   return obj.is_occluded;
+                               }));
+
+    // Create instance buffer with initial data
+    std::vector<InstanceData> instance_data;
+    instance_data.reserve(scene_objects.size());
+
+    // Initialize with all objects visible
+    for (const auto& obj : scene_objects)
+    {
+        InstanceData inst;
+        inst.model_matrix = glm::translate(glm::mat4(1.0f), obj.position) *
+                            glm::scale(glm::mat4(1.0f), obj.scale);
+        inst.color = obj.color;
+        instance_data.push_back(inst);
+    }
+
+    auto instance_buffer_result = device->create_instance_buffer(
+        std::as_bytes(std::span(instance_data)));
+    ASSERT_TRUE(instance_buffer_result.has_value()) << "Failed to create instance buffer";
+    auto instance_buffer = instance_buffer_result.value();
+
+    // Occlusion culling toggle
+    bool occlusion_culling_enabled = false;
+
+    // Frame timing
+    auto last_frame_time = std::chrono::high_resolution_clock::now();
+    bool last_o_pressed  = false;
+
+    // Render loop
+    while (!window->should_close())
+    {
+        auto  current_frame_time = std::chrono::high_resolution_clock::now();
+        float delta_time         = std::chrono::duration<float>(current_frame_time - last_frame_time).count();
+        last_frame_time          = current_frame_time;
+
+        window->poll_events();
+
+        auto input_state = input_system.process_events();
+        camera_controller.update(input_state, camera, delta_time);
+
+        if (input_state.keys[raktr::engine::KeyCode::Escape])
+        {
+            break;
+        }
+
+        // Toggle occlusion culling with O key
+        bool o_pressed = input_state.keys[raktr::engine::KeyCode::O];
+        if (o_pressed && !last_o_pressed)
+        {
+            occlusion_culling_enabled = !occlusion_culling_enabled;
+            spdlog::info("Occlusion Culling: {}", occlusion_culling_enabled ? "ENABLED" : "DISABLED");
+        }
+        last_o_pressed = o_pressed;
+
+        // Build instance data
+        instance_data.clear();
+
+        // Simple conservative occlusion test: objects behind occluders (in -Z direction)
+        auto camera_pos = camera.position();
+
+        for (const auto& obj : scene_objects)
+        {
+            bool should_render = true;
+
+            if (occlusion_culling_enabled && obj.is_occluded)
+            {
+                // Simple occlusion test: if object is behind an occluder from camera's perspective
+                // Check if there's an occluder between camera and object
+                for (const auto& occluder : scene_objects)
+                {
+                    if (!occluder.is_occluder)
+                        continue;
+
+                    // Simple conservative test: if object is roughly behind occluder
+                    glm::vec3 to_obj      = obj.position - camera_pos;
+                    glm::vec3 to_occluder = occluder.position - camera_pos;
+
+                    float obj_dist      = glm::length(to_obj);
+                    float occluder_dist = glm::length(to_occluder);
+
+                    // If object is farther than occluder
+                    if (obj_dist > occluder_dist + 2.0f)
+                    {
+                        // Check if object is roughly in same direction as occluder
+                        glm::vec3 dir_to_obj      = to_obj / obj_dist;
+                        glm::vec3 dir_to_occluder = to_occluder / occluder_dist;
+
+                        float alignment = glm::dot(dir_to_obj, dir_to_occluder);
+
+                        // If aligned (within some tolerance), consider occluded
+                        if (alignment > 0.85f)
+                        {
+                            // Additional check: is object within occluder's bounding area?
+                            glm::vec3 obj_to_occluder    = obj.position - occluder.position;
+                            glm::vec3 occluder_half_size = occluder.scale * 0.5f;
+
+                            // Simple AABB test in local space
+                            if (std::abs(obj_to_occluder.x) < occluder_half_size.x + 2.0f &&
+                                std::abs(obj_to_occluder.y) < occluder_half_size.y + 2.0f)
+                            {
+                                should_render = false;
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            if (should_render)
+            {
+                InstanceData inst;
+                inst.model_matrix = glm::translate(glm::mat4(1.0f), obj.position) *
+                                    glm::scale(glm::mat4(1.0f), obj.scale);
+                inst.color = obj.color;
+                instance_data.push_back(inst);
+            }
+        }
+
+        // Get camera matrices
+        math::View        view       = camera.view();
+        math::Perspective projection = camera.projection();
+
+        math::ModelViewProjection vp(projection.matrix() * view.matrix());
+        auto                      update_result = device->update_uniform_buffer(uniform_buffer.value(), vp.to_bytes());
+        ASSERT_TRUE(update_result.has_value());
+
+        device->set_uniform_buffer(uniform_buffer.value());
+
+        // Render
+        if (!instance_data.empty())
+        {
+            auto update_inst_result = device->update_instance_buffer(
+                instance_buffer,
+                std::as_bytes(std::span(instance_data)));
+            ASSERT_TRUE(update_inst_result.has_value());
+
+            auto draw_result = device->draw_indexed_instanced(
+                vertex_buffer.value(),
+                index_buffer.value(),
+                instance_buffer,
+                36,
+                static_cast<uint32_t>(instance_data.size()));
+
+            if (!draw_result.has_value())
+            {
+                FAIL() << "Failed to draw instanced objects";
+                break;
+            }
+        }
+
+        device->present();
+
+        // Log stats every second
+        static auto                  last_log_time = std::chrono::high_resolution_clock::now();
+        auto                         now           = std::chrono::high_resolution_clock::now();
+        std::chrono::duration<float> elapsed       = now - last_log_time;
+
+        if (elapsed.count() >= 1.0f)
+        {
+            spdlog::info("Occlusion Culling {}: Rendering {} / Total {} (Culled {}) - Camera pos: ({:.1f}, {:.1f}, {:.1f})",
+                         occlusion_culling_enabled ? "ON " : "OFF",
+                         instance_data.size(),
+                         scene_objects.size(),
+                         scene_objects.size() - instance_data.size(),
+                         camera_pos.x,
+                         camera_pos.y,
+                         camera_pos.z);
             last_log_time = now;
         }
 
