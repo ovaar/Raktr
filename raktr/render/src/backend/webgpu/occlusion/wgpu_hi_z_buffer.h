@@ -8,7 +8,6 @@
 #include <vector>
 #include <webgpu/webgpu.h>
 
-
 namespace raktr::render::backend::webgpu
 {
 
@@ -36,6 +35,8 @@ namespace raktr::render::backend::webgpu
         WgpuHiZBuffer& operator=(const WgpuHiZBuffer&) = delete;
         WgpuHiZBuffer(WgpuHiZBuffer&&) noexcept;
         WgpuHiZBuffer& operator=(WgpuHiZBuffer&&) noexcept;
+
+        friend void swap(WgpuHiZBuffer& first, WgpuHiZBuffer& second) noexcept;
 
         [[nodiscard]] std::expected<void, std::error_code>
         build_pyramid(void* depth_texture) override;

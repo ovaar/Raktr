@@ -226,6 +226,19 @@ private:
 };
 ```
 
+## Memory Alignment
+
+* Use `alignas(...)` for types requiring specific alignment.
+* Use `std::aligned_alloc` for dynamic allocations needing alignment.
+* Use static_asserts to verify alignment where applicable.
+
+```cpp
+struct alignas(16) AlignedVec4 {
+    float x, y, z, w;
+};
+static_assert(alignof(AlignedVec4) == 16, "AlignedVec4 must be 16-byte aligned");
+```
+
 ## Docstrings
 
 All public APIs must use Doxygen-style comments:

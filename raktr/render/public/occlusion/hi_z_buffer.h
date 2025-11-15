@@ -15,17 +15,17 @@
 #include <system_error>
 #include <vector>
 
-
 namespace raktr::render::occlusion
 {
 
     /*!
      * @brief Axis-Aligned Bounding Box for visibility testing.
+     * @note Uses 16-byte alignment to match GPU WGSL vec3 layout (32 bytes total per AABB).
      */
-    struct AABB
+    struct alignas(16) AABB
     {
-        glm::vec3 min; //!< Minimum corner in world space
-        glm::vec3 max; //!< Maximum corner in world space
+        alignas(16) glm::vec3 min; //!< Minimum corner in world space
+        alignas(16) glm::vec3 max; //!< Maximum corner in world space
 
         /*!
          * @brief Compute AABB center.
