@@ -122,6 +122,30 @@ namespace raktr::render::backend
                                uint32_t      instance_count);
 
         /*!
+         * @brief Create a Hi-Z buffer for GPU-accelerated occlusion culling.
+         *
+         * Creates a Hierarchical Z-Buffer (depth pyramid) used for efficient visibility
+         * testing of large numbers of objects. Uses compute shaders to build the pyramid
+         * and test AABBs against the depth buffer.
+         *
+         * @param width Depth buffer width in pixels (must match render target).
+         * @param height Depth buffer height in pixels (must match render target).
+         * @return Hi-Z buffer instance or error code.
+         *
+         * @note Requires compute shader support. Width and height should match the
+         *       depth pre-pass resolution for accurate culling.
+         *
+         * @example
+         * auto hi_z = device->create_hi_z_buffer(1920, 1080);
+         * if (hi_z) {
+         *     hi_z.value()->build_pyramid(depth_texture);
+         *     auto visible = hi_z.value()->test_visibility(aabbs, view_projection);
+         * }
+         */
+        [[nodiscard]] std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>
+        create_hi_z_buffer(uint32_t width, uint32_t height);
+
+        /*!
          * @brief Resize the surface to new dimensions.
          *
          * Reconfigures the WebGPU surface with new width and height.

@@ -6,6 +6,7 @@
 #include "wgpu_device.h"
 #include "buffer.h"
 #include "window/window.h"
+#include "backend/webgpu/occlusion/wgpu_hi_z_buffer.h"
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
@@ -1106,6 +1107,29 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         _current_surface_texture = surface_texture.texture;
 
         return {};
+    }
+
+    std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>
+    WgpuDevice::create_hi_z_buffer(uint32_t width, uint32_t height)
+    {
+        if (!_device || !_queue)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        if (width == 0 || height == 0)
+        {
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        try
+        {
+            return std::make_unique<backend::webgpu::WgpuHiZBuffer>(_device, _queue, width, height);
+        }
+        catch (...)
+        {
+            return std::unexpected(make_error_code(RenderError::InitializationFailed));
+        }
     }
 
     std::expected<void, std::error_code>

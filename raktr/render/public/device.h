@@ -206,11 +206,12 @@ namespace raktr::render
             }
 
         private:
-            [[nodiscard]] virtual std::optional<capabilities::BufferOps>     do_capability_bufferops() const     = 0;
-            [[nodiscard]] virtual std::optional<capabilities::DrawOps>       do_capability_drawops() const       = 0;
-            [[nodiscard]] virtual std::optional<capabilities::ViewportOps>   do_capability_viewportops() const   = 0;
-            [[nodiscard]] virtual std::optional<capabilities::PresentOps>    do_capability_presentops() const    = 0;
-            [[nodiscard]] virtual std::optional<capabilities::InstancingOps> do_capability_instancingops() const = 0;
+            [[nodiscard]] virtual std::optional<capabilities::BufferOps>          do_capability_bufferops() const          = 0;
+            [[nodiscard]] virtual std::optional<capabilities::DrawOps>            do_capability_drawops() const            = 0;
+            [[nodiscard]] virtual std::optional<capabilities::ViewportOps>        do_capability_viewportops() const        = 0;
+            [[nodiscard]] virtual std::optional<capabilities::PresentOps>         do_capability_presentops() const         = 0;
+            [[nodiscard]] virtual std::optional<capabilities::InstancingOps>      do_capability_instancingops() const      = 0;
+            [[nodiscard]] virtual std::optional<capabilities::OcclusionCullingOps> do_capability_occlusioncullingops() const = 0;
 
             template <typename Capability>
             std::optional<Capability> do_capability(std::type_index /* ti */) const
@@ -234,6 +235,10 @@ namespace raktr::render
                 else if constexpr (std::is_same_v<Capability, capabilities::InstancingOps>)
                 {
                     return do_capability_instancingops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::OcclusionCullingOps>)
+                {
+                    return do_capability_occlusioncullingops();
                 }
                 return std::nullopt;
             }
@@ -429,6 +434,22 @@ namespace raktr::render
                                                                   uint32_t      instance_count) mutable
                     {
                         return dev->draw_indexed_instanced(vertex_buffer, index_buffer, instance_buffer, index_count, instance_count);
+                    };
+                    return ops;
+                }
+                return std::nullopt;
+            }
+
+            std::optional<capabilities::OcclusionCullingOps> do_capability_occlusioncullingops() const override
+            {
+                if constexpr (requires(T& device, uint32_t w, uint32_t h) {
+                                  { device.create_hi_z_buffer(w, h) } -> std::same_as<std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>>;
+                              })
+                {
+                    capabilities::OcclusionCullingOps ops;
+                    ops.create_hi_z_buffer = [dev = &_device](uint32_t width, uint32_t height) mutable
+                    {
+                        return dev->create_hi_z_buffer(width, height);
                     };
                     return ops;
                 }

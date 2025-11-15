@@ -28,6 +28,13 @@ namespace raktr::render
     {
         class HiZBuffer;
     }
+}
+
+// Forward declaration isn't enough for std::unique_ptr in std::function - need complete type
+#include "occlusion/hi_z_buffer.h"
+
+namespace raktr::render
+{
 
     namespace capabilities
     {
