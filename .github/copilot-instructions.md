@@ -143,6 +143,89 @@ raktr/
 
 ---
 
+## RAII + copy-and-swap Idiom
+
+When managing resources, use RAII and the copy-and-swap idiom for strong exception safety:
+
+```cpp
+#include <iostream>
+#include <vector>
+#include <string>
+#include <stdint.h>
+#include <optional>
+
+class my_array
+{
+public:
+    // (default) constructor
+    my_array(std::size_t size = 0)
+        : mSize(size),
+          mArray(mSize ? new int[mSize]() : nullptr) {}
+
+    // copy-constructor
+    my_array(const my_array& other)
+        : mSize(other.mSize),
+          mArray(mSize ? new int[mSize] : nullptr)
+    {
+      // note that this is non-throwing, because of the data
+      // types being used; more attention to detail with regards
+      // to exceptions must be given in a more general case, however
+      std::copy(other.mArray, other.mArray + mSize, mArray);
+    }
+
+    // Move constructor
+    my_array(my_array&& other) noexcept
+        : my_array() // initialize via default constructor, C++11 only
+    {
+      swap(*this, other);
+    }
+
+    // destructor
+    ~my_array()
+    {
+      delete [] mArray;
+    }
+
+    // Copy Assignment operator
+    my_array& operator=(const my_array& other) noexcept
+    {
+      my_array tmp(other);
+      swap(*this, tmp);
+
+      return *this;
+    }
+
+    my_array& operator=(my_array&& other) noexcept
+    {
+      my_array tmp(std::move(other));
+      swap(*this, tmp);
+      return *this;
+    }
+    
+    std::size_t size() const {
+      return mSize;
+    }
+    int* get_array() {
+      return mArray;
+    }
+
+    friend void swap(my_array& first, my_array& second) noexcept // nothrow
+    {
+      // enable ADL (not necessary in our case, but good practice)
+      using std::swap;
+
+      // by swapping the members of two objects,
+      // the two objects are effectively swapped
+      swap(first.mSize, second.mSize);
+      swap(first.mArray, second.mArray);
+    }
+
+private:
+    std::size_t mSize;
+    int* mArray;
+};
+```
+
 ## Docstrings
 
 All public APIs must use Doxygen-style comments:
