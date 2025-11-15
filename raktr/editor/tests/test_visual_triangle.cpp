@@ -25,7 +25,6 @@
 #include <thread>
 #include <unordered_set>
 
-
 // For frustum culling demo
 #include "scene/octree.h"
 

@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <expected>
 #include <functional>
+#include <memory>
 #include <span>
 #include <system_error>
 
@@ -22,6 +23,11 @@ namespace raktr::render
     class Buffer;
     enum class AspectRatio;
     struct Viewport;
+
+    namespace occlusion
+    {
+        class HiZBuffer;
+    }
 
     namespace capabilities
     {
@@ -114,6 +120,19 @@ namespace raktr::render
 
             std::function<std::expected<void, std::error_code>(const Buffer&, const Buffer&, const Buffer&, uint32_t, uint32_t)>
                 draw_indexed_instanced;
+        };
+
+        /*!
+         * @brief Occlusion culling capability.
+         *
+         * Provides Hierarchical Z-Buffer (Hi-Z) occlusion culling for GPU-accelerated
+         * visibility determination of large object counts (10,000+).
+         * GPU devices with compute shader support should have this capability.
+         */
+        struct OcclusionCullingOps
+        {
+            std::function<std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>(uint32_t, uint32_t)>
+                create_hi_z_buffer;
         };
 
     } // namespace capabilities
