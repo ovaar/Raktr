@@ -4,18 +4,20 @@
  */
 
 #include "backend/soft/soft_device.h"
+#include "backend/wgpu/passes/geometry_pass.h"
+#include "backend/wgpu/passes/hi_z_occlusion_pass.h"
+#include "backend/wgpu/passes/hi_z_pyramid_pass.h"
+#include "backend/wgpu/wgpu_pass_context.h"
 #include "frame_resources.h"
 #include "occlusion/hi_z_buffer.h"
-#include "pass_context.h"
-#include "passes/geometry_pass.h"
-#include "passes/hi_z_occlusion_pass.h"
-#include "passes/hi_z_pyramid_pass.h"
 #include "render_graph.h"
 #include "gtest/gtest.h"
 #include <memory>
 #include <vector>
 
+
 using namespace raktr::render;
+using namespace raktr::render::backend::wgpu;
 
 namespace
 {
@@ -119,9 +121,9 @@ namespace
         return reinterpret_cast<WGPUTexture>(0x1234); // Non-null mock handle
     }
 
-    PassContext create_integration_test_context()
+    WgpuPassContext create_integration_test_context()
     {
-        PassContext ctx{};
+        WgpuPassContext ctx{};
         ctx.frame_index             = 0;
         ctx.command_encoder         = nullptr;
         ctx.color_target            = nullptr;

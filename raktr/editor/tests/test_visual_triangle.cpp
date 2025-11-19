@@ -29,14 +29,16 @@
 #include "scene/octree.h"
 
 // For render pass architecture
-#include "pass_context.h"
-#include "passes/geometry_pass.h"
-#include "passes/hi_z_occlusion_pass.h"
-#include "passes/hi_z_pyramid_pass.h"
-#include "passes/instanced_geometry_pass.h"
+#include "backend/wgpu/passes/geometry_pass.h"
+#include "backend/wgpu/passes/hi_z_occlusion_pass.h"
+#include "backend/wgpu/passes/hi_z_pyramid_pass.h"
+#include "backend/wgpu/passes/instanced_geometry_pass.h"
+#include "backend/wgpu/wgpu_pass_context.h"
 #include "render_graph.h"
 
+
 using namespace raktr::render;
+using namespace raktr::render::backend::wgpu;
 
 // Forward declare WgpuDevice for depth texture access
 namespace raktr::render::backend
@@ -1006,7 +1008,7 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
         // ========================================================================
 
         // TODO: Implement PassContext setup and execute
-        // temporal_occlusion_graph.execute(ctx);
+        temporal_occlusion_graph.execute(ctx);
     }
 
     spdlog::info("Occlusion Culling Demo finished after {} frames", frame_index);

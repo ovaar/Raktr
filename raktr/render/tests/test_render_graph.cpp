@@ -3,7 +3,7 @@
  * @brief Unit tests for RenderGraph.
  */
 
-#include "pass_context.h"
+#include "backend/wgpu/wgpu_pass_context.h"
 #include "render_graph.h"
 #include "render_pass.h"
 #include "gtest/gtest.h"
@@ -11,6 +11,7 @@
 #include <vector>
 
 using namespace raktr::render;
+using namespace raktr::render::backend::wgpu;
 
 namespace
 {
@@ -18,14 +19,14 @@ namespace
     class MockRenderPass
     {
     public:
-        using ContextType = PassContext; // Required for type erasure
+        using ContextType = WgpuPassContext; // Required for type erasure
 
         explicit MockRenderPass(std::string name, bool* executed = nullptr)
             : _name(std::move(name)), _executed(executed), _resize_called(false)
         {
         }
 
-        void execute(PassContext& ctx)
+        void execute(WgpuPassContext& ctx)
         {
             _execute_count++;
             _last_frame_index = ctx.frame_index;
@@ -70,9 +71,9 @@ namespace
         uint32_t    _last_height{ 0 };
     };
 
-    PassContext create_test_context(uint64_t frame_index = 0)
+    WgpuPassContext create_test_context(uint64_t frame_index = 0)
     {
-        PassContext ctx{};
+        WgpuPassContext ctx{};
         ctx.frame_index             = frame_index;
         ctx.command_encoder         = nullptr;
         ctx.color_target            = nullptr;
