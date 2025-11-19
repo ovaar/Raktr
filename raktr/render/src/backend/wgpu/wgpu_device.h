@@ -212,6 +212,15 @@ namespace raktr::render::backend
         }
 
         /*!
+         * @brief Get the underlying WGPUInstance handle.
+         * @return WGPUInstance handle (may be null if not initialized).
+         */
+        [[nodiscard]] WGPUInstance wgpu_instance() const
+        {
+            return _instance;
+        }
+
+        /*!
          * @brief Get the underlying WGPUDevice handle.
          * @return WGPUDevice handle (may be null if not initialized).
          */
@@ -227,6 +236,15 @@ namespace raktr::render::backend
         [[nodiscard]] WGPUQueue wgpu_queue() const
         {
             return _queue;
+        }
+
+        /*!
+         * @brief Get the depth texture for Hi-Z buffer updates.
+         * @return WGPUTexture handle (may be null if not initialized).
+         */
+        [[nodiscard]] WGPUTexture wgpu_depth_texture() const
+        {
+            return _depth_texture;
         }
 
     private:

@@ -237,13 +237,13 @@ TEST(CameraController_Integration, ComplexMovement_CombinesActionsCorrectly)
     InputState input{};
     input.keys.set(KeyCode::W, true); // Forward
     input.keys.set(KeyCode::D, true); // Right
-    input.keys.set(KeyCode::Q, true); // Up
+    input.keys.set(KeyCode::Q, true); // Down
 
     controller.update(input, camera, 0.1f);
 
     glm::vec3 new_pos = camera.position();
-    // Should have moved forward (0, 0, -1) + right (1, 0, 0) + up (0, 1, 0)
-    EXPECT_TRUE(vec3_near(new_pos, glm::vec3(1.0f, 1.0f, -1.0f), 0.01f));
+    // Should have moved forward (0, 0, -1) + right (1, 0, 0) + up (0, -1, 0)
+    EXPECT_TRUE(vec3_near(new_pos, glm::vec3(1.0f, -1.0f, -1.0f), 0.01f));
 }
 
 TEST(CameraController_Integration, MovementAndRotation_BothWork)

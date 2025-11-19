@@ -24,7 +24,7 @@ namespace raktr::render::test
         // Arrange
         auto         ctx = create_render_context();
         RenderConfig config{
-            .backend           = BackendType::Fake,
+            .backend           = BackendType::Soft,
             .enable_validation = false
         };
 
@@ -69,7 +69,7 @@ namespace raktr::render::test
     {
         // Arrange
         auto ctx         = create_render_context();
-        auto init_result = ctx->initialize({ .backend = BackendType::Fake });
+        auto init_result = ctx->initialize({ .backend = BackendType::Soft });
         ASSERT_TRUE(init_result.has_value());
 
         // Act

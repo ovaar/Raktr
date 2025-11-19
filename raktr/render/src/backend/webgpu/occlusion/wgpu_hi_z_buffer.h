@@ -21,12 +21,13 @@ namespace raktr::render::backend::webgpu
     public:
         /*!
          * @brief Construct Hi-Z buffer for given resolution.
+         * @param instance WebGPU instance handle (for callback polling).
          * @param device WebGPU device handle.
          * @param queue WebGPU queue handle.
          * @param width Depth buffer width.
          * @param height Depth buffer height.
          */
-        WgpuHiZBuffer(WGPUDevice device, WGPUQueue queue, uint32_t width, uint32_t height);
+        WgpuHiZBuffer(WGPUInstance instance, WGPUDevice device, WGPUQueue queue, uint32_t width, uint32_t height);
 
         ~WgpuHiZBuffer() override;
 
@@ -66,10 +67,14 @@ namespace raktr::render::backend::webgpu
         void     create_depth_pyramid_pipeline();
         void     create_visibility_test_pipeline();
         void     create_depth_pyramid_texture();
+        void     create_depth_copy_pipeline();
+        void     initialize_pyramid_to_far_plane();
+        void     copy_depth_to_r32float(WGPUCommandEncoder encoder, WGPUTexture depth_texture);
         uint32_t compute_mip_levels(uint32_t width, uint32_t height) const;
 
-        WGPUDevice _device{ nullptr };
-        WGPUQueue  _queue{ nullptr };
+        WGPUInstance _instance{ nullptr };
+        WGPUDevice   _device{ nullptr };
+        WGPUQueue    _queue{ nullptr };
 
         uint32_t _width{ 0 };
         uint32_t _height{ 0 };
@@ -79,14 +84,17 @@ namespace raktr::render::backend::webgpu
         WGPUTexture     _depth_pyramid{ nullptr };
         WGPUTextureView _depth_pyramid_view{ nullptr };
         WGPUSampler     _depth_sampler{ nullptr };
+        WGPUTexture     _depth_copy{ nullptr }; // R32Float copy of depth texture for compute access
 
-        // Compute pipelines
+        // Pipelines
         WGPUComputePipeline _pyramid_pipeline{ nullptr };
         WGPUComputePipeline _visibility_pipeline{ nullptr };
+        WGPUComputePipeline _depth_copy_pipeline{ nullptr };
 
         // Bind group layouts
         WGPUBindGroupLayout _pyramid_bind_group_layout{ nullptr };
         WGPUBindGroupLayout _visibility_bind_group_layout{ nullptr };
+        WGPUBindGroupLayout _depth_copy_bind_group_layout{ nullptr };
 
         // Buffers
         WGPUBuffer _aabb_buffer{ nullptr };

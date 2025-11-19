@@ -23,7 +23,7 @@ protected:
     {
         // Create fake render context
         _ctx = create_render_context();
-        RenderConfig config{ .backend = BackendType::Fake };
+        RenderConfig config{ .backend = BackendType::Soft };
         auto         result = _ctx->initialize(config);
         ASSERT_TRUE(result.has_value()) << "Failed to initialize render context";
         _device = _ctx->device();

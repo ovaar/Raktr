@@ -17,7 +17,7 @@ namespace raktr::render::test
         void SetUp() override
         {
             ctx = create_render_context();
-            RenderConfig config{ .backend = BackendType::Fake };
+            RenderConfig config{ .backend = BackendType::Soft };
             auto         result = ctx->initialize(config);
             ASSERT_TRUE(result.has_value()) << "Failed to initialize render context";
         }

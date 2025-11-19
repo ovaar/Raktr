@@ -1,9 +1,9 @@
 /*!
- * @file fake_device.cpp
- * @brief Fake device implementation - software renderer for testing.
+ * @file soft_device.cpp
+ * @brief Software device implementation - software renderer for testing.
  */
 
-#include "fake_device.h"
+#include "soft_device.h"
 #include "render_error.h"
 #include <algorithm>
 #include <cmath>
@@ -11,13 +11,13 @@
 
 namespace raktr::render::backend
 {
-    FakeDevice::FakeDevice(uint32_t width, uint32_t height)
+    SoftDevice::SoftDevice(uint32_t width, uint32_t height)
         : _framebuffer(width, height)
     {
     }
 
     std::expected<Buffer, std::error_code>
-    FakeDevice::create_vertex_buffer(std::span<const std::byte> data)
+    SoftDevice::create_vertex_buffer(std::span<const std::byte> data)
     {
         if (data.empty())
         {
@@ -36,7 +36,7 @@ namespace raktr::render::backend
     }
 
     std::expected<Buffer, std::error_code>
-    FakeDevice::create_index_buffer(std::span<const std::byte> data)
+    SoftDevice::create_index_buffer(std::span<const std::byte> data)
     {
         if (data.empty())
         {
@@ -55,7 +55,7 @@ namespace raktr::render::backend
     }
 
     std::expected<Buffer, std::error_code>
-    FakeDevice::create_instance_buffer(std::span<const std::byte> data)
+    SoftDevice::create_instance_buffer(std::span<const std::byte> data)
     {
         if (data.empty())
         {
@@ -74,7 +74,7 @@ namespace raktr::render::backend
     }
 
     std::expected<void, std::error_code>
-    FakeDevice::update_instance_buffer(const Buffer& buffer, std::span<const std::byte> data)
+    SoftDevice::update_instance_buffer(const Buffer& buffer, std::span<const std::byte> data)
     {
         if (!buffer.is_valid() || buffer.type() != BufferType::Instance)
         {
@@ -93,7 +93,7 @@ namespace raktr::render::backend
     }
 
     std::expected<void, std::error_code>
-    FakeDevice::draw_indexed(const Buffer& vertex_buffer,
+    SoftDevice::draw_indexed(const Buffer& vertex_buffer,
                              const Buffer& index_buffer,
                              uint32_t      index_count)
     {
@@ -168,7 +168,7 @@ namespace raktr::render::backend
         return {};
     }
 
-    void FakeDevice::clear()
+    void SoftDevice::clear()
     {
         std::fill(_framebuffer.pixels.begin(), _framebuffer.pixels.end(), _framebuffer.clear_color);
         if (_depth_test_enabled)
@@ -177,12 +177,12 @@ namespace raktr::render::backend
         }
     }
 
-    void FakeDevice::present()
+    void SoftDevice::present()
     {
-        // No-op for fake device (already in framebuffer)
+        // No-op for Software device (already in framebuffer)
     }
 
-    uint32_t FakeDevice::get_pixel(uint32_t x, uint32_t y) const
+    uint32_t SoftDevice::get_pixel(uint32_t x, uint32_t y) const
     {
         if (x >= _framebuffer.width || y >= _framebuffer.height)
         {
@@ -191,7 +191,7 @@ namespace raktr::render::backend
         return _framebuffer.pixels[y * _framebuffer.width + x];
     }
 
-    uint32_t FakeDevice::count_drawn_pixels() const
+    uint32_t SoftDevice::count_drawn_pixels() const
     {
         uint32_t count = 0;
         for (const auto& pixel : _framebuffer.pixels)
@@ -204,12 +204,12 @@ namespace raktr::render::backend
         return count;
     }
 
-    void FakeDevice::set_clear_color(uint32_t color)
+    void SoftDevice::set_clear_color(uint32_t color)
     {
         _framebuffer.clear_color = color;
     }
 
-    void FakeDevice::enable_depth_test(bool enabled)
+    void SoftDevice::enable_depth_test(bool enabled)
     {
         _depth_test_enabled = enabled;
         if (enabled)
@@ -218,22 +218,22 @@ namespace raktr::render::backend
         }
     }
 
-    bool FakeDevice::is_depth_test_enabled() const
+    bool SoftDevice::is_depth_test_enabled() const
     {
         return _depth_test_enabled;
     }
 
-    void FakeDevice::clear_depth_buffer()
+    void SoftDevice::clear_depth_buffer()
     {
         std::fill(_framebuffer.depth.begin(), _framebuffer.depth.end(), 1.0f);
     }
 
-    void FakeDevice::set_vertex_format(VertexFormat format)
+    void SoftDevice::set_vertex_format(VertexFormat format)
     {
         _vertex_format = format;
     }
 
-    void FakeDevice::rasterize_triangle(const float* v0, const float* v1, const float* v2)
+    void SoftDevice::rasterize_triangle(const float* v0, const float* v1, const float* v2)
     {
         // Convert NDC [-1,1] to screen space [0, width/height]
         const int   x0 = static_cast<int>((v0[0] + 1.0f) * 0.5f * _framebuffer.width);
@@ -285,7 +285,7 @@ namespace raktr::render::backend
         }
     }
 
-    void FakeDevice::rasterize_triangle_with_normals(const float* v0, const float* v1, const float* v2)
+    void SoftDevice::rasterize_triangle_with_normals(const float* v0, const float* v1, const float* v2)
     {
         // Extract positions and normals
         // Format: x, y, z, nx, ny, nz
@@ -351,7 +351,7 @@ namespace raktr::render::backend
         }
     }
 
-    bool FakeDevice::point_in_triangle(int px, int py, int x0, int y0, int x1, int y1, int x2, int y2) const
+    bool SoftDevice::point_in_triangle(int px, int py, int x0, int y0, int x1, int y1, int x2, int y2) const
     {
         // Edge function test (cross product sign)
         auto sign = [](int px, int py, int ax, int ay, int bx, int by) -> int
@@ -369,7 +369,7 @@ namespace raktr::render::backend
         return !(has_neg && has_pos);
     }
 
-    float FakeDevice::calculate_lighting(const float* normal) const
+    float SoftDevice::calculate_lighting(const float* normal) const
     {
         // Simple directional light from above
         constexpr float light_dir[3] = { 0.0f, 1.0f, 0.0f };
@@ -392,7 +392,7 @@ namespace raktr::render::backend
         return ambient + (1.0f - ambient) * dot;
     }
 
-    uint32_t FakeDevice::apply_lighting_to_color(uint32_t base_color, float intensity) const
+    uint32_t SoftDevice::apply_lighting_to_color(uint32_t base_color, float intensity) const
     {
         // Extract RGBA components
         const uint8_t r = static_cast<uint8_t>(((base_color >> 24) & 0xFF) * intensity);
@@ -405,46 +405,46 @@ namespace raktr::render::backend
 
     // Stub implementations for unsupported Device interface methods
     std::expected<Buffer, std::error_code>
-    FakeDevice::create_uniform_buffer(size_t)
+    SoftDevice::create_uniform_buffer(size_t)
     {
         return std::unexpected(make_error_code(std::errc::not_supported));
     }
 
     std::expected<void, std::error_code>
-    FakeDevice::update_uniform_buffer(const Buffer&, std::span<const std::byte>)
+    SoftDevice::update_uniform_buffer(const Buffer&, std::span<const std::byte>)
     {
         return std::unexpected(make_error_code(std::errc::not_supported));
     }
 
-    void FakeDevice::set_uniform_buffer(const Buffer&)
+    void SoftDevice::set_uniform_buffer(const Buffer&)
     {
         // No-op
     }
 
     std::expected<void, std::error_code>
-    FakeDevice::resize(uint32_t, uint32_t)
+    SoftDevice::resize(uint32_t, uint32_t)
     {
         return {}; // Success, but do nothing
     }
 
-    void FakeDevice::set_aspect_ratio(AspectRatio, float)
+    void SoftDevice::set_aspect_ratio(AspectRatio, float)
     {
         // No-op
     }
 
-    AspectRatio FakeDevice::aspect_ratio() const
+    AspectRatio SoftDevice::aspect_ratio() const
     {
         return AspectRatio::Ratio_16_9;
     }
 
-    const Viewport& FakeDevice::viewport() const
+    const Viewport& SoftDevice::viewport() const
     {
         static Viewport default_vp{};
         return default_vp;
     }
 
     std::expected<void, std::error_code>
-    FakeDevice::draw_indexed_instanced(const Buffer& vertex_buffer,
+    SoftDevice::draw_indexed_instanced(const Buffer& vertex_buffer,
                                        const Buffer& index_buffer,
                                        const Buffer& instance_buffer,
                                        uint32_t      index_count,
@@ -469,7 +469,7 @@ namespace raktr::render::backend
             return std::unexpected(make_error_code(RenderError::InvalidOperation));
         }
 
-        // For FakeDevice, we'll just draw each instance using draw_indexed
+        // For SoftDevice, we'll just draw each instance using draw_indexed
         // This is a simplified implementation that validates the API works
         // A full implementation would apply per-instance transforms
         for (uint32_t i = 0; i < instance_count; ++i)

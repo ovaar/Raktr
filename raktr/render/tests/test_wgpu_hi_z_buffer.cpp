@@ -12,7 +12,6 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-
 using namespace raktr::render;
 using namespace raktr::render::backend;
 using namespace raktr::render::backend::webgpu;
@@ -59,9 +58,10 @@ TEST_F(WgpuHiZBufferTest, Create_WithValidParameters_Succeeds)
     constexpr uint32_t height = 768;
 
     // Act
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer hi_z(device_handle, queue_handle, width, height);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer hi_z(instance_handle, device_handle, queue_handle, width, height);
 
     // Assert
     EXPECT_EQ(hi_z.width(), width);
@@ -92,12 +92,13 @@ TEST_F(WgpuHiZBufferTest, MipLevels_VariousResolutions_CorrectCount)
         { 800, 600, 10 },   // log2(800) + 1 = 9.643... + 1 ≈ 10
     };
 
-    WGPUDevice device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue  queue_handle  = wgpuDeviceGetQueue(device_handle);
+    WGPUInstance instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice   device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue    queue_handle    = wgpuDeviceGetQueue(device_handle);
 
     for (const auto& tc : test_cases)
     {
-        WgpuHiZBuffer hi_z(device_handle, queue_handle, tc.width, tc.height);
+        WgpuHiZBuffer hi_z(instance_handle, device_handle, queue_handle, tc.width, tc.height);
         EXPECT_EQ(hi_z.mip_levels(), tc.expected_mips)
             << "Failed for resolution " << tc.width << "x" << tc.height;
     }
@@ -109,9 +110,10 @@ TEST_F(WgpuHiZBufferTest, MipLevels_VariousResolutions_CorrectCount)
 TEST_F(WgpuHiZBufferTest, MoveConstructor_TransfersOwnership_Successfully)
 {
     // Arrange
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer original(device_handle, queue_handle, 512, 512);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer original(instance_handle, device_handle, queue_handle, 512, 512);
 
     uint32_t original_width  = original.width();
     uint32_t original_height = original.height();
@@ -132,10 +134,11 @@ TEST_F(WgpuHiZBufferTest, MoveConstructor_TransfersOwnership_Successfully)
 TEST_F(WgpuHiZBufferTest, MoveAssignment_TransfersOwnership_Successfully)
 {
     // Arrange
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer original(device_handle, queue_handle, 512, 512);
-    WgpuHiZBuffer target(device_handle, queue_handle, 256, 256);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer original(instance_handle, device_handle, queue_handle, 512, 512);
+    WgpuHiZBuffer target(instance_handle, device_handle, queue_handle, 256, 256);
 
     uint32_t original_width  = original.width();
     uint32_t original_height = original.height();
@@ -154,9 +157,10 @@ TEST_F(WgpuHiZBufferTest, MoveAssignment_TransfersOwnership_Successfully)
 TEST_F(WgpuHiZBufferTest, TestVisibility_EmptyAABBList_ReturnsEmpty)
 {
     // Arrange
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer hi_z(device_handle, queue_handle, 800, 600);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer hi_z(instance_handle, device_handle, queue_handle, 800, 600);
 
     std::vector<AABB> aabbs;
     glm::mat4         view_projection = glm::identity<glm::mat4>();
@@ -175,9 +179,10 @@ TEST_F(WgpuHiZBufferTest, TestVisibility_EmptyAABBList_ReturnsEmpty)
 TEST_F(WgpuHiZBufferTest, TestVisibility_SingleOnScreenAABB_ReturnsVisible)
 {
     // Arrange
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer hi_z(device_handle, queue_handle, 800, 600);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer hi_z(instance_handle, device_handle, queue_handle, 800, 600);
 
     // Create a simple view-projection matrix
     glm::mat4 view = glm::lookAt(
@@ -214,9 +219,10 @@ TEST_F(WgpuHiZBufferTest, TestVisibility_SingleOnScreenAABB_ReturnsVisible)
 TEST_F(WgpuHiZBufferTest, TestVisibility_MultipleAABBs_ProcessesAll)
 {
     // Arrange
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer hi_z(device_handle, queue_handle, 1024, 768);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer hi_z(instance_handle, device_handle, queue_handle, 1024, 768);
 
     glm::mat4 view = glm::lookAt(
         glm::vec3(0.0f, 0.0f, 10.0f),
@@ -257,9 +263,10 @@ TEST_F(WgpuHiZBufferTest, TestVisibility_MultipleAABBs_ProcessesAll)
 TEST_F(WgpuHiZBufferTest, Performance_1000AABBs_CompletesInReasonableTime)
 {
     // Arrange
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer hi_z(device_handle, queue_handle, 1920, 1080);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer hi_z(instance_handle, device_handle, queue_handle, 1920, 1080);
 
     glm::mat4 view = glm::lookAt(
         glm::vec3(0.0f, 50.0f, 100.0f),
@@ -317,9 +324,10 @@ TEST_F(WgpuHiZBufferTest, Performance_1000AABBs_CompletesInReasonableTime)
 TEST_F(WgpuHiZBufferTest, Performance_10000AABBs_CompletesSuccessfully)
 {
     // Arrange
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer hi_z(device_handle, queue_handle, 1920, 1080);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer hi_z(instance_handle, device_handle, queue_handle, 1920, 1080);
 
     glm::mat4 view = glm::lookAt(
         glm::vec3(0.0f, 100.0f, 200.0f),
@@ -378,9 +386,10 @@ TEST_F(WgpuHiZBufferTest, Performance_10000AABBs_CompletesSuccessfully)
 TEST_F(WgpuHiZBufferTest, Stats_AfterVisibilityTest_UpdatedCorrectly)
 {
     // Arrange
-    WGPUDevice    device_handle = static_cast<WGPUDevice>(_device->wgpu_device());
-    WGPUQueue     queue_handle  = wgpuDeviceGetQueue(device_handle);
-    WgpuHiZBuffer hi_z(device_handle, queue_handle, 800, 600);
+    WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
+    WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());
+    WGPUQueue     queue_handle    = wgpuDeviceGetQueue(device_handle);
+    WgpuHiZBuffer hi_z(instance_handle, device_handle, queue_handle, 800, 600);
 
     glm::mat4 view_projection = glm::identity<glm::mat4>();
 

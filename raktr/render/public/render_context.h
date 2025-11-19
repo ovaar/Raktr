@@ -12,7 +12,6 @@
 #include <memory>
 #include <system_error>
 
-
 namespace raktr::render
 {
     class Window;        // Forward declaration
@@ -23,7 +22,7 @@ namespace raktr::render
      */
     enum class BackendType
     {
-        Fake,   // Software renderer for testing
+        Soft,   // Software renderer for testing
         WebGPU, // WebGPU via wgpu-native
         OpenGL,
         Vulkan,
@@ -35,7 +34,7 @@ namespace raktr::render
      */
     struct RenderConfig
     {
-        BackendType backend           = BackendType::Fake;
+        BackendType backend           = BackendType::Soft;
         bool        enable_validation = false; // Debug layers/validation
         bool        enable_vsync      = true;
     };

@@ -4,9 +4,9 @@
  */
 
 #include "wgpu_device.h"
+#include "backend/webgpu/occlusion/wgpu_hi_z_buffer.h"
 #include "buffer.h"
 #include "window/window.h"
-#include "backend/webgpu/occlusion/wgpu_hi_z_buffer.h"
 #include <spdlog/spdlog.h>
 
 #ifdef _WIN32
@@ -568,7 +568,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         // Depth/stencil state (enable depth testing)
         WGPUDepthStencilState depth_stencil_state    = {};
-        depth_stencil_state.format                   = WGPUTextureFormat_Depth24Plus;
+        depth_stencil_state.format                   = WGPUTextureFormat_Depth32Float;
         depth_stencil_state.depthWriteEnabled        = WGPUOptionalBool_True;
         depth_stencil_state.depthCompare             = WGPUCompareFunction_Less;
         depth_stencil_state.stencilFront.compare     = WGPUCompareFunction_Always;
@@ -622,14 +622,14 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             _depth_texture = nullptr;
         }
 
-        // Create depth texture
+        // Create depth texture (Depth32Float for compute shader compatibility)
         WGPUTextureDescriptor depth_texture_desc   = {};
-        depth_texture_desc.usage                   = WGPUTextureUsage_RenderAttachment;
+        depth_texture_desc.usage                   = WGPUTextureUsage_RenderAttachment | WGPUTextureUsage_TextureBinding;
         depth_texture_desc.dimension               = WGPUTextureDimension_2D;
         depth_texture_desc.size.width              = _swapchain_width;
         depth_texture_desc.size.height             = _swapchain_height;
         depth_texture_desc.size.depthOrArrayLayers = 1;
-        depth_texture_desc.format                  = WGPUTextureFormat_Depth24Plus;
+        depth_texture_desc.format                  = WGPUTextureFormat_Depth32Float;
         depth_texture_desc.mipLevelCount           = 1;
         depth_texture_desc.sampleCount             = 1;
         depth_texture_desc.viewFormatCount         = 0;
@@ -644,7 +644,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         // Create depth texture view
         WGPUTextureViewDescriptor depth_view_desc = {};
-        depth_view_desc.format                    = WGPUTextureFormat_Depth24Plus;
+        depth_view_desc.format                    = WGPUTextureFormat_Depth32Float;
         depth_view_desc.dimension                 = WGPUTextureViewDimension_2D;
         depth_view_desc.baseMipLevel              = 0;
         depth_view_desc.mipLevelCount             = 1;
@@ -1124,7 +1124,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         try
         {
-            return std::make_unique<backend::webgpu::WgpuHiZBuffer>(_device, _queue, width, height);
+            return std::make_unique<backend::webgpu::WgpuHiZBuffer>(_instance, _device, _queue, width, height);
         }
         catch (...)
         {

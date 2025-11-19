@@ -108,7 +108,13 @@ fn ndc_to_uv(ndc: vec2<f32>) -> vec2<f32> {
     return (ndc * vec2<f32>(0.5, -0.5)) + vec2<f32>(0.5, 0.5);
 }
 
-fn compute_screen_aabb(aabb: AABB) -> vec4<f32> {
+struct ScreenAABB {
+    min_uv: vec2<f32>,
+    max_uv: vec2<f32>,
+    min_depth: f32,
+}
+
+fn compute_screen_aabb(aabb: AABB) -> ScreenAABB {
     var min_uv = vec2<f32>(1.0, 1.0);
     var max_uv = vec2<f32>(0.0, 0.0);
     var min_depth = 1.0;
@@ -135,12 +141,12 @@ fn compute_screen_aabb(aabb: AABB) -> vec4<f32> {
         min_depth = min(min_depth, proj.z / proj.w);
     }
     
-    return vec4<f32>(min_uv.x, min_uv.y, max_uv.x, max_uv.y);
+    return ScreenAABB(min_uv, max_uv, min_depth);
 }
 
-fn compute_mip_level(screen_aabb: vec4<f32>) -> f32 {
-    let width_px = (screen_aabb.z - screen_aabb.x) * vp.viewport_width;
-    let height_px = (screen_aabb.w - screen_aabb.y) * vp.viewport_height;
+fn compute_mip_level(screen_aabb: ScreenAABB) -> f32 {
+    let width_px = (screen_aabb.max_uv.x - screen_aabb.min_uv.x) * vp.viewport_width;
+    let height_px = (screen_aabb.max_uv.y - screen_aabb.min_uv.y) * vp.viewport_height;
     let max_size = max(width_px, height_px);
     return max(0.0, log2(max_size));
 }
@@ -155,7 +161,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     let aabb = aabb_buffer[aabb_idx];
     let screen_aabb = compute_screen_aabb(aabb);
     
-    if (screen_aabb.z < 0.0 || screen_aabb.x > 1.0 || screen_aabb.w < 0.0 || screen_aabb.y > 1.0) {
+    // Check if AABB is outside screen bounds
+    if (screen_aabb.max_uv.x < 0.0 || screen_aabb.min_uv.x > 1.0 || 
+        screen_aabb.max_uv.y < 0.0 || screen_aabb.min_uv.y > 1.0) {
         let word_idx = aabb_idx / 32u;
         let bit_idx = aabb_idx % 32u;
         atomicAnd(&visibility_buffer[word_idx], ~(1u << bit_idx));
@@ -163,11 +171,14 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
     
     let mip_level = compute_mip_level(screen_aabb);
-    let uv_center = (screen_aabb.xy + screen_aabb.zw) * 0.5;
+    let uv_center = (screen_aabb.min_uv + screen_aabb.max_uv) * 0.5;
     let hi_z_depth = textureSampleLevel(hi_z_texture, hi_z_sampler, uv_center, mip_level).r;
     
-    let nearest_depth = screen_aabb.x;
-    let is_visible = nearest_depth <= hi_z_depth;
+    // Hi-Z stores MAX depth (farthest occluder at each pixel)
+    // Object is OCCLUDED if ALL of it is behind the occluder
+    // Object is VISIBLE if ANY of it is in front of or at the same depth as the occluder
+    // Conservative test: visible if min_depth (closest point) <= hi_z_depth (farthest occluder)
+    let is_visible = screen_aabb.min_depth <= hi_z_depth + 0.001;
     
     let word_idx = aabb_idx / 32u;
     let bit_idx = aabb_idx % 32u;
@@ -186,16 +197,17 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
     } // anonymous namespace
 
-    WgpuHiZBuffer::WgpuHiZBuffer(WGPUDevice device, WGPUQueue queue, uint32_t width, uint32_t height)
-        : _device(device),
+    WgpuHiZBuffer::WgpuHiZBuffer(WGPUInstance instance, WGPUDevice device, WGPUQueue queue, uint32_t width, uint32_t height)
+        : _instance(instance),
+          _device(device),
           _queue(queue),
           _width(width),
           _height(height),
           _mip_levels(compute_mip_levels(width, height))
     {
-        if (!_device || !_queue)
+        if (!_instance || !_device || !_queue)
         {
-            spdlog::error("WgpuHiZBuffer: Invalid device or queue");
+            spdlog::error("WgpuHiZBuffer: Invalid instance, device or queue");
             return;
         }
 
@@ -204,6 +216,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         create_depth_pyramid_texture();
         create_depth_pyramid_pipeline();
         create_visibility_test_pipeline();
+        create_depth_copy_pipeline();
+        initialize_pyramid_to_far_plane();
 
         spdlog::info("WgpuHiZBuffer initialized successfully");
     }
@@ -215,16 +229,22 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             wgpuComputePipelineRelease(_pyramid_pipeline);
         if (_visibility_pipeline)
             wgpuComputePipelineRelease(_visibility_pipeline);
+        if (_depth_copy_pipeline)
+            wgpuComputePipelineRelease(_depth_copy_pipeline);
         if (_pyramid_bind_group_layout)
             wgpuBindGroupLayoutRelease(_pyramid_bind_group_layout);
         if (_visibility_bind_group_layout)
             wgpuBindGroupLayoutRelease(_visibility_bind_group_layout);
+        if (_depth_copy_bind_group_layout)
+            wgpuBindGroupLayoutRelease(_depth_copy_bind_group_layout);
         if (_depth_pyramid)
             wgpuTextureRelease(_depth_pyramid);
         if (_depth_pyramid_view)
             wgpuTextureViewRelease(_depth_pyramid_view);
         if (_depth_sampler)
             wgpuSamplerRelease(_depth_sampler);
+        if (_depth_copy)
+            wgpuTextureRelease(_depth_copy);
         if (_aabb_buffer)
             wgpuBufferRelease(_aabb_buffer);
         if (_visibility_buffer)
@@ -234,7 +254,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     }
 
     WgpuHiZBuffer::WgpuHiZBuffer(WgpuHiZBuffer&& other) noexcept
-        : _device(nullptr),
+        : _instance(nullptr),
+          _device(nullptr),
           _queue(nullptr),
           _width(0),
           _height(0),
@@ -242,10 +263,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
           _depth_pyramid(nullptr),
           _depth_pyramid_view(nullptr),
           _depth_sampler(nullptr),
+          _depth_copy(nullptr),
           _pyramid_pipeline(nullptr),
           _visibility_pipeline(nullptr),
+          _depth_copy_pipeline(nullptr),
           _pyramid_bind_group_layout(nullptr),
           _visibility_bind_group_layout(nullptr),
+          _depth_copy_bind_group_layout(nullptr),
           _aabb_buffer(nullptr),
           _visibility_buffer(nullptr),
           _uniform_buffer(nullptr),
@@ -265,6 +289,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     {
         using std::swap;
 
+        swap(first._instance, second._instance);
         swap(first._device, second._device);
         swap(first._queue, second._queue);
         swap(first._width, second._width);
@@ -273,10 +298,13 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         swap(first._depth_pyramid, second._depth_pyramid);
         swap(first._depth_pyramid_view, second._depth_pyramid_view);
         swap(first._depth_sampler, second._depth_sampler);
+        swap(first._depth_copy, second._depth_copy);
         swap(first._pyramid_pipeline, second._pyramid_pipeline);
         swap(first._visibility_pipeline, second._visibility_pipeline);
+        swap(first._depth_copy_pipeline, second._depth_copy_pipeline);
         swap(first._pyramid_bind_group_layout, second._pyramid_bind_group_layout);
         swap(first._visibility_bind_group_layout, second._visibility_bind_group_layout);
+        swap(first._depth_copy_bind_group_layout, second._depth_copy_bind_group_layout);
         swap(first._aabb_buffer, second._aabb_buffer);
         swap(first._visibility_buffer, second._visibility_buffer);
         swap(first._uniform_buffer, second._uniform_buffer);
@@ -348,7 +376,158 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             return;
         }
 
+        // Create R32Float depth copy texture (since we can't reinterpret Depth32Float as R32Float)
+        WGPUTextureDescriptor depth_copy_desc{};
+        depth_copy_desc.label         = make_string_view("Hi-Z Depth Copy");
+        depth_copy_desc.size          = { _width, _height, 1 };
+        depth_copy_desc.mipLevelCount = 1;
+        depth_copy_desc.sampleCount   = 1;
+        depth_copy_desc.dimension     = WGPUTextureDimension_2D;
+        depth_copy_desc.format        = WGPUTextureFormat_R32Float;
+        depth_copy_desc.usage         = WGPUTextureUsage_StorageBinding | WGPUTextureUsage_TextureBinding;
+
+        _depth_copy = wgpuDeviceCreateTexture(_device, &depth_copy_desc);
+        if (!_depth_copy)
+        {
+            spdlog::error("Failed to create depth copy texture");
+            return;
+        }
+
         spdlog::info("Created depth pyramid texture and sampler");
+    }
+
+    void WgpuHiZBuffer::initialize_pyramid_to_far_plane()
+    {
+        // Initialize all mip levels of the Hi-Z pyramid to 1.0 (far plane)
+        // using a compute shader so everything is visible until the first depth is captured
+
+        const char* init_shader_source = R"(
+@group(0) @binding(0) var output: texture_storage_2d<r32float, write>;
+
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let coords = vec2<i32>(global_id.xy);
+    let size = textureDimensions(output);
+    
+    if (coords.x >= i32(size.x) || coords.y >= i32(size.y)) {
+        return;
+    }
+    
+    // Write far plane depth (1.0) to make everything visible initially
+    textureStore(output, coords, vec4<f32>(1.0, 0.0, 0.0, 0.0));
+}
+)";
+
+        // Create shader module
+        WGPUShaderSourceWGSL wgsl_desc{};
+        wgsl_desc.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl_desc.code        = make_string_view(init_shader_source);
+
+        WGPUShaderModuleDescriptor shader_desc{};
+        shader_desc.nextInChain = &wgsl_desc.chain;
+        shader_desc.label       = make_string_view("Hi-Z Init Shader");
+
+        WGPUShaderModule shader_module = wgpuDeviceCreateShaderModule(_device, &shader_desc);
+        if (!shader_module)
+        {
+            spdlog::error("Failed to create Hi-Z init shader module");
+            return;
+        }
+
+        // Create bind group layout
+        WGPUBindGroupLayoutEntry layout_entry{};
+        layout_entry.binding                      = 0;
+        layout_entry.visibility                   = WGPUShaderStage_Compute;
+        layout_entry.storageTexture.access        = WGPUStorageTextureAccess_WriteOnly;
+        layout_entry.storageTexture.format        = WGPUTextureFormat_R32Float;
+        layout_entry.storageTexture.viewDimension = WGPUTextureViewDimension_2D;
+
+        WGPUBindGroupLayoutDescriptor bg_layout_desc{};
+        bg_layout_desc.entryCount = 1;
+        bg_layout_desc.entries    = &layout_entry;
+
+        WGPUBindGroupLayout bind_group_layout = wgpuDeviceCreateBindGroupLayout(_device, &bg_layout_desc);
+
+        // Create pipeline layout
+        WGPUPipelineLayoutDescriptor pipeline_layout_desc{};
+        pipeline_layout_desc.bindGroupLayoutCount = 1;
+        pipeline_layout_desc.bindGroupLayouts     = &bind_group_layout;
+
+        WGPUPipelineLayout pipeline_layout = wgpuDeviceCreatePipelineLayout(_device, &pipeline_layout_desc);
+
+        // Create compute pipeline
+        WGPUComputePipelineDescriptor compute_desc{};
+        compute_desc.label              = make_string_view("Hi-Z Init Pipeline");
+        compute_desc.layout             = pipeline_layout;
+        compute_desc.compute.module     = shader_module;
+        compute_desc.compute.entryPoint = make_string_view("main");
+
+        WGPUComputePipeline pipeline = wgpuDeviceCreateComputePipeline(_device, &compute_desc);
+
+        // Initialize each mip level
+        WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(_device, nullptr);
+
+        for (uint32_t mip = 0; mip < _mip_levels; ++mip)
+        {
+            uint32_t mip_width  = std::max(1u, _width >> mip);
+            uint32_t mip_height = std::max(1u, _height >> mip);
+
+            // Create view for this mip level
+            WGPUTextureViewDescriptor view_desc{};
+            view_desc.format          = WGPUTextureFormat_R32Float;
+            view_desc.dimension       = WGPUTextureViewDimension_2D;
+            view_desc.baseMipLevel    = mip;
+            view_desc.mipLevelCount   = 1;
+            view_desc.baseArrayLayer  = 0;
+            view_desc.arrayLayerCount = 1;
+            view_desc.aspect          = WGPUTextureAspect_All;
+
+            WGPUTextureView mip_view = wgpuTextureCreateView(_depth_pyramid, &view_desc);
+
+            // Create bind group for this mip level
+            WGPUBindGroupEntry bg_entry{};
+            bg_entry.binding     = 0;
+            bg_entry.textureView = mip_view;
+
+            WGPUBindGroupDescriptor bg_desc{};
+            bg_desc.layout     = bind_group_layout;
+            bg_desc.entryCount = 1;
+            bg_desc.entries    = &bg_entry;
+
+            WGPUBindGroup bind_group = wgpuDeviceCreateBindGroup(_device, &bg_desc);
+
+            // Dispatch compute pass
+            WGPUComputePassDescriptor pass_desc{};
+            WGPUComputePassEncoder    pass = wgpuCommandEncoderBeginComputePass(encoder, &pass_desc);
+
+            wgpuComputePassEncoderSetPipeline(pass, pipeline);
+            wgpuComputePassEncoderSetBindGroup(pass, 0, bind_group, 0, nullptr);
+
+            uint32_t workgroup_x = (mip_width + 7) / 8;
+            uint32_t workgroup_y = (mip_height + 7) / 8;
+            wgpuComputePassEncoderDispatchWorkgroups(pass, workgroup_x, workgroup_y, 1);
+
+            wgpuComputePassEncoderEnd(pass);
+            wgpuComputePassEncoderRelease(pass);
+
+            wgpuBindGroupRelease(bind_group);
+            wgpuTextureViewRelease(mip_view);
+        }
+
+        // Submit commands
+        WGPUCommandBufferDescriptor cmd_buffer_desc{};
+        WGPUCommandBuffer           cmd_buffer = wgpuCommandEncoderFinish(encoder, &cmd_buffer_desc);
+        wgpuQueueSubmit(_queue, 1, &cmd_buffer);
+
+        wgpuCommandBufferRelease(cmd_buffer);
+        wgpuCommandEncoderRelease(encoder);
+
+        wgpuComputePipelineRelease(pipeline);
+        wgpuPipelineLayoutRelease(pipeline_layout);
+        wgpuBindGroupLayoutRelease(bind_group_layout);
+        wgpuShaderModuleRelease(shader_module);
+
+        spdlog::info("Initialized Hi-Z pyramid to far plane (1.0) for {} mip levels", _mip_levels);
     }
 
     void WgpuHiZBuffer::create_depth_pyramid_pipeline()
@@ -380,10 +559,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         // Create bind group layout for depth pyramid generation
         std::vector<WGPUBindGroupLayoutEntry> entries(3);
 
-        // @binding(0): input depth texture
+        // @binding(0): input depth texture (R32Float is not filterable)
         entries[0].binding               = 0;
         entries[0].visibility            = WGPUShaderStage_Compute;
-        entries[0].texture.sampleType    = WGPUTextureSampleType_Float;
+        entries[0].texture.sampleType    = WGPUTextureSampleType_UnfilterableFloat;
         entries[0].texture.viewDimension = WGPUTextureViewDimension_2D;
 
         // @binding(1): output depth storage texture
@@ -393,10 +572,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         entries[1].storageTexture.format        = WGPUTextureFormat_R32Float;
         entries[1].storageTexture.viewDimension = WGPUTextureViewDimension_2D;
 
-        // @binding(2): depth sampler
+        // @binding(2): depth sampler (NonFiltering for R32Float)
         entries[2].binding      = 2;
         entries[2].visibility   = WGPUShaderStage_Compute;
-        entries[2].sampler.type = WGPUSamplerBindingType_Filtering;
+        entries[2].sampler.type = WGPUSamplerBindingType_NonFiltering;
 
         WGPUBindGroupLayoutDescriptor bg_layout_desc{};
         bg_layout_desc.label      = make_string_view("Depth Pyramid Bind Group Layout");
@@ -584,6 +763,169 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         wgpuShaderModuleRelease(shader_module);
     }
 
+    void WgpuHiZBuffer::create_depth_copy_pipeline()
+    {
+        // Simple shader to copy depth texture to R32Float texture using compute shader
+        const char* shader_source = R"(
+@group(0) @binding(0) var depth_input: texture_depth_2d;
+@group(0) @binding(1) var output: texture_storage_2d<r32float, write>;
+
+@compute @workgroup_size(8, 8, 1)
+fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
+    let dims = textureDimensions(depth_input);
+    if (global_id.x >= dims.x || global_id.y >= dims.y) {
+        return;
+    }
+    
+    let coords = vec2<i32>(i32(global_id.x), i32(global_id.y));
+    let depth_value = textureLoad(depth_input, coords, 0);
+    textureStore(output, coords, vec4<f32>(depth_value, 0.0, 0.0, 0.0));
+}
+)";
+
+        WGPUShaderSourceWGSL wgsl_desc{};
+        wgsl_desc.chain.sType = WGPUSType_ShaderSourceWGSL;
+        wgsl_desc.code        = make_string_view(shader_source);
+
+        WGPUShaderModuleDescriptor shader_desc{};
+        shader_desc.nextInChain = &wgsl_desc.chain;
+        shader_desc.label       = make_string_view("Depth Copy Shader");
+
+        WGPUShaderModule shader_module = wgpuDeviceCreateShaderModule(_device, &shader_desc);
+        if (!shader_module)
+        {
+            spdlog::error("Failed to create depth copy shader module");
+            return;
+        }
+
+        // Create bind group layout
+        std::vector<WGPUBindGroupLayoutEntry> entries(2);
+
+        // @binding(0): input depth texture
+        entries[0].binding               = 0;
+        entries[0].visibility            = WGPUShaderStage_Compute;
+        entries[0].texture.sampleType    = WGPUTextureSampleType_Depth;
+        entries[0].texture.viewDimension = WGPUTextureViewDimension_2D;
+
+        // @binding(1): output R32Float storage texture
+        entries[1].binding                      = 1;
+        entries[1].visibility                   = WGPUShaderStage_Compute;
+        entries[1].storageTexture.access        = WGPUStorageTextureAccess_WriteOnly;
+        entries[1].storageTexture.format        = WGPUTextureFormat_R32Float;
+        entries[1].storageTexture.viewDimension = WGPUTextureViewDimension_2D;
+
+        WGPUBindGroupLayoutDescriptor bg_layout_desc{};
+        bg_layout_desc.label      = make_string_view("Depth Copy Bind Group Layout");
+        bg_layout_desc.entryCount = static_cast<uint32_t>(entries.size());
+        bg_layout_desc.entries    = entries.data();
+
+        _depth_copy_bind_group_layout = wgpuDeviceCreateBindGroupLayout(_device, &bg_layout_desc);
+        if (!_depth_copy_bind_group_layout)
+        {
+            spdlog::error("Failed to create depth copy bind group layout");
+            wgpuShaderModuleRelease(shader_module);
+            return;
+        }
+
+        WGPUPipelineLayoutDescriptor pipeline_layout_desc{};
+        pipeline_layout_desc.label                = make_string_view("Depth Copy Pipeline Layout");
+        pipeline_layout_desc.bindGroupLayoutCount = 1;
+        pipeline_layout_desc.bindGroupLayouts     = &_depth_copy_bind_group_layout;
+
+        WGPUPipelineLayout pipeline_layout = wgpuDeviceCreatePipelineLayout(_device, &pipeline_layout_desc);
+        if (!pipeline_layout)
+        {
+            spdlog::error("Failed to create depth copy pipeline layout");
+            wgpuShaderModuleRelease(shader_module);
+            return;
+        }
+
+        WGPUComputePipelineDescriptor pipeline_desc{};
+        pipeline_desc.label              = make_string_view("Depth Copy Pipeline");
+        pipeline_desc.layout             = pipeline_layout;
+        pipeline_desc.compute.module     = shader_module;
+        pipeline_desc.compute.entryPoint = make_string_view("main");
+
+        _depth_copy_pipeline = wgpuDeviceCreateComputePipeline(_device, &pipeline_desc);
+        if (!_depth_copy_pipeline)
+        {
+            spdlog::error("Failed to create depth copy compute pipeline");
+        }
+        else
+        {
+            spdlog::info("Created depth copy compute pipeline");
+        }
+
+        wgpuPipelineLayoutRelease(pipeline_layout);
+        wgpuShaderModuleRelease(shader_module);
+    }
+
+    void WgpuHiZBuffer::copy_depth_to_r32float(WGPUCommandEncoder encoder, WGPUTexture depth_texture)
+    {
+        if (!_depth_copy_pipeline || !depth_texture)
+        {
+            return;
+        }
+
+        // Create depth texture view
+        WGPUTextureViewDescriptor depth_view_desc{};
+        depth_view_desc.format          = WGPUTextureFormat_Depth32Float;
+        depth_view_desc.dimension       = WGPUTextureViewDimension_2D;
+        depth_view_desc.baseMipLevel    = 0;
+        depth_view_desc.mipLevelCount   = 1;
+        depth_view_desc.baseArrayLayer  = 0;
+        depth_view_desc.arrayLayerCount = 1;
+        depth_view_desc.aspect          = WGPUTextureAspect_DepthOnly;
+
+        WGPUTextureView depth_view = wgpuTextureCreateView(depth_texture, &depth_view_desc);
+
+        // Create R32Float output view
+        WGPUTextureViewDescriptor output_view_desc{};
+        output_view_desc.format          = WGPUTextureFormat_R32Float;
+        output_view_desc.dimension       = WGPUTextureViewDimension_2D;
+        output_view_desc.baseMipLevel    = 0;
+        output_view_desc.mipLevelCount   = 1;
+        output_view_desc.baseArrayLayer  = 0;
+        output_view_desc.arrayLayerCount = 1;
+        output_view_desc.aspect          = WGPUTextureAspect_All;
+
+        WGPUTextureView output_view = wgpuTextureCreateView(_depth_copy, &output_view_desc);
+
+        // Create bind group
+        std::vector<WGPUBindGroupEntry> bg_entries(2);
+        bg_entries[0].binding     = 0;
+        bg_entries[0].textureView = depth_view;
+
+        bg_entries[1].binding     = 1;
+        bg_entries[1].textureView = output_view;
+
+        WGPUBindGroupDescriptor bg_desc{};
+        bg_desc.layout     = _depth_copy_bind_group_layout;
+        bg_desc.entryCount = static_cast<uint32_t>(bg_entries.size());
+        bg_desc.entries    = bg_entries.data();
+
+        WGPUBindGroup bind_group = wgpuDeviceCreateBindGroup(_device, &bg_desc);
+
+        // Execute compute pass
+        WGPUComputePassDescriptor pass_desc{};
+        pass_desc.label = make_string_view("Depth Copy Pass");
+
+        WGPUComputePassEncoder pass = wgpuCommandEncoderBeginComputePass(encoder, &pass_desc);
+        wgpuComputePassEncoderSetPipeline(pass, _depth_copy_pipeline);
+        wgpuComputePassEncoderSetBindGroup(pass, 0, bind_group, 0, nullptr);
+
+        uint32_t workgroup_x = (_width + 7) / 8;
+        uint32_t workgroup_y = (_height + 7) / 8;
+        wgpuComputePassEncoderDispatchWorkgroups(pass, workgroup_x, workgroup_y, 1);
+
+        wgpuComputePassEncoderEnd(pass);
+        wgpuComputePassEncoderRelease(pass);
+
+        wgpuBindGroupRelease(bind_group);
+        wgpuTextureViewRelease(output_view);
+        wgpuTextureViewRelease(depth_view);
+    }
+
     std::expected<void, std::error_code>
     WgpuHiZBuffer::build_pyramid(void* depth_texture)
     {
@@ -635,6 +977,9 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         encoder_desc.label         = make_string_view("Hi-Z Pyramid Builder");
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(_device, &encoder_desc);
 
+        // Copy Depth32Float texture to R32Float texture for compute shader access
+        copy_depth_to_r32float(encoder, input_texture);
+
         uint32_t src_width  = _width;
         uint32_t src_height = _height;
 
@@ -662,8 +1007,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             input_view_desc.arrayLayerCount = 1;
             input_view_desc.aspect          = WGPUTextureAspect_All;
 
+            // For mip 0, use _depth_copy instead of input_texture (Depth32Float can't be viewed as R32Float)
+            // TODO: Implement proper depth->R32Float copy before building pyramid
             WGPUTextureView input_view = wgpuTextureCreateView(
-                (mip == 0) ? input_texture : _depth_pyramid,
+                (mip == 0) ? _depth_copy : _depth_pyramid,
                 &input_view_desc);
 
             WGPUTextureViewDescriptor output_view_desc{};
@@ -917,6 +1264,54 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         wgpuCommandBufferRelease(cmd_buffer);
         wgpuCommandEncoderRelease(encoder);
 
+        // Wait for GPU work completion using AllowProcessEvents mode
+        // Note: WaitAnyOnly + wgpuInstanceWaitAny is not yet fully implemented in wgpu-native
+        struct QueueWorkDoneContext
+        {
+            bool                    done   = false;
+            WGPUQueueWorkDoneStatus status = WGPUQueueWorkDoneStatus_Unknown;
+        };
+
+        QueueWorkDoneContext queue_ctx;
+
+        WGPUQueueWorkDoneCallbackInfo queue_callback{};
+        queue_callback.mode     = WGPUCallbackMode_AllowProcessEvents;
+        queue_callback.callback = [](WGPUQueueWorkDoneStatus status, void* userdata1, void*)
+        {
+            auto* ctx   = static_cast<QueueWorkDoneContext*>(userdata1);
+            ctx->status = status;
+            ctx->done   = true;
+        };
+        queue_callback.userdata1 = &queue_ctx;
+        queue_callback.userdata2 = nullptr;
+
+        wgpuQueueOnSubmittedWorkDone(_queue, queue_callback);
+
+        // Poll for callback completion with timeout
+        constexpr int max_poll_iterations = 1000;
+        for (int i = 0; i < max_poll_iterations && !queue_ctx.done; ++i)
+        {
+            wgpuInstanceProcessEvents(_instance);
+            if (!queue_ctx.done)
+            {
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
+        }
+
+        if (!queue_ctx.done || queue_ctx.status != WGPUQueueWorkDoneStatus_Success)
+        {
+            spdlog::error("GPU work did not complete successfully (done: {}, status: {})",
+                          queue_ctx.done,
+                          static_cast<int>(queue_ctx.status));
+            wgpuBufferRelease(readback_buffer);
+            wgpuBufferRelease(vp_buffer);
+            wgpuBindGroupRelease(bind_group_0);
+            wgpuBindGroupRelease(bind_group_1);
+            wgpuBindGroupLayoutRelease(vp_bg_desc.layout);
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
+        }
+
+        // Now map the buffer (GPU work is done)
         struct MapContext
         {
             bool               done   = false;
@@ -926,7 +1321,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         MapContext map_ctx;
 
         WGPUBufferMapCallbackInfo callback_info{};
-        callback_info.mode     = WGPUCallbackMode_WaitAnyOnly;
+        callback_info.mode     = WGPUCallbackMode_AllowProcessEvents;
         callback_info.callback = [](WGPUMapAsyncStatus status, WGPUStringView, void* userdata1, void*)
         {
             auto* ctx   = static_cast<MapContext*>(userdata1);
@@ -936,12 +1331,29 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         callback_info.userdata1 = &map_ctx;
         callback_info.userdata2 = nullptr;
 
-        WGPUFuture map_future = wgpuBufferMapAsync(readback_buffer, WGPUMapMode_Read, 0, visibility_buffer_size, callback_info);
-        (void)map_future; // Unused for now
+        wgpuBufferMapAsync(readback_buffer, WGPUMapMode_Read, 0, visibility_buffer_size, callback_info);
 
-        while (!map_ctx.done)
+        // Poll for buffer mapping completion
+        for (int i = 0; i < max_poll_iterations && !map_ctx.done; ++i)
         {
-            std::this_thread::yield();
+            wgpuInstanceProcessEvents(_instance);
+            if (!map_ctx.done)
+            {
+                std::this_thread::sleep_for(std::chrono::microseconds(100));
+            }
+        }
+
+        if (!map_ctx.done || map_ctx.status != WGPUMapAsyncStatus_Success)
+        {
+            spdlog::error("Buffer mapping failed (done: {}, status: {})",
+                          map_ctx.done,
+                          static_cast<int>(map_ctx.status));
+            wgpuBufferRelease(readback_buffer);
+            wgpuBufferRelease(vp_buffer);
+            wgpuBindGroupRelease(bind_group_0);
+            wgpuBindGroupRelease(bind_group_1);
+            wgpuBindGroupLayoutRelease(vp_bg_desc.layout);
+            return std::unexpected(make_error_code(RenderError::InvalidOperation));
         }
 
         if (map_ctx.status != WGPUMapAsyncStatus_Success)

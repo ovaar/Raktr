@@ -1,10 +1,10 @@
 /*!
- * @file fake_device.h
- * @brief Fake device implementation - software renderer for testing.
+ * @file soft_device.h
+ * @brief Software device implementation - CPU-based renderer for testing.
  */
 
-#ifndef RAKTR_RENDER_BACKEND_FAKE_DEVICE_H
-#define RAKTR_RENDER_BACKEND_FAKE_DEVICE_H
+#ifndef RAKTR_RENDER_BACKEND_SOFT_DEVICE_H
+#define RAKTR_RENDER_BACKEND_SOFT_DEVICE_H
 
 #include "aspect_ratio.h"
 #include "buffer.h"
@@ -27,7 +27,7 @@ namespace raktr::render::backend
     };
 
     /*!
-     * @brief Fake device for testing - implements real software rendering.
+     * @brief Software device for testing - implements real CPU-based rendering.
      *
      * Unlike a mock, this actually stores buffer data and renders to an
      * in-memory framebuffer, enabling true end-to-end rendering tests.
@@ -37,17 +37,17 @@ namespace raktr::render::backend
      * - Simple directional lighting (ambient + diffuse)
      * - Normals and UV coordinate support
      */
-    class FakeDevice
+    class SoftDevice
     {
     public:
-        FakeDevice(uint32_t width = 800, uint32_t height = 600);
-        ~FakeDevice() = default;
+        SoftDevice(uint32_t width = 800, uint32_t height = 600);
+        ~SoftDevice() = default;
 
         // Copyable and movable (framebuffer data can be safely copied)
-        FakeDevice(const FakeDevice&)                = default;
-        FakeDevice& operator=(const FakeDevice&)     = default;
-        FakeDevice(FakeDevice&&) noexcept            = default;
-        FakeDevice& operator=(FakeDevice&&) noexcept = default;
+        SoftDevice(const SoftDevice&)                = default;
+        SoftDevice& operator=(const SoftDevice&)     = default;
+        SoftDevice(SoftDevice&&) noexcept            = default;
+        SoftDevice& operator=(SoftDevice&&) noexcept = default;
 
         std::expected<Buffer, std::error_code>
         create_vertex_buffer(std::span<const std::byte> data);
@@ -171,4 +171,4 @@ namespace raktr::render::backend
 
 } // namespace raktr::render::backend
 
-#endif // RAKTR_RENDER_BACKEND_FAKE_DEVICE_H
+#endif // RAKTR_RENDER_BACKEND_SOFT_DEVICE_H

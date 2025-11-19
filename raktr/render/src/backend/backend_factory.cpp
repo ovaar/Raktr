@@ -3,8 +3,8 @@
  * @brief Factory for creating backend implementations.
  */
 
-#include "backend/fake/fake_backend.h"
 #include "backend/ibackend.h"
+#include "backend/soft/soft_backend.h"
 #include "backend/wgpu/wgpu_backend.h"
 
 namespace raktr::render::backend
@@ -14,8 +14,8 @@ namespace raktr::render::backend
     {
         switch (type)
         {
-            case BackendType::Fake:
-                return std::make_unique<FakeBackend>();
+            case BackendType::Soft:
+                return std::make_unique<SoftBackend>();
 
             case BackendType::WebGPU:
                 return std::make_unique<WgpuBackend>();

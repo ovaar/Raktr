@@ -1,9 +1,9 @@
 /*!
  * @file test_fake_device_depth.cpp
- * @brief Tests for FakeDevice depth buffer and lighting features.
+ * @brief Tests for SoftDevice depth buffer and lighting features.
  */
 
-#include "backend/fake/fake_device.h"
+#include "backend/soft/soft_device.h"
 #include "render_context.h"
 #include <array>
 #include <cmath>
@@ -12,10 +12,10 @@
 namespace raktr::render::test
 {
 
-    TEST(FakeDevice_DepthBuffer, EnableDepthTest_InitializesDepthBuffer)
+    TEST(SoftDevice_DepthBuffer, EnableDepthTest_InitializesDepthBuffer)
     {
-        // Arrange - create FakeDevice directly for testing device-specific methods
-        backend::FakeDevice device(800, 600);
+        // Arrange - create SoftDevice directly for testing device-specific methods
+        backend::SoftDevice device(800, 600);
 
         // Act
         device.enable_depth_test(true);
@@ -24,10 +24,10 @@ namespace raktr::render::test
         EXPECT_TRUE(device.is_depth_test_enabled());
     }
 
-    TEST(FakeDevice_DepthBuffer, ClearDepthBuffer_ResetsAllDepthValues)
+    TEST(SoftDevice_DepthBuffer, ClearDepthBuffer_ResetsAllDepthValues)
     {
-        // Arrange - create FakeDevice directly for testing device-specific methods
-        backend::FakeDevice device(800, 600);
+        // Arrange - create SoftDevice directly for testing device-specific methods
+        backend::SoftDevice device(800, 600);
 
         device.enable_depth_test(true);
 
@@ -40,10 +40,10 @@ namespace raktr::render::test
         EXPECT_TRUE(device.is_depth_test_enabled());
     }
 
-    TEST(FakeDevice_DepthBuffer, CloserTriangleOccludesFartherTriangle)
+    TEST(SoftDevice_DepthBuffer, CloserTriangleOccludesFartherTriangle)
     {
-        // Arrange - create FakeDevice directly for testing device-specific methods
-        backend::FakeDevice device(800, 600);
+        // Arrange - create SoftDevice directly for testing device-specific methods
+        backend::SoftDevice device(800, 600);
 
         device.enable_depth_test(true);
         device.clear_depth_buffer();
@@ -82,10 +82,10 @@ namespace raktr::render::test
         EXPECT_GT(drawn, 0) << "Near triangle should be visible";
     }
 
-    TEST(FakeDevice_Lighting, VerticesWithNormals_ApplyLighting)
+    TEST(SoftDevice_Lighting, VerticesWithNormals_ApplyLighting)
     {
-        // Arrange - create FakeDevice directly for testing device-specific methods
-        backend::FakeDevice device(800, 600);
+        // Arrange - create SoftDevice directly for testing device-specific methods
+        backend::SoftDevice device(800, 600);
 
         device.clear();
 
@@ -129,10 +129,10 @@ namespace raktr::render::test
         EXPECT_GT(device.count_drawn_pixels(), 0);
     }
 
-    TEST(FakeDevice_Lighting, NormalsPointingAway_ProduceDarkerColor)
+    TEST(SoftDevice_Lighting, NormalsPointingAway_ProduceDarkerColor)
     {
-        // Arrange - create FakeDevice directly for testing device-specific methods
-        backend::FakeDevice device(800, 600);
+        // Arrange - create SoftDevice directly for testing device-specific methods
+        backend::SoftDevice device(800, 600);
 
         // Triangle with normals pointing down (away from light)
         std::array<float, 18> vertices_down = {

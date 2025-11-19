@@ -28,7 +28,7 @@ namespace raktr::render
     {
         class HiZBuffer;
     }
-}
+} // namespace raktr::render
 
 // Forward declaration isn't enough for std::unique_ptr in std::function - need complete type
 #include "occlusion/hi_z_buffer.h"
@@ -140,6 +140,12 @@ namespace raktr::render
         {
             std::function<std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>(uint32_t, uint32_t)>
                 create_hi_z_buffer;
+
+            /*!
+             * @brief Get the device's depth texture handle for Hi-Z pyramid updates.
+             * @return void* pointer to backend-specific depth texture (e.g., WGPUTexture).
+             */
+            std::function<void*()> get_depth_texture;
         };
 
     } // namespace capabilities

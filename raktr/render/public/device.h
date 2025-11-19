@@ -24,7 +24,7 @@ namespace raktr::render
     /*!
      * @brief Type-erased GPU device wrapper with capability-based interface.
      *
-     * This class wraps any concrete device type (WgpuDevice, FakeDevice, etc.)
+     * This class wraps any concrete device type (WgpuDevice, SoftDevice, etc.)
      * and provides capability-based access to device operations. Use supports<T>()
      * to check if a capability exists, then capability<T>() to access it.
      *
@@ -47,7 +47,7 @@ namespace raktr::render
     public:
         /*!
          * @brief Construct a Device from any concrete device type.
-         * @param device_impl Concrete device instance (WgpuDevice, FakeDevice, etc.).
+         * @param device_impl Concrete device instance (WgpuDevice, SoftDevice, etc.).
          */
         template <typename T>
         Device(T device_impl)
@@ -206,11 +206,11 @@ namespace raktr::render
             }
 
         private:
-            [[nodiscard]] virtual std::optional<capabilities::BufferOps>          do_capability_bufferops() const          = 0;
-            [[nodiscard]] virtual std::optional<capabilities::DrawOps>            do_capability_drawops() const            = 0;
-            [[nodiscard]] virtual std::optional<capabilities::ViewportOps>        do_capability_viewportops() const        = 0;
-            [[nodiscard]] virtual std::optional<capabilities::PresentOps>         do_capability_presentops() const         = 0;
-            [[nodiscard]] virtual std::optional<capabilities::InstancingOps>      do_capability_instancingops() const      = 0;
+            [[nodiscard]] virtual std::optional<capabilities::BufferOps>           do_capability_bufferops() const           = 0;
+            [[nodiscard]] virtual std::optional<capabilities::DrawOps>             do_capability_drawops() const             = 0;
+            [[nodiscard]] virtual std::optional<capabilities::ViewportOps>         do_capability_viewportops() const         = 0;
+            [[nodiscard]] virtual std::optional<capabilities::PresentOps>          do_capability_presentops() const          = 0;
+            [[nodiscard]] virtual std::optional<capabilities::InstancingOps>       do_capability_instancingops() const       = 0;
             [[nodiscard]] virtual std::optional<capabilities::OcclusionCullingOps> do_capability_occlusioncullingops() const = 0;
 
             template <typename Capability>
@@ -451,6 +451,18 @@ namespace raktr::render
                     {
                         return dev->create_hi_z_buffer(width, height);
                     };
+
+                    // Add get_depth_texture if device supports it
+                    if constexpr (requires(T& device) {
+                                      { device.wgpu_depth_texture() } -> std::convertible_to<void*>;
+                                  })
+                    {
+                        ops.get_depth_texture = [dev = &_device]() mutable -> void*
+                        {
+                            return dev->wgpu_depth_texture();
+                        };
+                    }
+
                     return ops;
                 }
                 return std::nullopt;

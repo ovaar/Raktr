@@ -28,7 +28,7 @@ namespace raktr::render::test
     {
         // Arrange
         auto ctx = create_render_context();
-        ASSERT_TRUE(ctx->initialize({ .backend = BackendType::Fake }).has_value());
+        ASSERT_TRUE(ctx->initialize({ .backend = BackendType::Soft }).has_value());
 
         // Vertices from OBJ (positions only for MVP)
         std::array<float, 12> vertices = {
@@ -72,7 +72,7 @@ namespace raktr::render::test
     {
         // Arrange
         auto ctx = create_render_context();
-        ASSERT_TRUE(ctx->initialize({ .backend = BackendType::Fake }).has_value());
+        ASSERT_TRUE(ctx->initialize({ .backend = BackendType::Soft }).has_value());
 
         std::array<float, 12> vertices = {
             0.5773502691896258f, 3.5773502691896257f, 0.5773502691896258f, 0.5773502691896258f, 3.5773502691896257f, -0.5773502691896258f, -0.5773502691896258f, 3.5773502691896257f, -0.5773502691896258f, -0.5773502691896258f, 3.5773502691896257f, 0.5773502691896258f

@@ -1,6 +1,6 @@
 /*!
  * @file test_fake_rasterization.cpp
- * @brief Unit tests for FakeDevice rasterization behavior.
+ * @brief Unit tests for SoftDevice rasterization behavior.
  */
 
 #include "buffer.h"
@@ -17,7 +17,7 @@ namespace raktr::render::test
         void SetUp() override
         {
             ctx = create_render_context();
-            RenderConfig config{ .backend = BackendType::Fake };
+            RenderConfig config{ .backend = BackendType::Soft };
             auto         result = ctx->initialize(config);
             ASSERT_TRUE(result.has_value()) << "Failed to initialize render context";
         }
@@ -51,7 +51,7 @@ namespace raktr::render::test
         // Assert
         ASSERT_TRUE(draw_result.has_value()) << draw_result.error().message();
 
-        // Note: We can't directly access FakeDevice methods from public API
+        // Note: We can't directly access SoftDevice methods from public API
         // This test verifies the draw operation succeeds
         // A more complete test would expose pixel readback through Device interface
     }
