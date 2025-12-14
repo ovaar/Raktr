@@ -15,7 +15,6 @@
 #include <memory>
 #include <vector>
 
-
 using namespace raktr::render;
 using namespace raktr::render::backend::wgpu;
 
@@ -405,9 +404,9 @@ TEST(TemporalOcclusion_Integration, FrameIndexProgression_TrackedCorrectly)
     auto ctx = create_integration_test_context();
 
     // Act - simulate multiple frames
-    for (uint64_t i = 0; i < 10; ++i)
+    for (auto i = 0; i < 10; ++i)
     {
-        ctx.frame_index = i;
+        ctx.frame_index = static_cast<uint32_t>(i);
         graph.execute(ctx);
     }
 

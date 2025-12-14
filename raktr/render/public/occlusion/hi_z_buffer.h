@@ -18,6 +18,9 @@
 namespace raktr::render::occlusion
 {
 
+#pragma warning(push)
+#pragma warning(disable : 4324) // structure was padded due to alignment specifier
+
     /*!
      * @brief Axis-Aligned Bounding Box for visibility testing.
      * @note Uses 16-byte alignment to match GPU WGSL vec3 layout (32 bytes total per AABB).
@@ -43,6 +46,7 @@ namespace raktr::render::occlusion
             return (max - min) * 0.5f;
         }
     };
+#pragma warning(pop)
 
     /*!
      * @brief Hierarchical Z-Buffer for occlusion culling.

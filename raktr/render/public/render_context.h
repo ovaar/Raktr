@@ -97,6 +97,14 @@ namespace raktr::render
          */
         [[nodiscard]] bool is_initialized() const;
 
+        /*!
+         * @brief Get pointer to backend implementation (for backend-specific operations).
+         * @return Pointer to backend, or nullptr if not initialized.
+         * @note Use with caution - breaks abstraction. Only needed for advanced scenarios
+         *       like RenderGraph PassContext setup with backend-specific resources.
+         */
+        [[nodiscard]] void* backend_ptr() const;
+
     private:
         struct Impl;
         std::unique_ptr<Impl> _impl;

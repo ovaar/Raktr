@@ -8,7 +8,9 @@
 
 #include "aspect_ratio.h"
 #include "buffer.h"
+#include "command_encoder.h"
 #include "device.h"
+#include "queue.h"
 #include <memory>
 #include <vector>
 #include <webgpu/webgpu.h>
@@ -247,6 +249,43 @@ namespace raktr::render::backend
             return _depth_texture;
         }
 
+        /*!
+         * @brief Create a command encoder for recording GPU commands.
+         * @return WGPUCommandEncoder handle (caller must release).
+         * @note Used for RenderGraph PassContext setup.
+         */
+        [[nodiscard]] WGPUCommandEncoder wgpu_create_command_encoder() const;
+
+        /*!
+         * @brief Get the current surface texture view for rendering.
+         * @return WGPUTextureView handle (valid until present()).
+         * @note Used for RenderGraph PassContext color_target.
+         */
+        [[nodiscard]] WGPUTextureView wgpu_surface_texture_view();
+
+        /*!
+         * @brief Get the depth texture view for rendering.
+         * @return WGPUTextureView handle (may be null if not initialized).
+         * @note Used for RenderGraph PassContext depth_target.
+         */
+        [[nodiscard]] WGPUTextureView wgpu_depth_texture_view() const
+        {
+            return _depth_texture_view;
+        }
+
+        /*!
+         * @brief Get the device's queue for submitting commands.
+         * @return Type-erased Queue wrapper.
+         */
+        [[nodiscard]] Queue queue();
+
+        /*!
+         * @brief Create a command encoder for recording GPU operations.
+         * @param label Debug label for the encoder (optional).
+         * @return Type-erased CommandEncoder wrapper.
+         */
+        [[nodiscard]] CommandEncoder create_command_encoder(std::string_view label = "");
+
     private:
         WgpuDevice() = default;
 
@@ -284,6 +323,9 @@ namespace raktr::render::backend
         // Buffer management
         std::vector<WGPUBuffer> _buffers;
 
+        // Command buffer management
+        std::vector<WGPUCommandBuffer> _command_buffers;
+
         // Shader and pipeline resources
         WGPUShaderModule   _shader_module   = nullptr;
         WGPURenderPipeline _render_pipeline = nullptr;
@@ -299,7 +341,8 @@ namespace raktr::render::backend
         WGPUTextureView _depth_texture_view = nullptr;
 
         // Current frame surface texture (needs to be released after present)
-        WGPUTexture _current_surface_texture = nullptr;
+        WGPUTexture     _current_surface_texture      = nullptr;
+        WGPUTextureView _current_surface_texture_view = nullptr;
     };
 
 } // namespace raktr::render::backend

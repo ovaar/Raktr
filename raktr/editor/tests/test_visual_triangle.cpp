@@ -33,18 +33,13 @@
 #include "backend/wgpu/passes/hi_z_occlusion_pass.h"
 #include "backend/wgpu/passes/hi_z_pyramid_pass.h"
 #include "backend/wgpu/passes/instanced_geometry_pass.h"
+#include "backend/wgpu/wgpu_device.h"
 #include "backend/wgpu/wgpu_pass_context.h"
 #include "render_graph.h"
-
+#include <webgpu/webgpu.h>
 
 using namespace raktr::render;
 using namespace raktr::render::backend::wgpu;
-
-// Forward declare WgpuDevice for depth texture access
-namespace raktr::render::backend
-{
-    class WgpuDevice;
-}
 
 TEST(VisualTest, DISABLED_ManualRenderTriangle)
 {
@@ -927,32 +922,13 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
     // This demonstrates the production API that users will use
     RenderGraph temporal_occlusion_graph(device);
 
-    // Add passes to the graph:
-    // 1. HiZOcclusionPass - tests visibility against previous frame's pyramid
-    // 2. InstancedGeometryPass - renders visible objects using GPU instancing
-    // 3. HiZPyramidPass - builds pyramid from depth for next frame
-
-    temporal_occlusion_graph.add_pass(HiZOcclusionPass(
-        hi_z_buffer.get(),
-        &scene_aabbs,
-        glm::mat4(1.0f), // Will be updated each frame
-        &visibility_results));
-
-    temporal_occlusion_graph.add_pass(InstancedGeometryPass(
-        device,
-        vertex_buffer.value(),
-        index_buffer.value(),
-        instance_buffer,
-        &all_instance_data,
-        &visibility_results,
-        36 // index count for cube
-        ));
-
-    // Note: HiZPyramidPass would be added here, but it needs access to depth texture
-    // which requires platform-specific APIs. For this demo, we'll build pyramid manually.
+    // Create passes (keep handles for per-frame updates before adding to graph)
+    // Note: Once passes are moved into RenderGraph via type erasure, we can't access them.
+    // For passes that need per-frame updates, we need to rebuild the graph each frame
+    // or use a different pattern. For this demo, we'll rebuild passes each frame.
 
     spdlog::info("=== Temporal Hi-Z Occlusion Culling Architecture ===");
-    spdlog::info("RenderGraph with {} passes:", temporal_occlusion_graph.pass_count());
+    spdlog::info("RenderGraph with 2 passes:");
     spdlog::info("  Pass 1: HiZOcclusionPass       → Test visibility against previous frame's pyramid");
     spdlog::info("  Pass 2: InstancedGeometryPass  → Render visible objects using GPU instancing");
     spdlog::info("  [Pass 3: HiZPyramidPass would build pyramid - done manually for demo]");
@@ -1007,8 +983,43 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
         // Execute RenderGraph
         // ========================================================================
 
-        // TODO: Implement PassContext setup and execute
+        // Rebuild graph each frame to update passes with current view_projection
+        temporal_occlusion_graph.clear();
+
+        temporal_occlusion_graph.add_pass(HiZOcclusionPass(
+            hi_z_buffer.get(),
+            &scene_aabbs,
+            view_projection, // Updated each frame
+            &visibility_results));
+
+        temporal_occlusion_graph.add_pass(InstancedGeometryPass(
+            device,
+            vertex_buffer.value(),
+            index_buffer.value(),
+            instance_buffer,
+            &all_instance_data,
+            &visibility_results,
+            36 // index count for cube
+            ));
+
+        // Create PassContext (currently passes don't use it - they call device methods directly)
+        // TODO: Refactor passes to use PassContext command encoder and render targets
+        WgpuPassContext ctx{};
+        ctx.frame_index     = static_cast<uint32_t>(frame_index);
+        ctx.command_encoder = nullptr; // Not used yet
+        ctx.color_target    = nullptr; // Not used yet
+        ctx.depth_target    = nullptr; // Not used yet
+        ctx.viewport_width  = window_config.width;
+        ctx.viewport_height = window_config.height;
+        ctx.device          = nullptr;
+
+        // Execute render passes (they call device draw methods which handle surface internally)
         temporal_occlusion_graph.execute(ctx);
+
+        // Present frame (device draw methods already submitted their commands)
+        device->present();
+
+        frame_index++;
     }
 
     spdlog::info("Occlusion Culling Demo finished after {} frames", frame_index);

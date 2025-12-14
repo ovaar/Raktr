@@ -36,14 +36,16 @@ namespace raktr::render::backend
 
         void    shutdown() override;
         Device* device() override;
+        void*   backend_device_ptr() override;
 
     private:
         std::expected<void, std::error_code> initialize_device(
             const RenderConfig& config,
             Window*             window);
 
-        std::unique_ptr<Window> _window;
-        std::optional<Device>   _device;
+        std::unique_ptr<Window>     _window;
+        std::unique_ptr<WgpuDevice> _wgpu_device; // Raw backend device for backend_device_ptr()
+        std::optional<Device>       _device;      // Type-erased wrapper (references _wgpu_device)
     };
 
 } // namespace raktr::render::backend

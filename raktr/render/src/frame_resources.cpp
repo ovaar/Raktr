@@ -57,7 +57,7 @@ namespace raktr::render
         }
 
         // Ring buffer: previous = (current - 1 + size) % size
-        uint32_t prev_index = (_current_index + _frames.size() - 1) % _frames.size();
+        size_t prev_index = (_current_index + _frames.size() - 1) % _frames.size();
         return _frames[prev_index];
     }
 

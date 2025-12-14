@@ -135,6 +135,15 @@ namespace raktr::render
         return _impl->initialized;
     }
 
+    void* RenderContext::backend_ptr() const
+    {
+        if (_impl->initialized && _impl->backend)
+        {
+            return _impl->backend->backend_device_ptr();
+        }
+        return nullptr;
+    }
+
     std::unique_ptr<RenderContext> create_render_context()
     {
         return std::make_unique<RenderContext>();

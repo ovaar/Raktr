@@ -6,6 +6,10 @@
 #include "wgpu_device.h"
 #include "backend/webgpu/occlusion/wgpu_hi_z_buffer.h"
 #include "buffer.h"
+#include "command_encoder.h"
+#include "queue.h"
+#include "wgpu_command_encoder.h"
+#include "wgpu_queue.h"
 #include "window/window.h"
 #include <spdlog/spdlog.h>
 
@@ -713,7 +717,12 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             _bind_group_layout = nullptr;
         }
 
-        // Release any pending surface texture
+        // Release any pending surface texture and view
+        if (_current_surface_texture_view)
+        {
+            wgpuTextureViewRelease(_current_surface_texture_view);
+            _current_surface_texture_view = nullptr;
+        }
         if (_current_surface_texture)
         {
             wgpuTextureRelease(_current_surface_texture);
@@ -1368,6 +1377,67 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         _current_surface_texture = surface_texture.texture;
     }
 
+    WGPUCommandEncoder WgpuDevice::wgpu_create_command_encoder() const
+    {
+        if (!_device)
+        {
+            return nullptr;
+        }
+
+        WGPUCommandEncoderDescriptor encoder_desc = {};
+        encoder_desc.nextInChain                  = nullptr;
+        encoder_desc.label                        = make_string_view("RenderGraph Command Encoder");
+        return wgpuDeviceCreateCommandEncoder(_device, &encoder_desc);
+    }
+
+    WGPUTextureView WgpuDevice::wgpu_surface_texture_view()
+    {
+        if (!_surface)
+        {
+            return nullptr;
+        }
+
+        // Release previous surface texture and view if any
+        if (_current_surface_texture_view)
+        {
+            wgpuTextureViewRelease(_current_surface_texture_view);
+            _current_surface_texture_view = nullptr;
+        }
+        if (_current_surface_texture)
+        {
+            wgpuTextureRelease(_current_surface_texture);
+            _current_surface_texture = nullptr;
+        }
+
+        // Get current texture from surface
+        WGPUSurfaceTexture surface_texture;
+        wgpuSurfaceGetCurrentTexture(_surface, &surface_texture);
+
+        if (surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal &&
+            surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessSuboptimal)
+        {
+            spdlog::error("Failed to get surface texture: {}", static_cast<int>(surface_texture.status));
+            return nullptr;
+        }
+
+        // Create texture view
+        WGPUTextureViewDescriptor view_desc = {};
+        view_desc.nextInChain               = nullptr;
+        view_desc.label                     = make_string_view("RenderGraph Surface Texture View");
+        view_desc.format                    = _swapchain_format;
+        view_desc.dimension                 = WGPUTextureViewDimension_2D;
+        view_desc.baseMipLevel              = 0;
+        view_desc.mipLevelCount             = 1;
+        view_desc.baseArrayLayer            = 0;
+        view_desc.arrayLayerCount           = 1;
+        view_desc.aspect                    = WGPUTextureAspect_All;
+
+        _current_surface_texture_view = wgpuTextureCreateView(surface_texture.texture, &view_desc);
+        _current_surface_texture      = surface_texture.texture;
+
+        return _current_surface_texture_view;
+    }
+
     void WgpuDevice::present()
     {
         if (!_surface)
@@ -1452,6 +1522,44 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
                          _viewport.x,
                          _viewport.y);
         }
+    }
+
+    Queue WgpuDevice::queue()
+    {
+        if (!_queue)
+        {
+            spdlog::error("WgpuDevice::queue: Queue not initialized");
+            return Queue(backend::WgpuQueue(nullptr, nullptr, nullptr));
+        }
+
+        // Create WgpuQueue wrapper with pointers to device storage
+        backend::WgpuQueue wgpu_queue(_queue, &_buffers, &_command_buffers);
+        return Queue(std::move(wgpu_queue));
+    }
+
+    CommandEncoder WgpuDevice::create_command_encoder(std::string_view label)
+    {
+        if (!_device)
+        {
+            spdlog::error("WgpuDevice::create_command_encoder: Device not initialized");
+            return CommandEncoder(backend::WgpuCommandEncoder(nullptr, nullptr, nullptr));
+        }
+
+        WGPUCommandEncoderDescriptor encoder_desc = {};
+        encoder_desc.nextInChain                  = nullptr;
+        encoder_desc.label                        = make_string_view(label.data());
+
+        WGPUCommandEncoder wgpu_encoder = wgpuDeviceCreateCommandEncoder(_device, &encoder_desc);
+
+        if (!wgpu_encoder)
+        {
+            spdlog::error("WgpuDevice::create_command_encoder: Failed to create command encoder");
+            return CommandEncoder(backend::WgpuCommandEncoder(nullptr, nullptr, nullptr));
+        }
+
+        // Create WgpuCommandEncoder wrapper with pointers to device storage
+        backend::WgpuCommandEncoder encoder(wgpu_encoder, &_buffers, &_command_buffers);
+        return CommandEncoder(std::move(encoder));
     }
 
 } // namespace raktr::render::backend

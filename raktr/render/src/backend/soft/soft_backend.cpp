@@ -53,4 +53,10 @@ namespace raktr::render::backend
         return _device.has_value() ? &_device.value() : nullptr;
     }
 
+    void* SoftBackend::backend_device_ptr()
+    {
+        // TODO: Return pointer to SoftDevice inside _device
+        return nullptr;
+    }
+
 } // namespace raktr::render::backend

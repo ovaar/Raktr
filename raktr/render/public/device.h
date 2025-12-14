@@ -12,7 +12,9 @@
 
 #include "aspect_ratio.h"
 #include "buffer.h"
+#include "command_encoder.h"
 #include "device_capabilities.h"
+#include "queue.h"
 #include <any>
 #include <memory>
 #include <optional>
@@ -46,12 +48,23 @@ namespace raktr::render
     {
     public:
         /*!
-         * @brief Construct a Device from any concrete device type.
+         * @brief Construct a Device from any concrete device type (owning).
          * @param device_impl Concrete device instance (WgpuDevice, SoftDevice, etc.).
          */
         template <typename T>
         Device(T device_impl)
             : _impl(std::make_unique<Model<T>>(std::move(device_impl)))
+        {
+        }
+
+        /*!
+         * @brief Construct a Device from a pointer (non-owning).
+         * @param device_ptr Pointer to existing device. Caller retains ownership.
+         * @warning The pointed-to device must outlive this Device instance.
+         */
+        template <typename T>
+        Device(T* device_ptr)
+            : _impl(std::make_unique<Model<T>>(device_ptr))
         {
         }
 
@@ -212,6 +225,8 @@ namespace raktr::render
             [[nodiscard]] virtual std::optional<capabilities::PresentOps>          do_capability_presentops() const          = 0;
             [[nodiscard]] virtual std::optional<capabilities::InstancingOps>       do_capability_instancingops() const       = 0;
             [[nodiscard]] virtual std::optional<capabilities::OcclusionCullingOps> do_capability_occlusioncullingops() const = 0;
+            [[nodiscard]] virtual std::optional<capabilities::QueueOps>            do_capability_queueops() const            = 0;
+            [[nodiscard]] virtual std::optional<capabilities::CommandEncoderOps>   do_capability_commandencoderops() const   = 0;
 
             template <typename Capability>
             std::optional<Capability> do_capability(std::type_index /* ti */) const
@@ -240,7 +255,18 @@ namespace raktr::render
                 {
                     return do_capability_occlusioncullingops();
                 }
-                return std::nullopt;
+                else if constexpr (std::is_same_v<Capability, capabilities::QueueOps>)
+                {
+                    return do_capability_queueops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::CommandEncoderOps>)
+                {
+                    return do_capability_commandencoderops();
+                }
+                else
+                {
+                    std::unreachable();
+                }
             }
         };
 
@@ -250,8 +276,18 @@ namespace raktr::render
         template <typename T>
         struct Model : Concept
         {
+            // Owning constructor
             explicit Model(T device_impl)
-                : _device(std::move(device_impl))
+                : _device_storage(std::move(device_impl)), _device_ptr(&*_device_storage), _owns(true)
+            {
+                build_capability_map();
+            }
+
+            // Non-owning constructor
+            explicit Model(T* device_ptr)
+                : _device_storage(std::nullopt) // No storage in non-owning case
+                  ,
+                  _device_ptr(device_ptr), _owns(false)
             {
                 build_capability_map();
             }
@@ -268,8 +304,16 @@ namespace raktr::render
             }
 
         private:
-            mutable T                                     _device;
+            std::optional<T>                              _device_storage; // Used if _owns == true
+            T*                                            _device_ptr;     // Points to storage or external
+            bool                                          _owns;           // Track ownership
             std::unordered_map<std::type_index, std::any> _capabilities;
+
+            // Get pointer to device (handles both owning and non-owning cases)
+            T* get_device() const
+            {
+                return _device_ptr;
+            }
 
             void build_capability_map()
             {
@@ -312,6 +356,22 @@ namespace raktr::render
                 {
                     _capabilities[std::type_index(typeid(capabilities::PresentOps))] = true;
                 }
+
+                // Check for QueueOps capability
+                if constexpr (requires(T& d) {
+                                  { d.queue() } -> std::same_as<Queue>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::QueueOps))] = true;
+                }
+
+                // Check for CommandEncoderOps capability
+                if constexpr (requires(T& d, std::string_view label) {
+                                  { d.create_command_encoder(label) } -> std::same_as<CommandEncoder>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::CommandEncoderOps))] = true;
+                }
             }
 
             std::optional<capabilities::BufferOps> do_capability_bufferops() const override
@@ -321,29 +381,32 @@ namespace raktr::render
                               })
                 {
                     capabilities::BufferOps ops;
-                    ops.create_vertex_buffer = [dev = &_device](std::span<const std::byte> data) mutable
+                    ops.create_vertex_buffer = [this](std::span<const std::byte> data) mutable
                     {
-                        return dev->create_vertex_buffer(data);
+                        return this->get_device()->create_vertex_buffer(data);
                     };
-                    ops.create_index_buffer = [dev = &_device](std::span<const std::byte> data) mutable
+                    ops.create_index_buffer = [this](std::span<const std::byte> data) mutable
                     {
-                        return dev->create_index_buffer(data);
+                        return this->get_device()->create_index_buffer(data);
                     };
-                    ops.create_uniform_buffer = [dev = &_device](size_t sz) mutable
+                    ops.create_uniform_buffer = [this](size_t sz) mutable
                     {
-                        return dev->create_uniform_buffer(sz);
+                        return this->get_device()->create_uniform_buffer(sz);
                     };
-                    ops.update_uniform_buffer = [dev = &_device](const Buffer& buf, std::span<const std::byte> data) mutable
+                    ops.update_uniform_buffer = [this](const Buffer& buf, std::span<const std::byte> data) mutable
                     {
-                        return dev->update_uniform_buffer(buf, data);
+                        return this->get_device()->update_uniform_buffer(buf, data);
                     };
-                    ops.set_uniform_buffer = [dev = &_device](const Buffer& buf) mutable
+                    ops.set_uniform_buffer = [this](const Buffer& buf) mutable
                     {
-                        dev->set_uniform_buffer(buf);
+                        this->get_device()->set_uniform_buffer(buf);
                     };
                     return ops;
                 }
-                return std::nullopt;
+                else
+                {
+                    std::unreachable();
+                }
             }
 
             std::optional<capabilities::DrawOps> do_capability_drawops() const override
@@ -353,17 +416,20 @@ namespace raktr::render
                               })
                 {
                     capabilities::DrawOps ops;
-                    ops.draw_indexed = [dev = &_device](const Buffer& vb, const Buffer& ib, uint32_t count) mutable
+                    ops.draw_indexed = [this](const Buffer& vb, const Buffer& ib, uint32_t count) mutable
                     {
-                        return dev->draw_indexed(vb, ib, count);
+                        return this->get_device()->draw_indexed(vb, ib, count);
                     };
-                    ops.clear = [dev = &_device]() mutable
+                    ops.clear = [this]() mutable
                     {
-                        dev->clear();
+                        this->get_device()->clear();
                     };
                     return ops;
                 }
-                return std::nullopt;
+                else
+                {
+                    std::unreachable();
+                }
             }
 
             std::optional<capabilities::ViewportOps> do_capability_viewportops() const override
@@ -373,25 +439,28 @@ namespace raktr::render
                               })
                 {
                     capabilities::ViewportOps ops;
-                    ops.resize = [dev = &_device](uint32_t w, uint32_t h) mutable
+                    ops.resize = [this](uint32_t w, uint32_t h) mutable
                     {
-                        return dev->resize(w, h);
+                        return this->get_device()->resize(w, h);
                     };
-                    ops.set_aspect_ratio = [dev = &_device](AspectRatio ar, float custom) mutable
+                    ops.set_aspect_ratio = [this](AspectRatio ar, float custom) mutable
                     {
-                        dev->set_aspect_ratio(ar, custom);
+                        this->get_device()->set_aspect_ratio(ar, custom);
                     };
-                    ops.aspect_ratio = [dev = &_device]() mutable
+                    ops.aspect_ratio = [this]() mutable
                     {
-                        return dev->aspect_ratio();
+                        return this->get_device()->aspect_ratio();
                     };
-                    ops.viewport = [dev = &_device]() mutable -> const Viewport&
+                    ops.viewport = [this]() mutable -> const Viewport&
                     {
-                        return dev->viewport();
+                        return this->get_device()->viewport();
                     };
                     return ops;
                 }
-                return std::nullopt;
+                else
+                {
+                    std::unreachable();
+                }
             }
 
             std::optional<capabilities::PresentOps> do_capability_presentops() const override
@@ -401,13 +470,16 @@ namespace raktr::render
                               })
                 {
                     capabilities::PresentOps ops;
-                    ops.present = [dev = &_device]() mutable
+                    ops.present = [this]() mutable
                     {
-                        dev->present();
+                        this->get_device()->present();
                     };
                     return ops;
                 }
-                return std::nullopt;
+                else
+                {
+                    std::unreachable();
+                }
             }
 
             std::optional<capabilities::InstancingOps> do_capability_instancingops() const override
@@ -419,25 +491,28 @@ namespace raktr::render
                               })
                 {
                     capabilities::InstancingOps ops;
-                    ops.create_instance_buffer = [dev = &_device](std::span<const std::byte> data) mutable
+                    ops.create_instance_buffer = [this](std::span<const std::byte> data) mutable
                     {
-                        return dev->create_instance_buffer(data);
+                        return this->get_device()->create_instance_buffer(data);
                     };
-                    ops.update_instance_buffer = [dev = &_device](const Buffer& buffer, std::span<const std::byte> data) mutable
+                    ops.update_instance_buffer = [this](const Buffer& buffer, std::span<const std::byte> data) mutable
                     {
-                        return dev->update_instance_buffer(buffer, data);
+                        return this->get_device()->update_instance_buffer(buffer, data);
                     };
-                    ops.draw_indexed_instanced = [dev = &_device](const Buffer& vertex_buffer,
-                                                                  const Buffer& index_buffer,
-                                                                  const Buffer& instance_buffer,
-                                                                  uint32_t      index_count,
-                                                                  uint32_t      instance_count) mutable
+                    ops.draw_indexed_instanced = [this](const Buffer& vertex_buffer,
+                                                        const Buffer& index_buffer,
+                                                        const Buffer& instance_buffer,
+                                                        uint32_t      index_count,
+                                                        uint32_t      instance_count) mutable
                     {
-                        return dev->draw_indexed_instanced(vertex_buffer, index_buffer, instance_buffer, index_count, instance_count);
+                        return this->get_device()->draw_indexed_instanced(vertex_buffer, index_buffer, instance_buffer, index_count, instance_count);
                     };
                     return ops;
                 }
-                return std::nullopt;
+                else
+                {
+                    std::unreachable();
+                }
             }
 
             std::optional<capabilities::OcclusionCullingOps> do_capability_occlusioncullingops() const override
@@ -447,9 +522,9 @@ namespace raktr::render
                               })
                 {
                     capabilities::OcclusionCullingOps ops;
-                    ops.create_hi_z_buffer = [dev = &_device](uint32_t width, uint32_t height) mutable
+                    ops.create_hi_z_buffer = [this](uint32_t width, uint32_t height) mutable
                     {
-                        return dev->create_hi_z_buffer(width, height);
+                        return this->get_device()->create_hi_z_buffer(width, height);
                     };
 
                     // Add get_depth_texture if device supports it
@@ -457,15 +532,56 @@ namespace raktr::render
                                       { device.wgpu_depth_texture() } -> std::convertible_to<void*>;
                                   })
                     {
-                        ops.get_depth_texture = [dev = &_device]() mutable -> void*
+                        ops.get_depth_texture = [this]() mutable -> void*
                         {
-                            return dev->wgpu_depth_texture();
+                            return this->get_device()->wgpu_depth_texture();
                         };
                     }
 
                     return ops;
                 }
-                return std::nullopt;
+                else
+                {
+                    std::unreachable();
+                }
+            }
+
+            std::optional<capabilities::QueueOps> do_capability_queueops() const override
+            {
+                if constexpr (requires(T& device) {
+                                  { device.queue() } -> std::same_as<Queue>;
+                              })
+                {
+                    capabilities::QueueOps ops;
+                    ops.queue = [this]() mutable
+                    {
+                        return this->get_device()->queue();
+                    };
+                    return ops;
+                }
+                else
+                {
+                    std::unreachable();
+                }
+            }
+
+            std::optional<capabilities::CommandEncoderOps> do_capability_commandencoderops() const override
+            {
+                if constexpr (requires(T& device, std::string_view label) {
+                                  { device.create_command_encoder(label) } -> std::same_as<CommandEncoder>;
+                              })
+                {
+                    capabilities::CommandEncoderOps ops;
+                    ops.create_command_encoder = [this](std::string_view label) mutable
+                    {
+                        return this->get_device()->create_command_encoder(label);
+                    };
+                    return ops;
+                }
+                else
+                {
+                    std::unreachable();
+                }
             }
         };
 

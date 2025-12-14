@@ -12,7 +12,6 @@
 #include <memory>
 #include <system_error>
 
-
 namespace raktr::render::backend
 {
     /*!
@@ -52,6 +51,12 @@ namespace raktr::render::backend
          * @brief Get the device abstraction.
          */
         virtual Device* device() = 0;
+
+        /*!
+         * @brief Get pointer to backend-specific device (for PassContext setup).
+         * @return Raw pointer to backend device (WgpuDevice*, SoftDevice*, etc).
+         */
+        virtual void* backend_device_ptr() = 0;
     };
 
     /*!

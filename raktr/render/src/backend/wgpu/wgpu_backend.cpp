@@ -11,7 +11,7 @@ namespace raktr::render::backend
 {
 
     WgpuBackend::WgpuBackend()
-        : _window(nullptr), _device(std::nullopt)
+        : _window(nullptr), _wgpu_device(nullptr), _device(std::nullopt)
     {
     }
 
@@ -73,7 +73,11 @@ namespace raktr::render::backend
             _window.reset(); // Safe - only affects owned window
             return std::unexpected(device_result.error());
         }
-        _device = Device(std::move(device_result.value()));
+
+        // Store device in unique_ptr
+        _wgpu_device = std::make_unique<WgpuDevice>(std::move(device_result.value()));
+        // Create Device wrapper (non-owning, pointer = observer pattern)
+        _device = Device(_wgpu_device.get());
 
         spdlog::info("WebGPU backend initialized successfully");
         return {};
@@ -82,12 +86,18 @@ namespace raktr::render::backend
     void WgpuBackend::shutdown()
     {
         _device = std::nullopt;
+        _wgpu_device.reset();
         _window.reset();
     }
 
     Device* WgpuBackend::device()
     {
         return _device.has_value() ? &_device.value() : nullptr;
+    }
+
+    void* WgpuBackend::backend_device_ptr()
+    {
+        return _wgpu_device.get();
     }
 
 } // namespace raktr::render::backend

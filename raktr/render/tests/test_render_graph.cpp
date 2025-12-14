@@ -52,7 +52,7 @@ namespace
         {
             return _execute_count;
         }
-        uint64_t last_frame_index() const
+        uint32_t last_frame_index() const
         {
             return _last_frame_index;
         }
@@ -65,13 +65,13 @@ namespace
         std::string _name;
         bool*       _executed;
         int         _execute_count{ 0 };
-        uint64_t    _last_frame_index{ 0 };
+        uint32_t    _last_frame_index{ 0 };
         bool        _resize_called{ false };
         uint32_t    _last_width{ 0 };
         uint32_t    _last_height{ 0 };
     };
 
-    WgpuPassContext create_test_context(uint64_t frame_index = 0)
+    WgpuPassContext create_test_context(uint32_t frame_index = 0)
     {
         WgpuPassContext ctx{};
         ctx.frame_index             = frame_index;

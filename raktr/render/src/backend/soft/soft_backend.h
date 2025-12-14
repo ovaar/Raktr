@@ -32,6 +32,7 @@ namespace raktr::render::backend
 
         void                  shutdown() override;
         [[nodiscard]] Device* device() override;
+        void*                 backend_device_ptr() override;
 
     private:
         std::optional<Device> _device;

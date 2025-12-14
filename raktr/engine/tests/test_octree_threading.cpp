@@ -324,7 +324,7 @@ TEST_F(OctreeThreadingTest, stress_test_many_objects_many_threads)
     {
         threads.emplace_back([&, thread_id = i]()
                              {
-                                 std::mt19937                          rng(thread_id);
+                                 std::mt19937                          rng(static_cast<unsigned int>(thread_id));
                                  std::uniform_real_distribution<float> dist(-50.0f, 50.0f);
 
                                  for (size_t j = 0; j < queries_per_thread; ++j)

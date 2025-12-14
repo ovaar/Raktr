@@ -48,30 +48,33 @@ namespace raktr::render::backend::wgpu
         _last_drawn_count = static_cast<uint32_t>(visible_instances.size());
 
         // Update instance buffer with visible instances
-        if (!visible_instances.empty())
+        if (visible_instances.empty())
         {
-            auto update_result = _device->update_instance_buffer(
-                _instance_buffer,
-                std::as_bytes(std::span(visible_instances)));
+            return; // Nothing to draw
+        }
 
-            if (!update_result.has_value())
-            {
-                spdlog::error("InstancedGeometryPass: Failed to update instance buffer");
-                return;
-            }
+        auto update_result = _device->update_instance_buffer(
+            _instance_buffer,
+            std::as_bytes(std::span(visible_instances)));
 
-            // Draw all visible instances in one call
-            auto draw_result = _device->draw_indexed_instanced(
-                _vertex_buffer,
-                _index_buffer,
-                _instance_buffer,
-                _index_count,
-                _last_drawn_count);
+        if (!update_result.has_value())
+        {
+            spdlog::error("InstancedGeometryPass: Failed to update instance buffer");
+            return;
+        }
 
-            if (!draw_result.has_value())
-            {
-                spdlog::error("InstancedGeometryPass: Failed to draw instances");
-            }
+        // TODO: Use PassContext command encoder and render targets to record draw commands
+        // For now, fall back to device draw (which will acquire surface - needs refactoring)
+        auto draw_result = _device->draw_indexed_instanced(
+            _vertex_buffer,
+            _index_buffer,
+            _instance_buffer,
+            _index_count,
+            _last_drawn_count);
+
+        if (!draw_result.has_value())
+        {
+            spdlog::error("InstancedGeometryPass: Failed to draw instances");
         }
 
         // Calculate and log culling statistics

@@ -21,6 +21,8 @@
 namespace raktr::render
 {
     class Buffer;
+    class Queue;
+    class CommandEncoder;
     enum class AspectRatio;
     struct Viewport;
 
@@ -146,6 +148,28 @@ namespace raktr::render
              * @return void* pointer to backend-specific depth texture (e.g., WGPUTexture).
              */
             std::function<void*()> get_depth_texture;
+        };
+
+        /*!
+         * @brief Queue access capability.
+         *
+         * Provides access to the device's command queue for submitting commands
+         * and writing buffer data directly from CPU.
+         */
+        struct QueueOps
+        {
+            std::function<Queue()> queue;
+        };
+
+        /*!
+         * @brief Command encoder creation capability.
+         *
+         * Provides creation of command encoders for recording GPU operations.
+         * Required for explicit command recording in modern graphics APIs.
+         */
+        struct CommandEncoderOps
+        {
+            std::function<CommandEncoder(std::string_view)> create_command_encoder;
         };
 
     } // namespace capabilities
