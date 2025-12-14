@@ -26,6 +26,17 @@ namespace raktr::render
     enum class AspectRatio;
     struct Viewport;
 
+    class ShaderModule;
+    class RenderPipeline;
+    class ComputePipeline;
+    class BindGroupLayout;
+    class BindGroup;
+    struct ShaderModuleDescriptor;
+    struct RenderPipelineDescriptor;
+    struct ComputePipelineDescriptor;
+    struct BindGroupLayoutDescriptor;
+    struct BindGroupDescriptor;
+
     namespace occlusion
     {
         class HiZBuffer;
@@ -170,6 +181,56 @@ namespace raktr::render
         struct CommandEncoderOps
         {
             std::function<CommandEncoder(std::string_view)> create_command_encoder;
+        };
+
+        /*!
+         * @brief Shader module creation capability (Phase 3).
+         *
+         * Provides functions for creating shader modules from WGSL source code.
+         * Modern graphics APIs (WebGPU, Vulkan, DX12) should support this capability.
+         */
+        struct ShaderOps
+        {
+            std::function<std::expected<ShaderModule, std::error_code>(const ShaderModuleDescriptor&)>
+                create_shader_module;
+        };
+
+        /*!
+         * @brief Graphics pipeline creation capability (Phase 3).
+         *
+         * Provides functions for creating immutable render pipeline state objects
+         * with vertex layouts, shader stages, and rasterization state.
+         */
+        struct RenderPipelineOps
+        {
+            std::function<std::expected<RenderPipeline, std::error_code>(const RenderPipelineDescriptor&)>
+                create_render_pipeline;
+        };
+
+        /*!
+         * @brief Compute pipeline creation capability (Phase 3).
+         *
+         * Provides functions for creating compute pipelines for GPGPU operations.
+         */
+        struct ComputePipelineOps
+        {
+            std::function<std::expected<ComputePipeline, std::error_code>(const ComputePipelineDescriptor&)>
+                create_compute_pipeline;
+        };
+
+        /*!
+         * @brief Bind group creation capability (Phase 3).
+         *
+         * Provides functions for creating bind group layouts and bind groups
+         * that describe resource bindings for shaders.
+         */
+        struct BindGroupOps
+        {
+            std::function<std::expected<BindGroupLayout, std::error_code>(const BindGroupLayoutDescriptor&)>
+                create_bind_group_layout;
+
+            std::function<std::expected<BindGroup, std::error_code>(const BindGroupDescriptor&)>
+                create_bind_group;
         };
 
     } // namespace capabilities

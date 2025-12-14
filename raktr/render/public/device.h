@@ -227,6 +227,10 @@ namespace raktr::render
             [[nodiscard]] virtual std::optional<capabilities::OcclusionCullingOps> do_capability_occlusioncullingops() const = 0;
             [[nodiscard]] virtual std::optional<capabilities::QueueOps>            do_capability_queueops() const            = 0;
             [[nodiscard]] virtual std::optional<capabilities::CommandEncoderOps>   do_capability_commandencoderops() const   = 0;
+            [[nodiscard]] virtual std::optional<capabilities::ShaderOps>           do_capability_shaderops() const           = 0;
+            [[nodiscard]] virtual std::optional<capabilities::RenderPipelineOps>   do_capability_renderpipelineops() const   = 0;
+            [[nodiscard]] virtual std::optional<capabilities::ComputePipelineOps>  do_capability_computepipelineops() const  = 0;
+            [[nodiscard]] virtual std::optional<capabilities::BindGroupOps>        do_capability_bindgroupops() const        = 0;
 
             template <typename Capability>
             std::optional<Capability> do_capability(std::type_index /* ti */) const
@@ -262,6 +266,22 @@ namespace raktr::render
                 else if constexpr (std::is_same_v<Capability, capabilities::CommandEncoderOps>)
                 {
                     return do_capability_commandencoderops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::ShaderOps>)
+                {
+                    return do_capability_shaderops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::RenderPipelineOps>)
+                {
+                    return do_capability_renderpipelineops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::ComputePipelineOps>)
+                {
+                    return do_capability_computepipelineops();
+                }
+                else if constexpr (std::is_same_v<Capability, capabilities::BindGroupOps>)
+                {
+                    return do_capability_bindgroupops();
                 }
                 else
                 {
@@ -371,6 +391,39 @@ namespace raktr::render
                               })
                 {
                     _capabilities[std::type_index(typeid(capabilities::CommandEncoderOps))] = true;
+                }
+
+                // ShaderOps capability
+                if constexpr (requires(T& d, const ShaderModuleDescriptor& desc) {
+                                  { d.create_shader_module(desc) } -> std::same_as<std::expected<ShaderModule, std::error_code>>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::ShaderOps))] = true;
+                }
+
+                // Check for RenderPipelineOps capability
+                if constexpr (requires(T& d, const RenderPipelineDescriptor& desc) {
+                                  { d.create_render_pipeline(desc) } -> std::same_as<std::expected<RenderPipeline, std::error_code>>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::RenderPipelineOps))] = true;
+                }
+
+                // Check for ComputePipelineOps capability
+                if constexpr (requires(T& d, const ComputePipelineDescriptor& desc) {
+                                  { d.create_compute_pipeline(desc) } -> std::same_as<std::expected<ComputePipeline, std::error_code>>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::ComputePipelineOps))] = true;
+                }
+
+                // Check for BindGroupOps capability
+                if constexpr (requires(T& d, const BindGroupLayoutDescriptor& layout_desc, const BindGroupDescriptor& bind_desc) {
+                                  { d.create_bind_group_layout(layout_desc) } -> std::same_as<std::expected<BindGroupLayout, std::error_code>>;
+                                  { d.create_bind_group(bind_desc) } -> std::same_as<std::expected<BindGroup, std::error_code>>;
+                              })
+                {
+                    _capabilities[std::type_index(typeid(capabilities::BindGroupOps))] = true;
                 }
             }
 
@@ -575,6 +628,87 @@ namespace raktr::render
                     ops.create_command_encoder = [this](std::string_view label) mutable
                     {
                         return this->get_device()->create_command_encoder(label);
+                    };
+                    return ops;
+                }
+                else
+                {
+                    std::unreachable();
+                }
+            }
+
+            std::optional<capabilities::ShaderOps> do_capability_shaderops() const override
+            {
+                if constexpr (requires(T& device, const ShaderModuleDescriptor& desc) {
+                                  { device.create_shader_module(desc) } -> std::same_as<std::expected<ShaderModule, std::error_code>>;
+                              })
+                {
+                    capabilities::ShaderOps ops;
+                    ops.create_shader_module = [this](const ShaderModuleDescriptor& desc) mutable
+                    {
+                        return this->get_device()->create_shader_module(desc);
+                    };
+                    return ops;
+                }
+                else
+                {
+                    std::unreachable();
+                }
+            }
+
+            std::optional<capabilities::RenderPipelineOps> do_capability_renderpipelineops() const override
+            {
+                if constexpr (requires(T& device, const RenderPipelineDescriptor& desc) {
+                                  { device.create_render_pipeline(desc) } -> std::same_as<std::expected<RenderPipeline, std::error_code>>;
+                              })
+                {
+                    capabilities::RenderPipelineOps ops;
+                    ops.create_render_pipeline = [this](const RenderPipelineDescriptor& desc) mutable
+                    {
+                        return this->get_device()->create_render_pipeline(desc);
+                    };
+                    return ops;
+                }
+                else
+                {
+                    std::unreachable();
+                }
+            }
+
+            std::optional<capabilities::ComputePipelineOps> do_capability_computepipelineops() const override
+            {
+                if constexpr (requires(T& device, const ComputePipelineDescriptor& desc) {
+                                  { device.create_compute_pipeline(desc) } -> std::same_as<std::expected<ComputePipeline, std::error_code>>;
+                              })
+                {
+                    capabilities::ComputePipelineOps ops;
+                    ops.create_compute_pipeline = [this](const ComputePipelineDescriptor& desc) mutable
+                    {
+                        return this->get_device()->create_compute_pipeline(desc);
+                    };
+                    return ops;
+                }
+                else
+                {
+                    std::unreachable();
+                }
+            }
+
+            std::optional<capabilities::BindGroupOps> do_capability_bindgroupops() const override
+            {
+                if constexpr (requires(T& device, const BindGroupLayoutDescriptor& layout_desc, const BindGroupDescriptor& bind_desc) {
+                                  { device.create_bind_group_layout(layout_desc) } -> std::same_as<std::expected<BindGroupLayout, std::error_code>>;
+                                  { device.create_bind_group(bind_desc) } -> std::same_as<std::expected<BindGroup, std::error_code>>;
+                              })
+                {
+                    capabilities::BindGroupOps ops;
+                    ops.create_bind_group_layout = [this](const BindGroupLayoutDescriptor& desc) mutable
+                    {
+                        return this->get_device()->create_bind_group_layout(desc);
+                    };
+                    ops.create_bind_group = [this](const BindGroupDescriptor& desc) mutable
+                    {
+                        return this->get_device()->create_bind_group(desc);
                     };
                     return ops;
                 }

@@ -8,10 +8,16 @@
 #include "buffer.h"
 #include "command_encoder.h"
 #include "queue.h"
+#include "render_error.h"
+#include "wgpu_bind_group.h"
 #include "wgpu_command_encoder.h"
+#include "wgpu_compute_pipeline.h"
 #include "wgpu_queue.h"
+#include "wgpu_render_pipeline.h"
+#include "wgpu_shader_module.h"
 #include "window/window.h"
 #include <spdlog/spdlog.h>
+
 
 #ifdef _WIN32
 #include <windows.h>
@@ -693,7 +699,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         }
         _buffers.clear();
 
-        // Release shader and pipeline resources
+        // Release shader and pipeline resources (legacy)
         if (_render_pipeline)
         {
             wgpuRenderPipelineRelease(_render_pipeline);
@@ -705,7 +711,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             _shader_module = nullptr;
         }
 
-        // Release bind group resources
+        // Release bind group resources (legacy)
         if (_current_bind_group)
         {
             wgpuBindGroupRelease(_current_bind_group);
@@ -716,6 +722,52 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
             wgpuBindGroupLayoutRelease(_bind_group_layout);
             _bind_group_layout = nullptr;
         }
+
+        // Release Phase 3 resources
+        for (auto bind_group : _bind_groups)
+        {
+            if (bind_group)
+            {
+                wgpuBindGroupRelease(bind_group);
+            }
+        }
+        _bind_groups.clear();
+
+        for (auto layout : _bind_group_layouts)
+        {
+            if (layout)
+            {
+                wgpuBindGroupLayoutRelease(layout);
+            }
+        }
+        _bind_group_layouts.clear();
+
+        for (auto pipeline : _compute_pipelines)
+        {
+            if (pipeline)
+            {
+                wgpuComputePipelineRelease(pipeline);
+            }
+        }
+        _compute_pipelines.clear();
+
+        for (auto pipeline : _render_pipelines)
+        {
+            if (pipeline)
+            {
+                wgpuRenderPipelineRelease(pipeline);
+            }
+        }
+        _render_pipelines.clear();
+
+        for (auto shader : _shader_modules)
+        {
+            if (shader)
+            {
+                wgpuShaderModuleRelease(shader);
+            }
+        }
+        _shader_modules.clear();
 
         // Release any pending surface texture and view
         if (_current_surface_texture_view)
@@ -1560,6 +1612,150 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // Create WgpuCommandEncoder wrapper with pointers to device storage
         backend::WgpuCommandEncoder encoder(wgpu_encoder, &_buffers, &_command_buffers);
         return CommandEncoder(std::move(encoder));
+    }
+
+    // ============================================================================
+    // Phase 3: Shader and Pipeline Creation
+    // ============================================================================
+
+    std::expected<ShaderModule, std::error_code>
+    WgpuDevice::create_shader_module(const ShaderModuleDescriptor& descriptor)
+    {
+        if (!_device)
+        {
+            spdlog::error("WgpuDevice::create_shader_module: Device not initialized");
+            return std::unexpected(make_error_code(RenderError::DeviceNotInitialized));
+        }
+
+        // Create backend shader module
+        backend::wgpu::WgpuShaderModule wgpu_shader(_device, descriptor.code, descriptor.label);
+
+        if (!wgpu_shader.native_handle())
+        {
+            spdlog::error("WgpuDevice::create_shader_module: Failed to create shader module");
+            return std::unexpected(make_error_code(RenderError::ShaderCompilationFailed));
+        }
+
+        // Store the native handle and get ID
+        size_t id = _shader_modules.size();
+        _shader_modules.push_back(static_cast<WGPUShaderModule>(wgpu_shader.native_handle()));
+
+        spdlog::info("Created shader module '{}' with ID {}", descriptor.label, id);
+
+        // Return type-erased ShaderModule with ID
+        return ShaderModule(std::move(wgpu_shader));
+    }
+
+    std::expected<RenderPipeline, std::error_code>
+    WgpuDevice::create_render_pipeline(const RenderPipelineDescriptor& descriptor)
+    {
+        if (!_device)
+        {
+            spdlog::error("WgpuDevice::create_render_pipeline: Device not initialized");
+            return std::unexpected(make_error_code(RenderError::DeviceNotInitialized));
+        }
+
+        // Create backend render pipeline
+        backend::wgpu::WgpuRenderPipeline wgpu_pipeline(_device, descriptor);
+
+        if (!wgpu_pipeline.native_handle())
+        {
+            spdlog::error("WgpuDevice::create_render_pipeline: Failed to create render pipeline");
+            return std::unexpected(make_error_code(RenderError::PipelineCreationFailed));
+        }
+
+        // Store the native handle and get ID
+        size_t id = _render_pipelines.size();
+        _render_pipelines.push_back(static_cast<WGPURenderPipeline>(wgpu_pipeline.native_handle()));
+
+        spdlog::info("Created render pipeline '{}' with ID {}", descriptor.label, id);
+
+        // Return type-erased RenderPipeline
+        return RenderPipeline(std::move(wgpu_pipeline));
+    }
+
+    std::expected<ComputePipeline, std::error_code>
+    WgpuDevice::create_compute_pipeline(const ComputePipelineDescriptor& descriptor)
+    {
+        if (!_device)
+        {
+            spdlog::error("WgpuDevice::create_compute_pipeline: Device not initialized");
+            return std::unexpected(make_error_code(RenderError::DeviceNotInitialized));
+        }
+
+        // Create backend compute pipeline
+        backend::wgpu::WgpuComputePipeline wgpu_pipeline(_device, descriptor);
+
+        if (!wgpu_pipeline.native_handle())
+        {
+            spdlog::error("WgpuDevice::create_compute_pipeline: Failed to create compute pipeline");
+            return std::unexpected(make_error_code(RenderError::PipelineCreationFailed));
+        }
+
+        // Store the native handle and get ID
+        size_t id = _compute_pipelines.size();
+        _compute_pipelines.push_back(static_cast<WGPUComputePipeline>(wgpu_pipeline.native_handle()));
+
+        spdlog::info("Created compute pipeline '{}' with ID {}", descriptor.label, id);
+
+        // Return type-erased ComputePipeline
+        return ComputePipeline(std::move(wgpu_pipeline));
+    }
+
+    std::expected<BindGroupLayout, std::error_code>
+    WgpuDevice::create_bind_group_layout(const BindGroupLayoutDescriptor& descriptor)
+    {
+        if (!_device)
+        {
+            spdlog::error("WgpuDevice::create_bind_group_layout: Device not initialized");
+            return std::unexpected(make_error_code(RenderError::DeviceNotInitialized));
+        }
+
+        // Create backend bind group layout
+        backend::wgpu::WgpuBindGroupLayout wgpu_layout(_device, descriptor);
+
+        if (!wgpu_layout.native_handle())
+        {
+            spdlog::error("WgpuDevice::create_bind_group_layout: Failed to create bind group layout");
+            return std::unexpected(make_error_code(RenderError::ResourceCreationFailed));
+        }
+
+        // Store the native handle and get ID
+        size_t id = _bind_group_layouts.size();
+        _bind_group_layouts.push_back(static_cast<WGPUBindGroupLayout>(wgpu_layout.native_handle()));
+
+        spdlog::info("Created bind group layout '{}' with ID {}", descriptor.label, id);
+
+        // Return type-erased BindGroupLayout
+        return BindGroupLayout(std::move(wgpu_layout));
+    }
+
+    std::expected<BindGroup, std::error_code>
+    WgpuDevice::create_bind_group(const BindGroupDescriptor& descriptor)
+    {
+        if (!_device)
+        {
+            spdlog::error("WgpuDevice::create_bind_group: Device not initialized");
+            return std::unexpected(make_error_code(RenderError::DeviceNotInitialized));
+        }
+
+        // Create backend bind group (needs buffer vector for ID→handle lookup)
+        backend::wgpu::WgpuBindGroup wgpu_bind_group(_device, descriptor, &_buffers);
+
+        if (!wgpu_bind_group.native_handle())
+        {
+            spdlog::error("WgpuDevice::create_bind_group: Failed to create bind group");
+            return std::unexpected(make_error_code(RenderError::ResourceCreationFailed));
+        }
+
+        // Store the native handle and get ID
+        size_t id = _bind_groups.size();
+        _bind_groups.push_back(static_cast<WGPUBindGroup>(wgpu_bind_group.native_handle()));
+
+        spdlog::info("Created bind group '{}' with ID {}", descriptor.label, id);
+
+        // Return type-erased BindGroup
+        return BindGroup(std::move(wgpu_bind_group));
     }
 
 } // namespace raktr::render::backend

@@ -83,13 +83,11 @@ namespace raktr::render
         {
         }
 
-        BindGroupLayout(const BindGroupLayout& other)
-            : _self(other._self ? other._self->clone() : nullptr),
-              _ptr(_self.get()),
-              _owns(true)
-        {
-        }
+        // Non-copyable (GPU resources cannot be cloned)
+        BindGroupLayout(const BindGroupLayout&)            = delete;
+        BindGroupLayout& operator=(const BindGroupLayout&) = delete;
 
+        // Movable
         BindGroupLayout(BindGroupLayout&& other) noexcept
             : _self(std::move(other._self)),
               _ptr(other._ptr),
@@ -97,17 +95,6 @@ namespace raktr::render
         {
             other._ptr  = nullptr;
             other._owns = false;
-        }
-
-        BindGroupLayout& operator=(const BindGroupLayout& other)
-        {
-            if (this != &other)
-            {
-                _self = other._self ? other._self->clone() : nullptr;
-                _ptr  = _self.get();
-                _owns = true;
-            }
-            return *this;
         }
 
         BindGroupLayout& operator=(BindGroupLayout&& other) noexcept
@@ -140,9 +127,8 @@ namespace raktr::render
     private:
         struct Concept
         {
-            virtual ~Concept()                                     = default;
-            virtual std::unique_ptr<Concept> clone() const         = 0;
-            virtual void*                    native_handle() const = 0;
+            virtual ~Concept()                  = default;
+            virtual void* native_handle() const = 0;
         };
 
         template <typename T>
@@ -152,18 +138,16 @@ namespace raktr::render
             {
             }
 
-            std::unique_ptr<Concept> clone() const override
-            {
-                return std::make_unique<Model<T>>(_impl);
-            }
-
             void* native_handle() const override
             {
                 if constexpr (requires { _impl.native_handle(); })
                 {
                     return _impl.native_handle();
                 }
-                return nullptr;
+                else
+                {
+                    return nullptr;
+                }
             }
 
             T _impl;
@@ -247,13 +231,11 @@ namespace raktr::render
         {
         }
 
-        BindGroup(const BindGroup& other)
-            : _self(other._self ? other._self->clone() : nullptr),
-              _ptr(_self.get()),
-              _owns(true)
-        {
-        }
+        // Non-copyable (GPU resources cannot be cloned)
+        BindGroup(const BindGroup&)            = delete;
+        BindGroup& operator=(const BindGroup&) = delete;
 
+        // Movable
         BindGroup(BindGroup&& other) noexcept
             : _self(std::move(other._self)),
               _ptr(other._ptr),
@@ -261,17 +243,6 @@ namespace raktr::render
         {
             other._ptr  = nullptr;
             other._owns = false;
-        }
-
-        BindGroup& operator=(const BindGroup& other)
-        {
-            if (this != &other)
-            {
-                _self = other._self ? other._self->clone() : nullptr;
-                _ptr  = _self.get();
-                _owns = true;
-            }
-            return *this;
         }
 
         BindGroup& operator=(BindGroup&& other) noexcept
@@ -304,9 +275,8 @@ namespace raktr::render
     private:
         struct Concept
         {
-            virtual ~Concept()                                     = default;
-            virtual std::unique_ptr<Concept> clone() const         = 0;
-            virtual void*                    native_handle() const = 0;
+            virtual ~Concept()                  = default;
+            virtual void* native_handle() const = 0;
         };
 
         template <typename T>
@@ -316,18 +286,16 @@ namespace raktr::render
             {
             }
 
-            std::unique_ptr<Concept> clone() const override
-            {
-                return std::make_unique<Model<T>>(_impl);
-            }
-
             void* native_handle() const override
             {
                 if constexpr (requires { _impl.native_handle(); })
                 {
                     return _impl.native_handle();
                 }
-                return nullptr;
+                else
+                {
+                    return nullptr;
+                }
             }
 
             T _impl;

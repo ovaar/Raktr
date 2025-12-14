@@ -62,12 +62,8 @@ namespace raktr::render
         {
         }
 
-        ComputePipeline(const ComputePipeline& other)
-            : _self(other._self ? other._self->clone() : nullptr),
-              _ptr(_self.get()),
-              _owns(true)
-        {
-        }
+        // Non-copyable (GPU resources cannot be cloned)
+        ComputePipeline(const ComputePipeline&) = delete;
 
         ComputePipeline(ComputePipeline&& other) noexcept
             : _self(std::move(other._self)),
@@ -78,16 +74,8 @@ namespace raktr::render
             other._owns = false;
         }
 
-        ComputePipeline& operator=(const ComputePipeline& other)
-        {
-            if (this != &other)
-            {
-                _self = other._self ? other._self->clone() : nullptr;
-                _ptr  = _self.get();
-                _owns = true;
-            }
-            return *this;
-        }
+        // Non-copyable (GPU resources cannot be cloned)
+        ComputePipeline& operator=(const ComputePipeline&) = delete;
 
         ComputePipeline& operator=(ComputePipeline&& other) noexcept
         {
@@ -119,9 +107,8 @@ namespace raktr::render
     private:
         struct Concept
         {
-            virtual ~Concept()                                     = default;
-            virtual std::unique_ptr<Concept> clone() const         = 0;
-            virtual void*                    native_handle() const = 0;
+            virtual ~Concept()                  = default;
+            virtual void* native_handle() const = 0;
         };
 
         template <typename T>
@@ -131,18 +118,16 @@ namespace raktr::render
             {
             }
 
-            std::unique_ptr<Concept> clone() const override
-            {
-                return std::make_unique<Model<T>>(_impl);
-            }
-
             void* native_handle() const override
             {
                 if constexpr (requires { _impl.native_handle(); })
                 {
                     return _impl.native_handle();
                 }
-                return nullptr;
+                else
+                {
+                    return nullptr;
+                }
             }
 
             T _impl;

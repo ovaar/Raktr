@@ -6,8 +6,8 @@
 #ifndef RAKTR_RENDER_RENDER_ERROR_H
 #define RAKTR_RENDER_RENDER_ERROR_H
 
-#include <system_error>
 #include <string>
+#include <system_error>
 
 namespace raktr::render
 {
@@ -20,8 +20,11 @@ namespace raktr::render
         BackendNotSupported,
         InitializationFailed,
         DeviceCreationFailed,
+        DeviceNotInitialized,
         BufferCreationFailed,
         ShaderCompilationFailed,
+        PipelineCreationFailed,
+        ResourceCreationFailed,
         InvalidOperation,
         WindowCreationFailed
     };
@@ -32,21 +35,39 @@ namespace raktr::render
     class RenderErrorCategory : public std::error_category
     {
     public:
-        const char* name() const noexcept override { return "raktr::render"; }
+        const char* name() const noexcept override
+        {
+            return "raktr::render";
+        }
 
         std::string message(int ev) const override
         {
             switch (static_cast<RenderError>(ev))
             {
-                case RenderError::Success: return "Success";
-                case RenderError::BackendNotSupported: return "Backend not supported";
-                case RenderError::InitializationFailed: return "Initialization failed";
-                case RenderError::DeviceCreationFailed: return "Device creation failed";
-                case RenderError::BufferCreationFailed: return "Buffer creation failed";
-                case RenderError::ShaderCompilationFailed: return "Shader compilation failed";
-                case RenderError::InvalidOperation: return "Invalid operation";
-                case RenderError::WindowCreationFailed: return "Window creation failed";
-                default: return "Unknown error";
+                case RenderError::Success:
+                    return "Success";
+                case RenderError::BackendNotSupported:
+                    return "Backend not supported";
+                case RenderError::InitializationFailed:
+                    return "Initialization failed";
+                case RenderError::DeviceCreationFailed:
+                    return "Device creation failed";
+                case RenderError::DeviceNotInitialized:
+                    return "Device not initialized";
+                case RenderError::BufferCreationFailed:
+                    return "Buffer creation failed";
+                case RenderError::ShaderCompilationFailed:
+                    return "Shader compilation failed";
+                case RenderError::PipelineCreationFailed:
+                    return "Pipeline creation failed";
+                case RenderError::ResourceCreationFailed:
+                    return "Resource creation failed";
+                case RenderError::InvalidOperation:
+                    return "Invalid operation";
+                case RenderError::WindowCreationFailed:
+                    return "Window creation failed";
+                default:
+                    return "Unknown error";
             }
         }
     };
@@ -65,7 +86,7 @@ namespace raktr::render
      */
     inline std::error_code make_error_code(RenderError e)
     {
-        return {static_cast<int>(e), render_category()};
+        return { static_cast<int>(e), render_category() };
     }
 
 } // namespace raktr::render
@@ -73,8 +94,10 @@ namespace raktr::render
 // Enable automatic conversion to std::error_code
 namespace std
 {
-    template<>
-    struct is_error_code_enum<raktr::render::RenderError> : true_type {};
-}
+    template <>
+    struct is_error_code_enum<raktr::render::RenderError> : true_type
+    {
+    };
+} // namespace std
 
 #endif // RAKTR_RENDER_RENDER_ERROR_H

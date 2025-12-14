@@ -7,13 +7,18 @@
 #define RAKTR_RENDER_WGPU_DEVICE_H
 
 #include "aspect_ratio.h"
+#include "bind_group.h"
 #include "buffer.h"
 #include "command_encoder.h"
+#include "compute_pipeline.h"
 #include "device.h"
 #include "queue.h"
+#include "render_pipeline.h"
+#include "shader_module.h"
 #include <memory>
 #include <vector>
 #include <webgpu/webgpu.h>
+
 
 namespace raktr::render
 {
@@ -286,6 +291,47 @@ namespace raktr::render::backend
          */
         [[nodiscard]] CommandEncoder create_command_encoder(std::string_view label = "");
 
+        // Phase 3: Shader and Pipeline Creation
+        /*!
+         * @brief Create a shader module from WGSL source code.
+         * @param descriptor Shader module descriptor with source code.
+         * @return Type-erased ShaderModule or error code.
+         */
+        [[nodiscard]] std::expected<ShaderModule, std::error_code>
+        create_shader_module(const ShaderModuleDescriptor& descriptor);
+
+        /*!
+         * @brief Create a render pipeline with vertex layout and shaders.
+         * @param descriptor Render pipeline descriptor.
+         * @return Type-erased RenderPipeline or error code.
+         */
+        [[nodiscard]] std::expected<RenderPipeline, std::error_code>
+        create_render_pipeline(const RenderPipelineDescriptor& descriptor);
+
+        /*!
+         * @brief Create a compute pipeline.
+         * @param descriptor Compute pipeline descriptor.
+         * @return Type-erased ComputePipeline or error code.
+         */
+        [[nodiscard]] std::expected<ComputePipeline, std::error_code>
+        create_compute_pipeline(const ComputePipelineDescriptor& descriptor);
+
+        /*!
+         * @brief Create a bind group layout.
+         * @param descriptor Bind group layout descriptor.
+         * @return Type-erased BindGroupLayout or error code.
+         */
+        [[nodiscard]] std::expected<BindGroupLayout, std::error_code>
+        create_bind_group_layout(const BindGroupLayoutDescriptor& descriptor);
+
+        /*!
+         * @brief Create a bind group.
+         * @param descriptor Bind group descriptor.
+         * @return Type-erased BindGroup or error code.
+         */
+        [[nodiscard]] std::expected<BindGroup, std::error_code>
+        create_bind_group(const BindGroupDescriptor& descriptor);
+
     private:
         WgpuDevice() = default;
 
@@ -326,9 +372,16 @@ namespace raktr::render::backend
         // Command buffer management
         std::vector<WGPUCommandBuffer> _command_buffers;
 
-        // Shader and pipeline resources
+        // Shader and pipeline resources (legacy - for backward compatibility)
         WGPUShaderModule   _shader_module   = nullptr;
         WGPURenderPipeline _render_pipeline = nullptr;
+
+        // Phase 3: Resource storage (ID-based handle management)
+        std::vector<WGPUShaderModule>    _shader_modules;
+        std::vector<WGPURenderPipeline>  _render_pipelines;
+        std::vector<WGPUComputePipeline> _compute_pipelines;
+        std::vector<WGPUBindGroupLayout> _bind_group_layouts;
+        std::vector<WGPUBindGroup>       _bind_groups;
 
         // Uniform buffer and bind group management
         WGPUBindGroupLayout _bind_group_layout  = nullptr;
