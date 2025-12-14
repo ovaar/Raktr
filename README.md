@@ -33,26 +33,24 @@ conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Release
 conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Debug
 
 
+pushd raktr
 # Install
-cd ./raktr/; conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_cl.profile -o:a='&:with_tests=True' --build=missing
-
+conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_cl.profile -o:a='&:with_tests=True' --build=missing
 # Configure
-cd ./raktr/; cmake --preset conan-release
-
+cmake --preset conan-release
 # Build
-cd ./raktr/; cmake --build --preset conan-release
+cmake --build --preset conan-release
+# Clean 
+cmake --build --preset conan-release --clean
+popd
 
 # Build tests
-cd build\Release; cmake --build . --target raktr_render
+cmake --build build\Release --target raktr_engine_test;
+.\build\Release\render\tests\render_tests.exe; .\build\Release\engine\tests\raktr_engine_test.exe; .\build\Release\editor\tests\raktr_editor_test.exe
 
-# Clean
-cd ./raktr/; cmake --build --preset conan-release --clean
-
-ctest
+# Run disabled test
+.\build\Release\editor\tests\raktr_editor_test.exe --gtest_filter="VisualTest.DISABLED_OcclusionCullingDemo" --gtest_also_run_disabled_tests
 ```
-
-
-
 
 ### Architecture Overview
 
@@ -89,9 +87,10 @@ ctest
 ┌─────────────────────────────────────────────────────────┐
 │         raktr::render::backend::*                       │
 │                                                         │
-│  ├── OpenGLBackend   (src/backend/opengl/)            │
-│  ├── VulkanBackend   (src/backend/vulkan/)            │
-│  └── DX12Backend     (src/backend/directx12/)         │
+│  ├── WGPUBackend     (src/backend/wgpu/)                │
+|  ├── OpenGLBackend   (src/backend/opengl/)              │
+│  ├── VulkanBackend   (src/backend/vulkan/)              │
+│  └── DX12Backend     (src/backend/directx12/)           │
 └─────────────────────────────────────────────────────────┘
 ```
 
