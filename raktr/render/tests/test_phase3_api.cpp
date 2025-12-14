@@ -18,7 +18,7 @@ using namespace raktr::render;
 // ============================================================================
 // Shader Module Tests
 // ============================================================================
-
+// TODO Remove all references of `Phase3` when Phase 3 is fully implemented.
 TEST(Phase3_ShaderModule, DescriptorCreation)
 {
     ShaderModuleDescriptor desc;

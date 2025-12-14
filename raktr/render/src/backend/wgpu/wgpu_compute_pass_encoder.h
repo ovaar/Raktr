@@ -6,6 +6,8 @@
 #ifndef RAKTR_RENDER_WGPU_COMPUTE_PASS_H
 #define RAKTR_RENDER_WGPU_COMPUTE_PASS_H
 
+#include "bind_group.h"
+#include "compute_pipeline.h"
 #include <webgpu/webgpu.h>
 
 namespace raktr::render::backend
@@ -53,6 +55,16 @@ namespace raktr::render::backend
         {
             cleanup();
         }
+
+        /*!
+         * @brief Set compute pipeline.
+         */
+        void set_pipeline(const render::ComputePipeline& pipeline) const;
+
+        /*!
+         * @brief Set bind group.
+         */
+        void set_bind_group(uint32_t group_index, const render::BindGroup& bind_group, const uint32_t* dynamic_offsets, uint32_t dynamic_offset_count) const;
 
         /*!
          * @brief Dispatch compute workgroups.

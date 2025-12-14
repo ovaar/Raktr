@@ -6,7 +6,9 @@
 #ifndef RAKTR_RENDER_WGPU_RENDER_PASS_H
 #define RAKTR_RENDER_WGPU_RENDER_PASS_H
 
+#include "bind_group.h"
 #include "buffer.h"
+#include "render_pipeline.h"
 #include <vector>
 #include <webgpu/webgpu.h>
 
@@ -58,6 +60,36 @@ namespace raktr::render::backend
         {
             cleanup();
         }
+
+        /*!
+         * @brief Set render pipeline.
+         */
+        void set_pipeline(const render::RenderPipeline& pipeline) const;
+
+        /*
+         * @brief Set bind group.
+         */
+        void set_bind_group(uint32_t group_index, const render::BindGroup& bind_group, const uint32_t* dynamic_offsets, uint32_t dynamic_offset_count) const;
+
+        /*
+         * @brief Set viewport.
+         */
+        void set_viewport(float x, float y, float width, float height, float min_depth, float max_depth) const;
+
+        /*
+         * @brief Set scissor rectangle.
+         */
+        void set_scissor_rect(uint32_t x, uint32_t y, uint32_t width, uint32_t height) const;
+
+        /*
+         * @brief Set blend constant.
+         * @brief Set vertex buffer for rendering.
+         * @param slot Vertex buffer binding slot.
+         * @param buffer Vertex buffer to bind.
+         * @param offset Byte offset into buffer.
+         * @param size Size of buffer region to bind (0 = entire buffer).
+         */
+        void set_blend_constant(float r, float g, float b, float a) const;
 
         /*!
          * @brief Set vertex buffer for rendering.
