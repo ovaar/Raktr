@@ -8,6 +8,13 @@ compiler.cppstd=23
 compiler.version=194
 compiler.runtime=dynamic
 
+wgpu-native*:compiler=msvc
+wgpu-native*:compiler.version=194
+wgpu-native*:compiler.runtime=dynamic
+wgpu-native*:compiler.runtime_type=Release
+wgpu-native*:build_type=Release
+
+
 [conf]
-tools.cmake.cmaketoolchain:generator=Ninja
+tools.cmake.cmaketoolchain:generator=Visual Studio 17
 tools.compilation:verbosity=verbose
