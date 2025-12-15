@@ -18,7 +18,6 @@
 #include "window/window.h"
 #include <spdlog/spdlog.h>
 
-
 #ifdef _WIN32
 #include <windows.h>
 #endif
@@ -1587,6 +1586,16 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         // Create WgpuQueue wrapper with pointers to device storage
         backend::WgpuQueue wgpu_queue(_queue, &_buffers, &_command_buffers);
         return Queue(std::move(wgpu_queue));
+    }
+
+    void* WgpuDevice::get_surface_view()
+    {
+        return static_cast<void*>(wgpu_surface_texture_view());
+    }
+
+    void* WgpuDevice::get_depth_view() const
+    {
+        return static_cast<void*>(_depth_texture_view);
     }
 
     CommandEncoder WgpuDevice::create_command_encoder(std::string_view label)

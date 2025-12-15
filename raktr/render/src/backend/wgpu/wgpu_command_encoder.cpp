@@ -35,6 +35,7 @@ namespace raktr::render::backend
             wgpu_color_attachments[i].clearValue.g  = att.clear_color.g;
             wgpu_color_attachments[i].clearValue.b  = att.clear_color.b;
             wgpu_color_attachments[i].clearValue.a  = att.clear_color.a;
+            wgpu_color_attachments[i].depthSlice    = WGPU_DEPTH_SLICE_UNDEFINED;
         }
 
         wgpu_desc.colorAttachmentCount = descriptor.color_attachment_count;

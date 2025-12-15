@@ -14,6 +14,9 @@
 
 namespace raktr::render
 {
+    // Forward declaration
+    class RenderPipeline;
+
     /*!
      * @brief Load operation for render pass attachments.
      */
@@ -125,6 +128,26 @@ namespace raktr::render
         ~RenderPassEncoder() = default;
 
         /*!
+         * @brief Set the render pipeline for subsequent draw calls.
+         *
+         * Configures the graphics pipeline state (shaders, vertex layout, blend mode, etc.)
+         * for all draw calls that follow until another pipeline is set.
+         *
+         * @param pipeline Render pipeline to bind.
+         *
+         * @example
+         * RenderPassEncoder pass = encoder.begin_render_pass(desc);
+         * pass.set_pipeline(my_pipeline);
+         * pass.set_vertex_buffer(0, vertex_buffer);
+         * pass.draw(vertex_count, 1, 0, 0);
+         * pass.end();
+         */
+        void set_pipeline(const RenderPipeline& pipeline) const
+        {
+            _impl->do_set_pipeline(pipeline);
+        }
+
+        /*!
          * @brief Set vertex buffer for rendering.
          * @param slot Vertex buffer binding slot.
          * @param buffer Vertex buffer to bind.
@@ -187,6 +210,7 @@ namespace raktr::render
         struct Concept
         {
             virtual ~Concept()                                                                                                                                    = default;
+            virtual void do_set_pipeline(const RenderPipeline& pipeline) const                                                                                    = 0;
             virtual void do_set_vertex_buffer(uint32_t slot, Buffer buffer, uint64_t offset, uint64_t size) const                                                 = 0;
             virtual void do_set_index_buffer(Buffer buffer, uint64_t offset, uint64_t size) const                                                                 = 0;
             virtual void do_draw(uint32_t vertex_count, uint32_t instance_count, uint32_t first_vertex, uint32_t first_instance) const                            = 0;
@@ -200,6 +224,11 @@ namespace raktr::render
             explicit Model(T encoder_impl)
                 : _encoder(std::move(encoder_impl))
             {
+            }
+
+            void do_set_pipeline(const RenderPipeline& pipeline) const override
+            {
+                _encoder.set_pipeline(pipeline);
             }
 
             void do_set_vertex_buffer(uint32_t slot, Buffer buffer, uint64_t offset, uint64_t size) const override

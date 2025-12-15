@@ -15,6 +15,8 @@
 #include "command_encoder.h"
 #include "device_capabilities.h"
 #include "queue.h"
+#include "render_pipeline.h"
+#include "shader_module.h"
 #include <any>
 #include <memory>
 #include <optional>
@@ -157,6 +159,26 @@ namespace raktr::render
             capability<capabilities::PresentOps>().present();
         }
 
+        [[nodiscard]] Queue queue() const
+        {
+            return capability<capabilities::QueueOps>().queue();
+        }
+
+        [[nodiscard]] CommandEncoder create_command_encoder(std::string_view label = "") const
+        {
+            return capability<capabilities::CommandEncoderOps>().create_command_encoder(label);
+        }
+
+        [[nodiscard]] void* get_surface_view() const
+        {
+            return capability<capabilities::ViewportOps>().get_surface_view();
+        }
+
+        [[nodiscard]] void* get_depth_view() const
+        {
+            return capability<capabilities::ViewportOps>().get_depth_view();
+        }
+
         [[nodiscard]] std::expected<void, std::error_code>
         resize(uint32_t width, uint32_t height) const
         {
@@ -200,6 +222,26 @@ namespace raktr::render
         {
             return capability<capabilities::InstancingOps>().draw_indexed_instanced(
                 vertex_buffer, index_buffer, instance_buffer, index_count, instance_count);
+        }
+
+        // Occlusion culling operations (if supported)
+        [[nodiscard]] void* get_depth_texture() const
+        {
+            return capability<capabilities::OcclusionCullingOps>().get_depth_texture();
+        }
+
+        // Shader operations (if supported)
+        [[nodiscard]] std::expected<ShaderModule, std::error_code>
+        create_shader_module(const ShaderModuleDescriptor& descriptor) const
+        {
+            return capability<capabilities::ShaderOps>().create_shader_module(descriptor);
+        }
+
+        // Render pipeline operations (if supported)
+        [[nodiscard]] std::expected<RenderPipeline, std::error_code>
+        create_render_pipeline(const RenderPipelineDescriptor& descriptor) const
+        {
+            return capability<capabilities::RenderPipelineOps>().create_render_pipeline(descriptor);
         }
 
     private:
@@ -508,6 +550,29 @@ namespace raktr::render
                     {
                         return this->get_device()->viewport();
                     };
+
+                    // Optional surface view access (GPU devices only)
+                    if constexpr (requires(T& d) {
+                                      { d.get_surface_view() } -> std::convertible_to<void*>;
+                                  })
+                    {
+                        ops.get_surface_view = [this]() mutable -> void*
+                        {
+                            return this->get_device()->get_surface_view();
+                        };
+                    }
+
+                    // Optional depth view access (GPU devices only)
+                    if constexpr (requires(T& d) {
+                                      { d.get_depth_view() } -> std::convertible_to<void*>;
+                                  })
+                    {
+                        ops.get_depth_view = [this]() mutable -> void*
+                        {
+                            return this->get_device()->get_depth_view();
+                        };
+                    }
+
                     return ops;
                 }
                 else

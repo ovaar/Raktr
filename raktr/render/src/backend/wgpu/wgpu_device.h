@@ -19,7 +19,6 @@
 #include <vector>
 #include <webgpu/webgpu.h>
 
-
 namespace raktr::render
 {
     // Forward declaration
@@ -290,6 +289,18 @@ namespace raktr::render::backend
          * @return Type-erased CommandEncoder wrapper.
          */
         [[nodiscard]] CommandEncoder create_command_encoder(std::string_view label = "");
+
+        /*!
+         * @brief Get current surface texture view for rendering.
+         * @return Opaque pointer to surface texture view.
+         */
+        [[nodiscard]] void* get_surface_view();
+
+        /*!
+         * @brief Get current depth texture view for rendering.
+         * @return Opaque pointer to depth texture view.
+         */
+        [[nodiscard]] void* get_depth_view() const;
 
         // Phase 3: Shader and Pipeline Creation
         /*!

@@ -6,7 +6,12 @@
 #include "command_encoder.h"
 #include "compute_pass_encoder.h"
 #include "queue.h"
+#include "render_context.h"
 #include "render_pass_encoder.h"
+#include "render_pipeline.h"
+#include "shader_module.h"
+#include "window/window.h"
+
 #include <gtest/gtest.h>
 
 using namespace raktr::render;
@@ -153,6 +158,132 @@ TEST(CommandRecording, ClearColor_Creation)
 }
 
 /*!
+ * @brief Test RenderPassEncoder set_pipeline() method.
+ *
+ * This test verifies that the set_pipeline() method is available
+ * on the RenderPassEncoder API.
+ */
+TEST(CommandRecording, RenderPassEncoder_SetPipeline)
+{
+    WindowConfig window_config;
+    window_config.width     = 800;
+    window_config.height    = 600;
+    window_config.title     = "RenderPassEncoder SetPipeline Test";
+    window_config.resizable = true;
+
+    RenderConfig render_config;
+    render_config.backend           = BackendType::WebGPU;
+    render_config.enable_validation = false;
+
+    auto window_result = create_window(window_config);
+    ASSERT_TRUE(window_result.has_value()) << "Failed to create window";
+    auto& window = window_result.value();
+
+    auto render_context = create_render_context();
+    ASSERT_NE(render_context, nullptr);
+
+    auto render_ctx_result = render_context->initialize(render_config, window.get());
+    ASSERT_TRUE(render_ctx_result.has_value()) << "Failed to initialize RenderContext";
+
+    auto device = render_context->device();
+    ASSERT_NE(device, nullptr);
+
+    // Create cube geometry
+    float vertices[] = {
+        -0.5f, -0.5f, -0.5f, 0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, -0.5f, 0.5f, -0.5f, -0.5f, -0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f, 0.5f, 0.5f, -0.5f, 0.5f, 0.5f
+    };
+    auto vertex_buffer = device->create_vertex_buffer(std::as_bytes(std::span(vertices)));
+    ASSERT_TRUE(vertex_buffer.has_value());
+
+    uint32_t indices[] = {
+        0, 2, 1, 0, 3, 2, 4, 5, 6, 4, 6, 7, 4, 7, 3, 4, 3, 0, 1, 2, 6, 1, 6, 5, 0, 1, 5, 0, 5, 4, 3, 6, 2, 3, 7, 6
+    };
+    auto index_buffer = device->create_index_buffer(std::as_bytes(std::span(indices)));
+    ASSERT_TRUE(index_buffer.has_value());
+
+    // Create shader module
+    const char* shader_code = R"(
+        @vertex
+        fn vs_main(@location(0) position: vec3<f32>) -> @builtin(position) vec4<f32> {
+            return vec4<f32>(position, 1.0);
+        }
+
+        @fragment
+        fn fs_main() -> @location(0) vec4<f32> {
+            return vec4<f32>(1.0, 0.0, 0.0, 1.0);
+        }
+    )";
+
+    ShaderModuleDescriptor shader_desc;
+    shader_desc.label  = "Test Shader";
+    shader_desc.code   = shader_code;
+    auto shader_result = device->create_shader_module(shader_desc);
+    ASSERT_TRUE(shader_result.has_value()) << "Failed to create shader module";
+
+    // Create pipeline
+    RenderPipelineDescriptor pipeline_desc;
+    pipeline_desc.label              = "Test Pipeline";
+    pipeline_desc.vertex_shader      = std::move(shader_result.value());
+    pipeline_desc.vertex_entry_point = "vs_main";
+
+    // Create another shader module for fragment stage
+    auto fragment_shader_result = device->create_shader_module(shader_desc);
+    ASSERT_TRUE(fragment_shader_result.has_value()) << "Failed to create fragment shader module";
+    pipeline_desc.fragment_shader      = std::move(fragment_shader_result.value());
+    pipeline_desc.fragment_entry_point = "fs_main";
+
+    // Configure vertex layout
+    VertexAttribute position_attrib;
+    position_attrib.format          = VertexFormat::Float32x3;
+    position_attrib.offset          = 0;
+    position_attrib.shader_location = 0;
+
+    VertexBufferLayout vertex_layout;
+    vertex_layout.array_stride = sizeof(float) * 3;
+    vertex_layout.step_mode    = VertexStepMode::Vertex;
+    vertex_layout.attributes   = { position_attrib };
+
+    pipeline_desc.vertex_buffers = { vertex_layout };
+
+    // Configure color target
+    ColorTargetState color_target;
+    color_target.format         = TextureFormat::BGRA8Unorm;
+    pipeline_desc.color_targets = { color_target };
+
+    // Configure primitive state
+    pipeline_desc.primitive.topology = PrimitiveTopology::TriangleList;
+
+    auto pipeline_result = device->create_render_pipeline(pipeline_desc);
+    ASSERT_TRUE(pipeline_result.has_value()) << "Failed to create render pipeline";
+    RenderPipeline pipeline = std::move(pipeline_result.value());
+
+    // Create encoder
+    CommandEncoder encoder = device->create_command_encoder("Test");
+
+    // Begin render pass
+    RenderPassDescriptor render_desc;
+    render_desc.color_attachments[0].view    = device->get_surface_view();
+    render_desc.color_attachments[0].load_op = LoadOp::Clear;
+    render_desc.color_attachment_count       = 1;
+
+    RenderPassEncoder pass = encoder.begin_render_pass(render_desc);
+
+    // Set pipeline
+    pass.set_pipeline(pipeline);
+
+    // Set buffers and draw
+    pass.set_vertex_buffer(0, vertex_buffer.value(), 0, sizeof(vertices));
+    pass.set_index_buffer(index_buffer.value(), 0, sizeof(indices));
+    pass.draw(3, 1, 0, 0);
+
+    pass.end();
+
+    CommandBuffer                commands = encoder.finish();
+    std::array<CommandBuffer, 1> command_list{ commands };
+    device->queue().submit(command_list);
+}
+
+/*!
  * @brief Document the command recording workflow.
  *
  * This test describes the complete command recording workflow:
@@ -188,6 +319,9 @@ TEST(CommandRecording, Workflow_Documentation)
     // 3. Record graphics commands
     {
         RenderPassEncoder pass = encoder.begin_render_pass(render_desc);
+
+        // Set pipeline
+        pass.set_pipeline(render_pipeline);
 
         // Set buffers
         pass.set_vertex_buffer(0, vertex_buffer, 0, vertex_size);

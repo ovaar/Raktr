@@ -109,6 +109,12 @@ namespace raktr::render
 
             std::function<const Viewport&()>
                 viewport;
+
+            std::function<void*()>
+                get_surface_view;
+
+            std::function<void*()>
+                get_depth_view;
         };
 
         /*!
