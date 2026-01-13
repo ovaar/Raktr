@@ -3,7 +3,7 @@
  * @brief WebGPU Hi-Z occlusion culling pass implementation.
  */
 
-#include "hi_z_occlusion_pass.h"
+#include "wgpu_hi_z_occlusion_pass.h"
 #include <spdlog/spdlog.h>
 
 namespace raktr::render::backend::wgpu

@@ -3,7 +3,7 @@
  * @brief WebGPU instanced geometry rendering pass implementation.
  */
 
-#include "instanced_geometry_pass.h"
+#include "wgpu_instanced_geometry_pass.h"
 #include "backend/wgpu/wgpu_device.h"
 #include "backend/wgpu/wgpu_pass_context.h"
 #include "render_pass_builder.h"

@@ -3,7 +3,7 @@
  * @brief Implementation of WebGPU geometry rendering pass.
  */
 
-#include "geometry_pass.h"
+#include "wgpu_geometry_pass.h"
 #include "render_pass_builder.h"
 #include <spdlog/spdlog.h>
 

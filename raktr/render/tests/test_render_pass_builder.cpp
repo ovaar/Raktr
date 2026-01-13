@@ -126,7 +126,7 @@ TEST(RenderPassBuilder_FluentChaining, MultipleAttachments_ChainsCorrectly)
     auto& result = builder
                        .color_attachment(color_view, WGPULoadOp_Clear, { 0.1f, 0.1f, 0.15f, 1.0f })
                        .depth_attachment(depth_view, WGPULoadOp_Clear, 1.0f)
-                       .label("GeometryPass");
+                       .label("WgpuGeometryPass");
 
     // Assert
     EXPECT_EQ(&result, &builder);
@@ -200,3 +200,4 @@ TEST(RenderPassBuilder_DefaultConstructor, EmptyBuilder_CanBeConfigured)
 
     destroy_mock_texture_view(view);
 }
+
