@@ -15,7 +15,6 @@
 #include <memory>
 #include <vector>
 
-
 using namespace raktr::render;
 using namespace raktr::render::backend::wgpu;
 

@@ -199,3 +199,4 @@ TEST(RenderPassBuilder_DefaultConstructor, EmptyBuilder_CanBeConfigured)
 
     destroy_mock_texture_view(view);
 }
+

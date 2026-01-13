@@ -12,7 +12,6 @@
 #include <vector>
 #include <webgpu/webgpu.h>
 
-
 namespace raktr::render::backend::wgpu
 {
 
