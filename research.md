@@ -1240,7 +1240,7 @@ if (vb_result && ib_result) {
 
 ### Context
 
-The current `MockBackend` and `MockDevice` are minimal test doubles that validate inputs but don't implement actual rendering behavior. The task is to refactor them into `FakeBackend` and `FakeDevice` that implement real software rendering.
+The current `MockBackend` and `MockDevice` are minimal test doubles that validate inputs but don't implement actual rendering behavior. The task is to refactor them into `SoftBackend` and `SoftDevice` that implement real software rendering.
 
 ### Mock vs Fake (Test Double Patterns)
 
@@ -1259,7 +1259,7 @@ The current `MockBackend` and `MockDevice` are minimal test doubles that validat
 
 ### Design: Fake Software Renderer
 
-A `FakeDevice` should be a CPU-based software renderer that:
+A `SoftDevice` should be a CPU-based software renderer that:
 
 1. **Stores buffer data** — Actually keeps vertex/index data in memory
 2. **Maintains framebuffer** — 2D pixel array representing rendered output
@@ -1273,10 +1273,10 @@ This enables:
 - ✅ Debugging rendering logic in tests
 - ✅ Cross-platform CI without graphics drivers
 
-### FakeDevice Architecture
+### SoftDevice Architecture
 
 ```cpp
-class FakeDevice : public Device
+class SoftDevice : public Device
 {
 private:
     // Buffer storage
@@ -1319,8 +1319,8 @@ private:
 ### Implementation Plan
 
 1. ✅ Research and document Fake design (this section)
-2. Rename `MockBackend` → `FakeBackend`, `MockDevice` → `FakeDevice`
-3. Implement buffer storage in `FakeDevice`
+2. Rename `MockBackend` → `SoftBackend`, `MockDevice` → `SoftDevice`
+3. Implement buffer storage in `SoftDevice`
 4. Implement framebuffer and clear operation
 5. Implement simple triangle rasterization
 6. Add pixel readback methods for testing
@@ -1335,16 +1335,16 @@ private:
 
 
 
-## 2025-10-29 � Technical Debt Resolution: FakeDevice Improvements & OBJ Loader
+## 2025-10-29 � Technical Debt Resolution: SoftDevice Improvements & OBJ Loader
 
 ### Context
 
-After implementing the initial FakeBackend with basic triangle rasterization, three technical debt items remained:
-1. FakeDevice used simple flat shading (no lighting/normals)
+After implementing the initial SoftBackend with basic triangle rasterization, three technical debt items remained:
+1. SoftDevice used simple flat shading (no lighting/normals)
 2. No depth buffer implementation
 3. OBJ loader was minimal (positions only, no normals/UVs)
 
-### Implementation: Enhanced FakeDevice
+### Implementation: Enhanced SoftDevice
 
 #### Depth Buffer
 - Added depth buffer as std::vector<float> alongside framebuffer pixels
@@ -1439,12 +1439,12 @@ Added 11 new tests across 5 test suites:
 - ObjLoader_ParseQuad - Automatic quad triangulation
 - ObjLoader_ErrorHandling - Empty mesh, invalid indices
 
-#### FakeDevice Depth Tests (3 tests)
+#### SoftDevice Depth Tests (3 tests)
 - EnableDepthTest_InitializesDepthBuffer - State initialization
 - ClearDepthBuffer_ResetsAllDepthValues - Buffer clearing
 - CloserTriangleOccludesFartherTriangle - Depth ordering verification
 
-#### FakeDevice Lighting Tests (2 tests)
+#### SoftDevice Lighting Tests (2 tests)
 - VerticesWithNormals_ApplyLighting - Lighting calculation
 - NormalsPointingAway_ProduceDarkerColor - Directional light validation
 
@@ -1489,6 +1489,251 @@ Deferred to maintain MVP scope:
 - OBJ material (.mtl) support
 - Binary OBJ/PLY loaders
 
+
+## 2025-11-15 — Occlusion Culling Implementation Strategy
+
+### Executive Summary
+
+Research comprehensive occlusion culling techniques for Raktr's WebGPU-based architecture. **Recommendation: Implement Hierarchical Z-Buffer (Hi-Z) occlusion culling as MVP**, with Software Occlusion Culling as fallback.
+
+### Main Occlusion Culling Techniques
+
+#### A) Hardware Occlusion Queries (HOQ)
+
+**How It Works:**
+- Submit low-poly proxy geometry (bounding boxes) to GPU
+- Query returns pixel count that passed depth test
+- If count > 0, object is visible; render full detail
+
+**WebGPU Support:** ✅ Via `WGPUQueryType_Occlusion`
+
+**Frame Latency Issue:** ⚠️ Results available **next frame** (GPU→CPU roundtrip)
+- Frame N: Submit queries
+- Frame N+1: Results available, decide visibility
+- Temporal lag can cause flickering with fast camera movement
+
+**Best Use Cases:**
+- ✅ Large, static occluders (buildings, terrain)
+- ✅ VR/high-frame-rate scenarios
+- ✅ Coarse culling (large groups of objects)
+- ❌ Avoid: Per-object queries, fast-moving cameras, small occluders
+
+#### B) Hierarchical Z-Buffer (Hi-Z) ⭐ **RECOMMENDED**
+
+**How It Works:**
+1. Build depth pyramid (mipmap chain) from depth buffer using compute shader
+2. Each level is half-resolution of previous, stores maximum depth per tile
+3. Test object AABBs against appropriate mip level
+4. If object's min depth > Hi-Z depth, object is occluded
+
+**WebGPU Implementation:**
+- **Phase 1:** Depth pyramid generation via compute shader
+- **Phase 2:** Visibility testing (GPU compute or CPU)
+- No CPU-GPU sync required, no frame latency
+
+**Performance:**
+- Depth pyramid generation: ~0.5-1ms (1080p)
+- Visibility testing: ~0.2-0.5ms (10,000 objects)
+- Total overhead: 0.5-1.5ms
+
+**Pros:**
+- ✅ Best performance/complexity ratio
+- ✅ No frame latency (results same frame)
+- ✅ WebGPU native support (compute shaders)
+- ✅ Scales with GPU power
+- ✅ Handles 10,000+ objects efficiently
+
+**Cons:**
+- ❌ Requires compute shader support
+- ❌ Initial implementation complexity (medium)
+
+#### C) Software Occlusion Culling
+
+**How It Works:**
+- Rasterize simplified occluders on CPU (depth-only)
+- Use low-resolution depth buffer (e.g., 512×512)
+- Test object AABBs against CPU depth buffer
+- Multi-threaded rasterization
+
+**Intel's Library:** https://github.com/GameTechDev/OcclusionCulling
+- Apache 2.0 license (compatible)
+- SIMD optimized (SSE4.1, AVX2)
+- ~1-2ms on modern CPUs (10,000 AABBs)
+
+**Pros:**
+- ✅ No GPU dependency
+- ✅ Predictable performance
+- ✅ Integrates with Octree (CPU-side)
+- ✅ Great for low-end hardware
+
+**Cons:**
+- ❌ CPU overhead (1-2ms per frame)
+- ❌ Lower precision than GPU depth
+- ❌ Requires multi-threading
+
+#### D) Conservative Occlusion (Bounding Volumes)
+
+**How It Works:**
+- Test object AABBs against previous frame's depth buffer
+- Conservative: cull if AABB's nearest point is behind depth
+- Simplest approach, minimal implementation
+
+**Best For:**
+- Static scenes with few dynamic objects
+- Large occluders (buildings, mountains)
+- Low object density (< 1,000 objects)
+
+### Recommendation for Raktr
+
+**MVP: Hierarchical Z-Buffer (Hi-Z) in `raktr::render`**
+
+**Why:**
+1. Best performance/complexity ratio (0.5-1.5ms total)
+2. No frame latency (unlike HOQ)
+3. WebGPU native (compute shaders well-supported)
+4. Scales with GPU power
+5. Fits Raktr's GPU-first architecture
+
+**Fallback: Software Occlusion in `raktr::engine`**
+- Use when compute shaders unavailable
+- For CPU-bound scenarios
+- Mobile/low-power GPUs
+
+### Integration with Existing Pipeline
+
+**Current:**
+```
+Camera → Frustum Culling (Octree) → Visible Objects → Render
+```
+
+**With Occlusion:**
+```
+Camera → Frustum Culling (Octree) → Potentially Visible Set
+         ↓
+    Occlusion Culling (Hi-Z) → Confirmed Visible Set
+         ↓
+    Instance Rendering
+```
+
+### Implementation Plan
+
+#### Phase 1: MVP (Hi-Z Core) - 2-3 weeks
+
+**Week 1: Depth Pyramid Generation**
+- Create `DepthPyramid` class in `raktr/render/src/occlusion/`
+- Compute shader: `depth_reduce.wgsl` (downsample depth buffer)
+- Generate mip chain: each level = max depth of 2×2 block from previous
+
+**Week 2: Visibility Testing**
+- Create `VisibilityTest` class
+- Compute shader: test AABBs against depth pyramid
+- Project AABB to screen space, sample appropriate mip level
+- Output: bitfield of visible objects
+
+**Week 3: Integration with Octree**
+- Integrate with existing frustum culling in `RenderSystem`
+- Two-stage pipeline: Frustum (coarse) → Hi-Z (fine)
+- Build instance buffer from confirmed visible objects
+
+#### Phase 2: Advanced Optimizations - 2-4 weeks
+
+1. **Two-Pass Rendering (Early-Z)**
+   - Pass 1: Render occluders only (depth pre-pass)
+   - Build Hi-Z from depth pre-pass
+   - Pass 2: Test all objects, render visible
+
+2. **GPU-Driven Rendering**
+   - Keep visibility results on GPU
+   - Use indirect draw commands
+   - Eliminate CPU readback
+
+3. **Temporal Coherence**
+   - Track visibility across frames
+   - Skip testing for objects visible in last N frames
+   - Reduces overhead by 50-70%
+
+4. **LOD Integration**
+   - Occluded objects switch to lower LOD
+   - Prevents pop-in when visible
+
+#### Phase 3: Polish & Fallbacks - 1 week
+
+- Software occlusion fallback
+- Debug visualization modes
+- Performance profiling
+
+### Testing Strategy
+
+**Correctness Tests:**
+```cpp
+TEST(HiZCulling, OccludedObjectBehindWall_IsCulled)
+TEST(HiZCulling, PartiallyOccludedObject_IsVisible)
+TEST(HiZCulling, ObjectInFrontOfOccluder_IsVisible)
+```
+
+**Performance Tests:**
+```cpp
+TEST(HiZCulling, Performance_10kObjects_UnderBudget) {
+    // Should complete in < 1.5ms
+}
+```
+
+**Visual Verification:**
+- Freeze occlusion culling feature
+- Render visible in green, culled in red
+- Compare vs ground truth
+
+### Performance Expectations
+
+| Scene Type | Objects | Hi-Z Time | Culling Efficiency |
+|------------|---------|-----------|-------------------|
+| Small      | 1,000   | 0.3ms     | Minimal benefit   |
+| Medium     | 10,000  | 0.8ms     | 60-80% culled     |
+| Large      | 50,000  | 1.5ms     | 70-85% culled     |
+| Massive    | 100,000+| 2.5ms     | 75-90% culled     |
+
+**Culling Efficiency by Scene:**
+- Dense urban: 60-80% culled
+- Open terrain: 20-40% culled
+- Indoor corridor: 80-95% culled
+
+### Architecture Placement
+
+**Option A: In `raktr::render` (RECOMMENDED)**
+- Hi-Z tightly coupled to GPU depth buffer
+- Compute shaders live in render backend
+- Visibility results feed directly into instance buffer
+
+```cpp
+// raktr/render/src/occlusion/hi_z_culling.h
+namespace raktr::render::occlusion {
+    class HiZCulling {
+        WGPUTexture _depth_pyramid;
+        WGPUBuffer _visibility_buffer;
+    public:
+        void build_pyramid(WGPUTexture depth);
+        void test_visibility(std::span<const AABB> aabbs, 
+                           const glm::mat4& view_proj);
+    };
+}
+```
+
+**Option B: In `raktr::engine`**
+- For Software Occlusion Culling
+- Integrates with Octree on CPU side
+
+### References
+
+1. **"Hierarchical Z-buffer Visibility"** - Ned Greene et al., SIGGRAPH 1993
+2. **"Masked Occlusion Culling"** - Intel, 2016
+3. **Intel's Software Occlusion**: https://github.com/GameTechDev/OcclusionCulling
+4. **WebGPU Occlusion Queries**: https://www.w3.org/TR/webgpu/#queries
+
+### Summary
+
+Implement **Hi-Z in `raktr::render::occlusion`**, targeting 1.0-1.5ms overhead for 10,000 objects. Two-stage pipeline: **Frustum (coarse) → Hi-Z (fine)** culling.
+
+---
 
 ## 2025-10-30 — Wireframe Rendering from Vertex/Index Buffers
 
@@ -1854,7 +2099,7 @@ Given Raktr's goals (learning, cross-platform, multiple backends), I recommend:
 
 Rationale:
 1. ✅ **Simple implementation** — Easy to understand and debug
-2. ✅ **Backend-agnostic** — Works with FakeDevice, OpenGL, Vulkan, DirectX
+2. ✅ **Backend-agnostic** — Works with SoftDevice, OpenGL, Vulkan, DirectX
 3. ✅ **Optimal** — O(N) time, no duplicates
 4. ✅ **TDD-friendly** — Easy to unit test
 5. ✅ **MVP-appropriate** — Minimal complexity, proven approach
@@ -1992,7 +2237,7 @@ TEST(WireframeExtraction, Cube_ReturnsAllEdges) {
 #### Integration Tests
 
 ```cpp
-TEST(FakeDevice, RenderWireframe_ProducesLines) {
+TEST(SoftDevice, RenderWireframe_ProducesLines) {
     // Arrange
     auto ctx = create_render_context();
     ctx->initialize({.backend = BackendType::Fake});
@@ -2097,7 +2342,7 @@ Use stencil to mark edge pixels during solid rendering.
 **Next steps:**
 1. Implement `extract_wireframe_indices()` in `raktr/render/src/mesh/wireframe.cpp`
 2. Add unit tests for edge extraction
-3. Extend FakeDevice to support line rasterization
+3. Extend SoftDevice to support line rasterization
 4. Update OBJ loader to optionally compute wireframe indices
 5. Add integration tests rendering wireframe primitives
 
@@ -2340,8 +2585,8 @@ Before implementing the OpenGL4 backend, we need to assess what foundational com
    - Test primitives (cube, pyramid, sphere, plane, triangle)
 
 4. **Testing Infrastructure**
-   - `FakeBackend` and `FakeDevice` for software rendering tests
-   - Depth buffer support in FakeDevice
+   - `SoftBackend` and `SoftDevice` for software rendering tests
+   - Depth buffer support in SoftDevice
    - Basic lighting calculations (dot product with normals)
    - 44 passing tests covering buffers, OBJ loading, wireframe extraction
 
@@ -2359,7 +2604,7 @@ The following components are **critical gaps** that must be filled before OpenGL
 **Current State:**
 - Empty `raktr/render/public/window/` directory
 - No windowing library in Conan dependencies
-- `FakeBackend` creates context without actual window
+- `SoftBackend` creates context without actual window
 
 **Required:**
 - Window abstraction (`Window` interface)
@@ -2431,7 +2676,7 @@ if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress)) {
 **Current State:**
 - Empty `raktr/render/public/shaders/` directory
 - No shader compilation/linking infrastructure
-- FakeDevice uses hardcoded software "shaders"
+- SoftDevice uses hardcoded software "shaders"
 
 **Required:**
 - Shader compilation (vertex, fragment, geometry, compute)
@@ -2518,7 +2763,7 @@ void main() {
 **Current State:**
 - `Buffer` is opaque handle
 - No vertex attribute description
-- FakeDevice assumes hardcoded layout (position, normal, uv)
+- SoftDevice assumes hardcoded layout (position, normal, uv)
 
 **Required:**
 - Vertex attribute specification (location, format, offset, stride)
@@ -2559,7 +2804,7 @@ namespace raktr::render {
 ##### 5. Pipeline State Management ðŸŸ¡ IMPORTANT
 
 **Current State:**
-- FakeDevice has hardcoded depth testing
+- SoftDevice has hardcoded depth testing
 - No state objects for blend/raster/depth-stencil
 
 **Required:**
@@ -2661,7 +2906,7 @@ namespace raktr::render {
 ##### 7. Framebuffer Abstraction ðŸŸ¢ NICE-TO-HAVE
 
 **Current State:**
-- FakeDevice has internal framebuffer (`_pixels`, `_depth_buffer`)
+- SoftDevice has internal framebuffer (`_pixels`, `_depth_buffer`)
 - OpenGL uses default framebuffer initially
 
 **Required (eventually):**
@@ -2681,7 +2926,7 @@ namespace raktr::render {
 **Current State:**
 - Buffers use `uint32_t` handles (id-based)
 - No explicit destroy methods
-- FakeDevice stores resources in vectors
+- SoftDevice stores resources in vectors
 
 **Required (for production):**
 - RAII wrappers or explicit resource destruction
@@ -2825,9 +3070,9 @@ virtual void destroy_texture(const Texture& texture) = 0;
 
 ### Migration Path for Existing Tests
 
-Our current `FakeBackend` tests will remain valuable:
+Our current `SoftBackend` tests will remain valuable:
 
-1. Keep `FakeBackend` for **headless testing** (CI, unit tests)
+1. Keep `SoftBackend` for **headless testing** (CI, unit tests)
 2. Add `OpenGLBackend` for **visual validation** (manual testing, screenshots)
 3. Both backends implement same `Device` interface
 4. Tests can run against both (via test fixtures)
@@ -2857,7 +3102,7 @@ INSTANTIATE_TEST_SUITE_P(AllBackends, DeviceTest,
 | OpenGL context creation failures      | Robust error reporting, fallback to Fake       |
 | Shader compilation errors             | Store line numbers, return detailed logs       |
 | State management complexity           | Start simple (global state), refactor later    |
-| Testing requires GPU                  | Keep FakeBackend for CI, OpenGL for dev only   |
+| Testing requires GPU                  | Keep SoftBackend for CI, OpenGL for dev only   |
 | GLAD generation customization         | Document exact GLAD options used               |
 
 ### Conan Dependency Updates Needed
@@ -3064,9 +3309,9 @@ raktr/render/
 #### Integration Strategy
 
 1. **Wrap wgpu-native** in our existing `Device` interface
-2. **Keep FakeBackend** for unit tests (no GPU needed)
+2. **Keep SoftBackend** for unit tests (no GPU needed)
 3. **Add WgpuBackend** for hardware rendering
-4. **Existing tests** continue to work with FakeBackend
+4. **Existing tests** continue to work with SoftBackend
 5. **New integration tests** use WgpuBackend
 
 #### API Mapping
@@ -3109,7 +3354,7 @@ raktr/render/
    - WebGPU handles swapchain creation
 
 4. **Test Infrastructure**
-   - Keep existing FakeBackend tests
+   - Keep existing SoftBackend tests
    - Add WgpuBackend integration tests (requires GPU)
    - Use `BackendType::WebGPU` enum
 
@@ -3161,7 +3406,7 @@ WebGPU supports:
 
 ### Testing Strategy
 
-#### Unit Tests (FakeBackend)
+#### Unit Tests (SoftBackend)
 - ✅ Keep existing 44 tests
 - ✅ No changes needed
 - ✅ Run in CI without GPU
@@ -3176,7 +3421,7 @@ WebGPU supports:
 - Save framebuffer to PNG
 - Visual regression testing
 
-### Migration from FakeBackend
+### Migration from SoftBackend
 
 **No breaking changes** - both backends coexist:
 
@@ -3248,10 +3493,3352 @@ gpu_context->initialize(gpu_config);
 
 **Next steps:**
 1. Add wgpu-native as dependency (git submodule or pre-built)
-2. Integrate with CMake build system
-3. Implement WgpuDevice wrapper around existing Device interface
-4. Create window with GPU surface
-5. Render first triangle using WebGPU API
+
+---
+
+## 2025-11-07 — User Input Event Handling Architecture (Revised)
+
+### Context
+
+The next TODO item requires implementing user input capture and notification for keyboard and mouse events. This design follows a **callback-based architecture** with clear separation of concerns between `render` (raw capture) and `engine` (processing).
+
+### Architectural Principles
+
+1. **`render/window`** — Exposes raw GLFW input callbacks (minimal abstraction)
+2. **`engine/input`** — Handles event processing, mapping, and game logic
+3. **Callback pattern** — Consistent with existing `set_resize_callback` API
+4. **No polling** — Events delivered immediately via callbacks
+5. **GLFW key codes exposed** — Allow `engine` to map to its own enumerations
+6. **Multithreading ready** — Engine can process events in parallel
+
+### Current State Analysis
+
+**What We Have:**
+- ✅ GLFW window abstraction (`GLFWWindow` in `raktr/render/src/window/`)
+- ✅ `Window::poll_events()` calls `glfwPollEvents()` (triggers GLFW callbacks)
+- ✅ Resize callback system using `std::function<void(uint32_t, uint32_t)>`
+- ✅ `Window` interface is in `raktr/render/public/window/window.h`
+
+**What's Missing:**
+- ❌ No keyboard event callbacks
+- ❌ No mouse button event callbacks
+- ❌ No mouse movement callbacks
+- ❌ No mouse scroll callbacks
+- ❌ No GLFW callback registration in Window API
+
+### Architectural Decision: Callback-Based Split Architecture
+
+**`render/window` Responsibilities:**
+- Register GLFW callbacks
+- Expose raw callback setters on `Window` interface
+- Pass GLFW key codes/mouse buttons directly (no abstraction)
+- Minimal overhead — just forward GLFW events
+
+**`engine/input` Responsibilities** (future TODO):
+- Subscribe to window callbacks
+- Map GLFW codes → engine-specific enumerations
+- Maintain input state (key down/up)
+- Process events (potentially in parallel threads)
+- Provide high-level API (action mapping, input contexts)
+
+---
+
+### Design: `render/window` — Raw Callback API
+
+**Goal:** Expose GLFW input callbacks through the `Window` interface with minimal abstraction.
+
+#### Callback Type Definitions
+
+Match GLFW callback signatures exactly:
+
+```cpp
+// In raktr/render/public/window/window.h
+
+// Key callback (GLFW: GLFWkeyfun)
+// key: GLFW_KEY_* constant
+// scancode: platform-specific scancode
+// action: GLFW_PRESS, GLFW_RELEASE, GLFW_REPEAT
+// mods: GLFW_MOD_* bitfield (Shift, Ctrl, Alt, etc.)
+using KeyCallback = std::function<void(int key, int scancode, int action, int mods)>;
+
+// Mouse button callback (GLFW: GLFWmousebuttonfun)
+// button: GLFW_MOUSE_BUTTON_* constant
+// action: GLFW_PRESS or GLFW_RELEASE
+// mods: GLFW_MOD_* bitfield
+using MouseButtonCallback = std::function<void(int button, int action, int mods)>;
+
+// Cursor position callback (GLFW: GLFWcursorposfun)
+// xpos, ypos: cursor position in screen coordinates
+using CursorPosCallback = std::function<void(double xpos, double ypos)>;
+
+// Scroll callback (GLFW: GLFWscrollfun)
+// xoffset, yoffset: scroll offsets
+using ScrollCallback = std::function<void(double xoffset, double yoffset)>;
+
+// Resize callback (already exists)
+using ResizeCallback = std::function<void(uint32_t width, uint32_t height)>;
+```
+
+#### `Window` Interface Extensions
+
+Add callback setters to `Window` interface:
+
+```cpp
+// In raktr/render/public/window/window.h
+
+class Window {
+public:
+    // ... existing methods ...
+
+    // Input callbacks
+    virtual void set_key_callback(KeyCallback callback) = 0;
+    virtual void set_mouse_button_callback(MouseButtonCallback callback) = 0;
+    virtual void set_cursor_pos_callback(CursorPosCallback callback) = 0;
+    virtual void set_scroll_callback(ScrollCallback callback) = 0;
+
+    // Resize callback (already exists)
+    virtual void set_resize_callback(ResizeCallback callback) = 0;
+};
+```
+
+**Design Notes:**
+- Use `int` for GLFW constants (not enums) → keeps render layer agnostic
+- Callbacks optional → game logic subscribes as needed
+- Thread-safe → GLFW events fire on main thread, `engine` can dispatch to workers
+
+---
+
+### Implementation: `GLFWWindow` Callback Registration
+
+**File:** `raktr/render/src/window/glfw_window.h`
+
+```cpp
+class GLFWWindow : public Window {
+private:
+    GLFWwindow* _window{nullptr};
+    
+    // Stored callbacks
+    KeyCallback _key_callback;
+    MouseButtonCallback _mouse_button_callback;
+    CursorPosCallback _cursor_pos_callback;
+    ScrollCallback _scroll_callback;
+    ResizeCallback _resize_callback; // already exists
+
+public:
+    void set_key_callback(KeyCallback callback) override;
+    void set_mouse_button_callback(MouseButtonCallback callback) override;
+    void set_cursor_pos_callback(CursorPosCallback callback) override;
+    void set_scroll_callback(ScrollCallback callback) override;
+};
+```
+
+**File:** `raktr/render/src/window/glfw_window.cpp`
+
+```cpp
+#include "glfw_window.h"
+#include <GLFW/glfw3.h>
+
+// Static wrapper to forward GLFW callbacks to instance methods
+namespace {
+
+void glfw_key_callback_wrapper(GLFWwindow* window, int key, int scancode, int action, int mods) {
+    auto* win = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+    if (win && win->_key_callback) {
+        win->_key_callback(key, scancode, action, mods);
+    }
+}
+
+void glfw_mouse_button_callback_wrapper(GLFWwindow* window, int button, int action, int mods) {
+    auto* win = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+    if (win && win->_mouse_button_callback) {
+        win->_mouse_button_callback(button, action, mods);
+    }
+}
+
+void glfw_cursor_pos_callback_wrapper(GLFWwindow* window, double xpos, double ypos) {
+    auto* win = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+    if (win && win->_cursor_pos_callback) {
+        win->_cursor_pos_callback(xpos, ypos);
+    }
+}
+
+void glfw_scroll_callback_wrapper(GLFWwindow* window, double xoffset, double yoffset) {
+    auto* win = static_cast<GLFWWindow*>(glfwGetWindowUserPointer(window));
+    if (win && win->_scroll_callback) {
+        win->_scroll_callback(xoffset, yoffset);
+    }
+}
+
+} // anonymous namespace
+
+void GLFWWindow::set_key_callback(KeyCallback callback) {
+    _key_callback = std::move(callback);
+    glfwSetKeyCallback(_window, _key_callback ? glfw_key_callback_wrapper : nullptr);
+}
+
+void GLFWWindow::set_mouse_button_callback(MouseButtonCallback callback) {
+    _mouse_button_callback = std::move(callback);
+    glfwSetMouseButtonCallback(_window, _mouse_button_callback ? glfw_mouse_button_callback_wrapper : nullptr);
+}
+
+void GLFWWindow::set_cursor_pos_callback(CursorPosCallback callback) {
+    _cursor_pos_callback = std::move(callback);
+    glfwSetCursorPosCallback(_window, _cursor_pos_callback ? glfw_cursor_pos_callback_wrapper : nullptr);
+}
+
+void GLFWWindow::set_scroll_callback(ScrollCallback callback) {
+    _scroll_callback = std::move(callback);
+    glfwSetScrollCallback(_window, _scroll_callback ? glfw_scroll_callback_wrapper : nullptr);
+}
+```
+
+**Key Implementation Points:**
+- Store callbacks as member variables (allows unsubscribing via `nullptr`)
+- Use `glfwGetWindowUserPointer` to retrieve `GLFWWindow*` instance
+- Register GLFW callback only if user callback is valid
+- Unregister (set to `nullptr`) if user callback is cleared
+
+---
+
+### Design: `engine/input` — Event Processing (Future TODO)
+
+**Goal:** Process raw GLFW events and provide game-ready input abstractions.
+
+#### Engine-Side Event Structures
+
+**File:** `raktr/engine/public/input/key_event.h`
+
+```cpp
+namespace raktr::engine {
+
+// Engine-specific key codes (mapped from GLFW)
+enum class KeyCode : uint16_t {
+    Unknown = 0,
+    Space = 32,
+    Apostrophe = 39,
+    Comma = 44,
+    // ... (map from GLFW_KEY_* constants)
+    A = 65, B = 66, /* ... */ Z = 90,
+    Escape = 256,
+    Enter = 257,
+    // ... complete mapping
+};
+
+enum class KeyAction : uint8_t {
+    Release = 0,
+    Press = 1,
+    Repeat = 2
+};
+
+struct KeyModifiers {
+    bool shift : 1;
+    bool ctrl : 1;
+    bool alt : 1;
+    bool super : 1;
+};
+
+struct KeyEvent {
+    KeyCode key;
+    int scancode;
+    KeyAction action;
+    KeyModifiers mods;
+};
+
+} // namespace raktr::engine
+```
+
+**File:** `raktr/engine/public/input/mouse_event.h`
+
+```cpp
+namespace raktr::engine {
+
+enum class MouseButton : uint8_t {
+    Left = 0,
+    Right = 1,
+    Middle = 2,
+    Button4 = 3,
+    Button5 = 4,
+    // ...
+};
+
+enum class MouseAction : uint8_t {
+    Release = 0,
+    Press = 1
+};
+
+struct MouseButtonEvent {
+    MouseButton button;
+    MouseAction action;
+    KeyModifiers mods;
+};
+
+struct MouseMoveEvent {
+    double x;
+    double y;
+};
+
+struct MouseScrollEvent {
+    double xoffset;
+    double yoffset;
+};
+
+} // namespace raktr::engine
+```
+
+#### Input Event Variant
+
+**File:** `raktr/engine/public/input/input_event.h`
+
+```cpp
+#include <variant>
+#include "key_event.h"
+#include "mouse_event.h"
+
+namespace raktr::engine {
+
+using InputEvent = std::variant<
+    KeyEvent,
+    MouseButtonEvent,
+    MouseMoveEvent,
+    MouseScrollEvent
+>;
+
+} // namespace raktr::engine
+```
+
+**Rationale:**
+- `std::variant` → composition over inheritance ✅
+- Type-safe event handling via `std::visit`
+- No vtable overhead
+
+#### Engine Input System (Conceptual)
+
+**File:** `raktr/engine/public/input/input_system.h`
+
+```cpp
+namespace raktr::engine {
+
+class InputSystem {
+public:
+    explicit InputSystem(raktr::render::Window& window);
+
+    // Map GLFW codes → engine codes
+    static KeyCode map_glfw_key(int glfw_key);
+    static MouseButton map_glfw_mouse_button(int glfw_button);
+    static KeyModifiers map_glfw_mods(int glfw_mods);
+
+    // Process events (called per frame or in separate thread)
+    void process_events();
+
+    // Query input state
+    bool is_key_pressed(KeyCode key) const;
+    bool is_mouse_button_pressed(MouseButton button) const;
+    std::pair<double, double> get_mouse_position() const;
+
+private:
+    // Callbacks registered with Window
+    void on_key(int key, int scancode, int action, int mods);
+    void on_mouse_button(int button, int action, int mods);
+    void on_cursor_pos(double xpos, double ypos);
+    void on_scroll(double xoffset, double yoffset);
+
+    // Internal state
+    std::unordered_map<KeyCode, bool> _key_states;
+    std::unordered_map<MouseButton, bool> _mouse_button_states;
+    double _mouse_x{0.0}, _mouse_y{0.0};
+
+    // Event queue for deferred processing (thread-safe)
+    std::mutex _event_queue_mutex;
+    std::vector<InputEvent> _event_queue;
+};
+
+} // namespace raktr::engine
+```
+
+**Multithreading Considerations:**
+- GLFW callbacks fire on **main thread** (window thread)
+- `InputSystem` can queue events and process on **worker threads**
+- Use `std::mutex` to protect event queue
+- Decouple event capture (main thread) from event processing (worker threads)
+
+---
+
+### GLFW Key Code Reference
+
+GLFW provides key codes as `int` constants (e.g., `GLFW_KEY_A = 65`). The `engine` layer will map these to `KeyCode` enum.
+
+**Sample GLFW Key Codes:**
+```cpp
+#define GLFW_KEY_SPACE              32
+#define GLFW_KEY_APOSTROPHE         39
+#define GLFW_KEY_COMMA              44
+#define GLFW_KEY_MINUS              45
+#define GLFW_KEY_PERIOD             46
+#define GLFW_KEY_SLASH              47
+#define GLFW_KEY_0                  48
+#define GLFW_KEY_1                  49
+// ...
+#define GLFW_KEY_A                  65
+#define GLFW_KEY_B                  66
+// ...
+#define GLFW_KEY_ESCAPE             256
+#define GLFW_KEY_ENTER              257
+#define GLFW_KEY_TAB                258
+#define GLFW_KEY_BACKSPACE          259
+// ...
+```
+
+**Sample GLFW Mouse Button Codes:**
+```cpp
+#define GLFW_MOUSE_BUTTON_1         0
+#define GLFW_MOUSE_BUTTON_2         1
+#define GLFW_MOUSE_BUTTON_3         2
+#define GLFW_MOUSE_BUTTON_LEFT      GLFW_MOUSE_BUTTON_1
+#define GLFW_MOUSE_BUTTON_RIGHT     GLFW_MOUSE_BUTTON_2
+#define GLFW_MOUSE_BUTTON_MIDDLE    GLFW_MOUSE_BUTTON_3
+```
+
+## 2025-11-18 — Object-Oriented Render Pass Architecture
+
+### Context
+
+After researching the nanite-webgpu reference implementation and OOP design patterns, we need to design a clean, maintainable architecture for render pass management that supports:
+
+1. **Temporal Hi-Z occlusion culling** (current frame uses previous frame's depth pyramid)
+2. **Multiple render passes** with explicit load/store operations
+3. **Frame resource management** (double/triple buffering)
+4. **Pass composition** via render graph
+5. **Type safety** and **testability**
+
+### Key Architectural Patterns
+
+#### 1. **Pass Object Pattern (Command)**
+
+Each rendering technique is encapsulated in a self-contained pass object:
+
+```cpp
+namespace raktr::render {
+
+class IRenderPass {
+public:
+    virtual ~IRenderPass() = default;
+    
+    // Execute the pass with given context
+    virtual void execute(PassContext& ctx) = 0;
+    
+    // Lifecycle hooks
+    virtual void on_viewport_resize() = 0;
+    virtual std::string_view name() const = 0;
+};
+
+} // namespace raktr::render
+```
+
+**Benefits:**
+- Single Responsibility: Each pass does ONE thing
+- Open/Closed: Add new passes without modifying existing code
+- Testable: Mock passes for unit tests
+
+#### 2. **PassContext Pattern (Data Carrier)**
+
+Instead of scattered parameters, use a context object that carries frame state:
+
+```cpp
+namespace raktr::render {
+
+struct PassContext {
+    // Frame state
+    uint32_t frame_index;
+    
+    // Command recording
+    WGPUCommandEncoder command_encoder;
+    
+    // Render targets (current frame)
+    WGPUTextureView color_target;
+    WGPUTextureView depth_target;
+    
+    // Previous frame resources (for temporal techniques like Hi-Z)
+    WGPUTextureView prev_frame_hi_z_pyramid;
+    
+    // Shared resources
+    UniformBuffer& global_uniforms;
+    Scene& scene;
+    
+    // GPU device access
+    WgpuDevice& device;
+    
+    // Profiler (optional)
+    GpuProfiler* profiler = nullptr;
+};
+
+} // namespace raktr::render
+```
+
+**Benefits:**
+- Reduces parameter lists
+- Easy to extend without breaking existing code
+- Clear data ownership
+
+#### 3. **RenderPassBuilder (Fluent API)**
+
+For flexible render pass construction with method chaining:
+
+```cpp
+namespace raktr::render {
+
+class RenderPassBuilder {
+public:
+    RenderPassBuilder& color_attachment(
+        WGPUTextureView target,
+        WGPULoadOp load_op = WGPULoadOp_Clear,
+        std::array<float, 4> clear_color = {0.0f, 0.0f, 0.0f, 1.0f}
+    );
+    
+    RenderPassBuilder& depth_attachment(
+        WGPUTextureView target,
+        WGPULoadOp load_op = WGPULoadOp_Clear,
+        float clear_depth = 1.0f
+    );
+    
+    RenderPassBuilder& label(std::string_view name);
+    
+    // Execute and return encoder
+    WGPURenderPassEncoder begin(WGPUCommandEncoder encoder);
+    
+private:
+    struct AttachmentDesc {
+        WGPUTextureView view;
+        WGPULoadOp load_op;
+        std::array<float, 4> clear_color;
+    };
+    
+    std::optional<AttachmentDesc> _color;
+    std::optional<AttachmentDesc> _depth;
+    std::string _label;
+};
+
+// Usage example:
+auto render_pass = RenderPassBuilder()
+    .color_attachment(hdr_target, WGPULoadOp_Load)  // Don't clear
+    .depth_attachment(depth_target, WGPULoadOp_Load) // Don't clear
+    .label("GeometryPass")
+    .begin(cmd_encoder);
+
+} // namespace raktr::render
+```
+
+**Benefits:**
+- Type-safe configuration
+- Self-documenting code
+- Prevents invalid state
+
+#### 4. **Concrete Pass Classes (Strategy Pattern)**
+
+Each rendering technique is its own class implementing `IRenderPass`:
+
+```cpp
+namespace raktr::render {
+
+// Occlusion culling pass
+class HiZOcclusionPass : public IRenderPass {
+public:
+    explicit HiZOcclusionPass(WgpuDevice& device);
+    
+    void execute(PassContext& ctx) override;
+    void on_viewport_resize() override;
+    std::string_view name() const override { return "HiZOcclusionPass"; }
+    
+private:
+    std::unique_ptr<HiZBuffer> _hi_z_buffer;
+};
+
+// Geometry rendering pass
+class GeometryPass : public IRenderPass {
+public:
+    GeometryPass(WgpuDevice& device, WGPUTextureFormat color_format);
+    
+    void execute(PassContext& ctx) override;
+    void on_viewport_resize() override;
+    std::string_view name() const override { return "GeometryPass"; }
+    
+private:
+    WGPURenderPipeline _pipeline;
+    BindingsCache _bindings_cache;
+};
+
+// Hi-Z pyramid building pass
+class HiZPyramidPass : public IRenderPass {
+public:
+    explicit HiZPyramidPass(WgpuDevice& device);
+    
+    void execute(PassContext& ctx) override;
+    void on_viewport_resize() override;
+    std::string_view name() const override { return "HiZPyramidPass"; }
+    
+private:
+    std::unique_ptr<HiZBuffer> _hi_z_buffer;
+};
+
+} // namespace raktr::render
+```
+
+#### 5. **RenderGraph (Composite Pattern)**
+
+Manages pass execution order and dependencies:
+
+```cpp
+namespace raktr::render {
+
+class RenderGraph {
+public:
+    RenderGraph& add_pass(std::unique_ptr<IRenderPass> pass);
+    
+    void execute(PassContext& ctx);
+    void on_viewport_resize();
+    
+private:
+    std::vector<std::unique_ptr<IRenderPass>> _passes;
+};
+
+} // namespace raktr::render
+```
+
+#### 6. **FrameResources (Resource Manager)**
+
+Manages per-frame resources with double/triple buffering for temporal techniques:
+
+```cpp
+namespace raktr::render {
+
+class FrameResources {
+public:
+    struct Frame {
+        WGPUTexture color_texture;
+        WGPUTextureView color_view;
+        WGPUTexture depth_texture;
+        WGPUTextureView depth_view;
+        WGPUTexture hi_z_pyramid;
+        WGPUTextureView hi_z_pyramid_view;
+    };
+    
+    explicit FrameResources(WgpuDevice& device, uint32_t num_frames = 2);
+    
+    // Get current frame resources
+    Frame& current();
+    
+    // Get previous frame resources (for temporal occlusion)
+    Frame& previous();
+    
+    // Advance to next frame
+    void advance();
+    
+    void resize(uint32_t width, uint32_t height);
+    
+private:
+    std::vector<Frame> _frames;
+    uint32_t _current_index = 0;
+};
+
+} // namespace raktr::render
+```
+
+### Complete Integration
+
+```cpp
+namespace raktr::render {
+
+class Renderer {
+public:
+    Renderer(WgpuDevice& device, uint32_t width, uint32_t height);
+    
+    void render(Scene& scene);
+    void resize(uint32_t width, uint32_t height);
+    
+private:
+    void setup_render_graph();
+    
+    WgpuDevice& _device;
+    FrameResources _frame_resources;
+    UniformBuffer _global_uniforms;
+    RenderGraph _render_graph;
+    uint32_t _frame_index = 0;
+};
+
+} // namespace raktr::render
+```
+
+### Design Principles Applied
+
+| Principle | Application |
+|-----------|-------------|
+| **Single Responsibility** | Each pass does ONE thing |
+| **Open/Closed** | Add new passes without modifying existing code |
+| **Liskov Substitution** | All passes implement IRenderPass interface |
+| **Interface Segregation** | PassContext provides only what passes need |
+| **Dependency Inversion** | Renderer depends on IRenderPass abstraction |
+| **Command Pattern** | Passes encapsulate operations |
+| **Strategy Pattern** | Different rendering strategies as pass implementations |
+| **Composite Pattern** | RenderGraph composes passes |
+| **Builder Pattern** | RenderPassBuilder for flexible construction |
+
+### Benefits
+
+✅ **Testable** - Mock passes for unit tests  
+✅ **Flexible** - Reorder/replace passes easily
+
+---
+
+## 2025-11-19 — PassContext Backend Isolation Research
+
+### Problem Statement
+
+**Concern**: PassContext currently contains backend-specific types (e.g., `WGPUCommandEncoder`, `WGPUTextureView` from WebGPU). This violates architectural principles:
+
+1. **Abstraction leakage** - Backend details exposed in public API
+2. **Engine coupling** - Engine code would depend on backend-specific types
+3. **Multi-backend support** - Different backends need different context data (OpenGL has different primitives than WebGPU)
+
+**Current PassContext** (problematic):
+```cpp
+struct PassContext {
+    uint32_t frame_index = 0;
+    
+    // ❌ Backend-specific types exposed
+    WGPUCommandEncoder command_encoder = nullptr;
+    WGPUTextureView color_target = nullptr;
+    WGPUTextureView depth_target = nullptr;
+    WGPUTextureView prev_frame_hi_z_pyramid = nullptr;
+    
+    uint32_t viewport_width  = 0;
+    uint32_t viewport_height = 0;
+    
+    // ❌ Backend-specific device type
+    backend::wgpu::WgpuDevice* device = nullptr;
+};
+```
+
+### Architectural Analysis
+
+#### Current Architecture
+
+The codebase already uses **type erasure** successfully in two places:
+
+1. **Device** (public API) - Type-erases concrete backend devices (WgpuDevice, SoftDevice, etc.)
+2. **Backend interface** (internal) - Hides implementation details via IBackend
+
+**Key Insight**: RenderGraph and render passes are **internal implementation details**, NOT public API that the engine uses directly.
+
+#### Layer Separation
+
+```
+┌─────────────────────────────────────────────────────┐
+│         raktr::engine (PUBLIC API CONSUMER)         │
+│                                                     │
+│  Uses: Device, Buffer, RenderContext                │
+│  Does NOT use: RenderGraph, PassContext, passes    │
+└─────────────────────────────────────────────────────┘
+                          │
+                          │ uses
+                          ▼
+┌─────────────────────────────────────────────────────┐
+│       raktr::render PUBLIC API (ABSTRACTION)        │
+│                                                     │
+│  • Device (type-erased)                             │
+│  • Buffer (handle)                                  │
+│  • RenderContext (factory)                          │
+│  • RenderConfig                                     │
+│                                                     │
+│  ❌ NOT exposed: RenderGraph, PassContext, passes  │
+└─────────────────────────────────────────────────────┘
+                          │
+                          │ implements
+                          ▼
+┌─────────────────────────────────────────────────────┐
+│     raktr::render INTERNAL (IMPLEMENTATION)         │
+│                                                     │
+│  Backend-specific (src/):                           │
+│  • WgpuDevice, SoftDevice                           │
+│  • WgpuBackend, SoftBackend                         │
+│  • RenderGraph + PassContext ← HERE                 │
+│  • Render passes (HiZOcclusionPass, etc.)          │
+│                                                     │
+│  ✅ Backend-specific types OK here                 │
+└─────────────────────────────────────────────────────┘
+```
+
+### Solution Options
+
+#### Option 1: Keep PassContext Backend-Specific (RECOMMENDED)
+
+**Rationale**: PassContext is INTERNAL to the render subsystem. It's never exposed to the engine.
+
+**Architecture**:
+```cpp
+// raktr/render/src/pass_context.h (INTERNAL - not in public/)
+namespace raktr::render {
+
+// Forward declarations for backend-specific types
+using WGPUCommandEncoder = struct WGPUCommandEncoderImpl*;
+using WGPUTextureView    = struct WGPUTextureViewImpl*;
+
+struct PassContext {
+    // Frame state (backend-agnostic)
+    uint32_t frame_index = 0;
+    uint32_t viewport_width  = 0;
+    uint32_t viewport_height = 0;
+    
+    // Backend-specific resources
+    // ✅ This is OK because PassContext is internal implementation
+    WGPUCommandEncoder command_encoder = nullptr;
+    WGPUTextureView color_target = nullptr;
+    WGPUTextureView depth_target = nullptr;
+    WGPUTextureView prev_frame_hi_z_pyramid = nullptr;
+    
+    // Backend device access
+    backend::wgpu::WgpuDevice* device = nullptr;
+};
+
+} // namespace raktr::render
+```
+
+**File placement**:
+- ✅ `raktr/render/src/pass_context.h` - Internal implementation
+- ❌ NOT in `raktr/render/public/` - Never exposed to engine
+
+**Who uses PassContext**:
+- `RenderGraph::execute()` - Creates PassContext, passes to render passes
+- Render passes (`HiZOcclusionPass`, `GeometryPass`, etc.) - Receive PassContext in execute()
+- Backend implementation - Populates PassContext with backend-specific data
+
+**Who does NOT use PassContext**:
+- Engine code - Never sees PassContext
+- Public Device API - Abstracts away implementation details
+
+**Benefits**:
+- ✅ Simple - No additional abstraction needed
+- ✅ Performant - Direct access to backend resources
+- ✅ Type-safe - Compile-time backend coupling within render subsystem
+- ✅ Maintainable - Backend-specific logic stays in backend code
+
+**Trade-offs**:
+- ⚠️ RenderGraph is WebGPU-specific (but that's OK - it's internal)
+- ⚠️ Would need OpenGLPassContext for OpenGL backend (handled by separate RenderGraph implementation)
+
+#### Option 2: Type-Erase PassContext (OVER-ENGINEERING)
+
+**Rationale**: If PassContext were PUBLIC API (it's not), we'd need type erasure.
+
+**Architecture**:
+```cpp
+// raktr/render/public/pass_context.h
+namespace raktr::render {
+
+struct PassContext {
+    uint32_t frame_index = 0;
+    uint32_t viewport_width  = 0;
+    uint32_t viewport_height = 0;
+    
+    // Type-erased backend data
+    std::any backend_data;
+    
+    // Type-erased device
+    Device* device = nullptr;
+};
+
+} // namespace raktr::render
+
+// Backend-specific context (internal)
+namespace raktr::render::backend {
+
+struct WgpuPassContext {
+    WGPUCommandEncoder command_encoder;
+    WGPUTextureView color_target;
+    WGPUTextureView depth_target;
+    WGPUTextureView prev_frame_hi_z_pyramid;
+};
+
+} // namespace raktr::render::backend
+```
+
+**Problems**:
+- ❌ Complexity - Need casting and type checking
+- ❌ Runtime overhead - `std::any` has performance cost
+- ❌ Error-prone - Easy to cast to wrong type
+- ❌ **Not needed** - PassContext is already internal!
+
+#### Option 3: Per-Backend RenderGraph (FUTURE-PROOF)
+
+**Rationale**: Each backend has its own RenderGraph + PassContext implementation.
+
+**Architecture**:
+```cpp
+// raktr/render/src/backend/wgpu/wgpu_render_graph.h
+namespace raktr::render::backend {
+
+struct WgpuPassContext {
+    uint32_t frame_index;
+    WGPUCommandEncoder command_encoder;
+    WGPUTextureView color_target;
+    // ... WebGPU-specific data
+};
+
+class WgpuRenderGraph {
+public:
+    void execute(WgpuPassContext& ctx);
+    // ... WebGPU-specific implementation
+};
+
+} // namespace raktr::render::backend
+
+// raktr/render/src/backend/opengl/opengl_render_graph.h
+namespace raktr::render::backend {
+
+struct OpenGLPassContext {
+    uint32_t frame_index;
+    GLuint framebuffer;
+    GLuint depth_texture;
+    // ... OpenGL-specific data
+};
+
+class OpenGLRenderGraph {
+public:
+    void execute(OpenGLPassContext& ctx);
+    // ... OpenGL-specific implementation
+};
+
+} // namespace raktr::render::backend
+```
+
+**Benefits**:
+- ✅ Complete backend isolation
+- ✅ Backend-specific optimizations possible
+- ✅ No shared abstractions needed
+
+**Trade-offs**:
+- ⚠️ Code duplication across backends
+- ⚠️ More complex to maintain multiple implementations
+- ⚠️ Overkill for current needs (only WebGPU backend exists)
+
+---
+
+## 2025-11-19 — Implementation Plan: Per-Backend RenderGraph Architecture
+
+### Decision Rationale
+
+**Selected**: Option 3 - Per-Backend RenderGraph (FUTURE-PROOF)
+
+**Why**: Preparing for multi-backend support (OpenGL, Vulkan, DirectX) requires backend-isolated RenderGraph implementations. This prevents large refactors when adding new backends.
+
+### High-Level Strategy
+
+Each backend will have:
+1. **Backend-specific PassContext** - Contains backend-native types (WGPUCommandEncoder vs GLuint)
+2. **Backend-specific RenderGraph** - Manages pass execution with backend context
+3. **Backend-specific RenderPass implementations** - Each pass optimized for backend
+4. **Shared RenderPass interface** - Common abstraction for pass behavior
+
+### Directory Structure (Target)
+
+```
+raktr/render/
+├── public/
+│   ├── device.h                    # Type-erased device (unchanged)
+│   ├── buffer.h                    # Buffer handle (unchanged)
+│   ├── render_context.h            # Factory (unchanged)
+│   └── render_pass.h               # ✨ NEW: Abstract pass interface (backend-agnostic)
+│
+└── src/
+    ├── backend/
+    │   ├── wgpu/
+    │   │   ├── wgpu_device.h
+    │   │   ├── wgpu_backend.h
+    │   │   ├── wgpu_pass_context.h   # ✨ NEW: WebGPU-specific context
+    │   │   ├── wgpu_render_graph.h   # ✨ NEW: WebGPU graph implementation
+    │   │   ├── wgpu_render_graph.cpp
+    │   │   └── passes/               # ✨ NEW: WebGPU-specific passes
+    │   │       ├── wgpu_hi_z_occlusion_pass.h
+    │   │       ├── wgpu_hi_z_occlusion_pass.cpp
+    │   │       ├── wgpu_geometry_pass.h
+    │   │       ├── wgpu_geometry_pass.cpp
+    │   │       ├── wgpu_instanced_geometry_pass.h
+    │   │       ├── wgpu_instanced_geometry_pass.cpp
+    │   │       ├── wgpu_hi_z_pyramid_pass.h
+    │   │       └── wgpu_hi_z_pyramid_pass.cpp
+    │   │
+    │   └── fake/
+    │       ├── fake_device.h
+    │       ├── fake_backend.h
+    │       ├── fake_pass_context.h   # ✨ NEW: Fake backend context
+    │       ├── fake_render_graph.h   # ✨ NEW: Fake graph (no-op or simple)
+    │       └── fake_render_graph.cpp
+    │
+    ├── render_graph.h                # ❌ REMOVE: No longer shared
+    ├── render_graph.cpp              # ❌ REMOVE
+    ├── pass_context.h                # ❌ REMOVE: No longer shared
+    └── passes/                       # ❌ REMOVE: Move to backend-specific
+        ├── hi_z_occlusion_pass.h     # → backend/wgpu/passes/
+        ├── hi_z_occlusion_pass.cpp
+        ├── geometry_pass.h
+        ├── geometry_pass.cpp
+        ├── instanced_geometry_pass.h
+        ├── instanced_geometry_pass.cpp
+        ├── hi_z_pyramid_pass.h
+        └── hi_z_pyramid_pass.cpp
+```
+
+### Step-by-Step Implementation Plan
+
+---
+
+#### **Phase 1: Create Backend-Agnostic Abstraction Layer**
+
+**Goal**: Define common interfaces that all backends will implement.
+
+##### Step 1.1: Create Abstract RenderPass Interface (Public API)
+
+**File**: `raktr/render/public/render_pass.h`
+
+**Action**: Move existing `IRenderPass` to public API and make it truly backend-agnostic.
+
+**Code**:
+```cpp
+namespace raktr::render {
+
+/*!
+ * @brief Backend-agnostic render pass interface.
+ * 
+ * Concrete implementations are backend-specific and live in backend/*/passes/.
+ */
+class IRenderPass {
+public:
+    virtual ~IRenderPass() = default;
+    
+    /*!
+     * @brief Get pass name for debugging/profiling.
+     */
+    [[nodiscard]] virtual std::string_view name() const = 0;
+    
+    /*!
+     * @brief Handle viewport resize event.
+     */
+    virtual void on_viewport_resize(uint32_t width, uint32_t height) = 0;
+};
+
+} // namespace raktr::render
+```
+
+**Note**: No `execute()` method - backend-specific contexts make this impossible at this level.
+
+##### Step 1.2: Create Backend-Specific PassContext Type Trait
+
+**File**: `raktr/render/src/backend/backend_traits.h` (NEW)
+
+**Action**: Define compile-time traits for backend types.
+
+**Code**:
+```cpp
+namespace raktr::render::backend {
+
+// Forward declarations
+namespace wgpu { struct WgpuPassContext; class WgpuRenderGraph; }
+namespace fake { struct SoftPassContext; class SoftRenderGraph; }
+
+/*!
+ * @brief Compile-time mapping of backend types.
+ * 
+ * Each backend specializes this trait to define its PassContext and RenderGraph types.
+ */
+template<typename BackendDevice>
+struct BackendTraits;
+
+// Specialization for WgpuDevice
+template<>
+struct BackendTraits<wgpu::WgpuDevice> {
+    using PassContext = wgpu::WgpuPassContext;
+    using RenderGraph = wgpu::WgpuRenderGraph;
+};
+
+// Specialization for SoftDevice
+template<>
+struct BackendTraits<soft::SoftDevice> {
+    using PassContext = soft::SoftPassContext;
+    using RenderGraph = soft::SoftRenderGraph;
+};
+
+} // namespace raktr::render::backend
+```
+
+**Benefits**:
+- ✅ Compile-time type safety
+- ✅ No runtime overhead
+- ✅ Easy to add new backends (just add specialization)
+
+---
+
+#### **Phase 2: Implement WebGPU Backend-Specific Components**
+
+**Goal**: Create WebGPU-specific PassContext, RenderGraph, and move existing passes.
+
+##### Step 2.1: Create WgpuPassContext
+
+**File**: `raktr/render/src/backend/wgpu/wgpu_pass_context.h` (NEW)
+
+**Action**: Move current PassContext into WebGPU backend.
+
+**Code**:
+```cpp
+namespace raktr::render::backend::wgpu {
+
+// Forward declarations
+class WgpuDevice;
+
+/*!
+ * @brief WebGPU-specific pass execution context.
+ * 
+ * Contains WebGPU command encoder, texture views, and frame state.
+ */
+struct WgpuPassContext {
+    // Frame state
+    uint32_t frame_index = 0;
+    uint32_t viewport_width = 0;
+    uint32_t viewport_height = 0;
+    
+    // WebGPU command recording
+    WGPUCommandEncoder command_encoder = nullptr;
+    
+    // WebGPU render targets
+    WGPUTextureView color_target = nullptr;
+    WGPUTextureView depth_target = nullptr;
+    
+    // Temporal resources (for Hi-Z occlusion)
+    WGPUTextureView prev_frame_hi_z_pyramid = nullptr;
+    
+    // Device access
+    WgpuDevice* device = nullptr;
+    
+    // Renderer configuration
+    const RendererConfig* config = nullptr;
+};
+
+} // namespace raktr::render::backend::wgpu
+```
+
+##### Step 2.2: Create WgpuRenderGraph
+
+**File**: `raktr/render/src/backend/wgpu/wgpu_render_graph.h` (NEW)
+
+**Action**: Create WebGPU-specific render graph.
+
+**Code**:
+```cpp
+namespace raktr::render::backend::wgpu {
+
+// Forward declarations
+class WgpuRenderPass;
+
+/*!
+ * @brief WebGPU-specific render graph.
+ * 
+ * Manages execution order of WebGPU render passes.
+ */
+class WgpuRenderGraph {
+public:
+    explicit WgpuRenderGraph(WgpuDevice* device);
+    
+    /*!
+     * @brief Add a WebGPU render pass to the graph.
+     */
+    WgpuRenderGraph& add_pass(std::unique_ptr<WgpuRenderPass> pass);
+    
+    /*!
+     * @brief Execute all passes with WebGPU context.
+     */
+    void execute(WgpuPassContext& ctx);
+    
+    /*!
+     * @brief Notify passes of viewport resize.
+     */
+    void on_viewport_resize(uint32_t width, uint32_t height);
+    
+    /*!
+     * @brief Get number of passes.
+     */
+    [[nodiscard]] size_t pass_count() const { return _passes.size(); }
+    
+    /*!
+     * @brief Clear all passes.
+     */
+    void clear();
+    
+    /*!
+     * @brief Get injected device.
+     */
+    [[nodiscard]] WgpuDevice* device() const { return _device; }
+    
+private:
+    WgpuDevice* _device{nullptr};
+    std::vector<std::unique_ptr<WgpuRenderPass>> _passes;
+};
+
+} // namespace raktr::render::backend::wgpu
+```
+
+**File**: `raktr/render/src/backend/wgpu/wgpu_render_graph.cpp` (NEW)
+
+**Implementation**:
+```cpp
+namespace raktr::render::backend::wgpu {
+
+WgpuRenderGraph::WgpuRenderGraph(WgpuDevice* device)
+    : _device(device)
+{
+}
+
+WgpuRenderGraph& WgpuRenderGraph::add_pass(std::unique_ptr<WgpuRenderPass> pass) {
+    _passes.push_back(std::move(pass));
+    return *this;
+}
+
+void WgpuRenderGraph::execute(WgpuPassContext& ctx) {
+    for (auto& pass : _passes) {
+        pass->execute(ctx);
+    }
+}
+
+void WgpuRenderGraph::on_viewport_resize(uint32_t width, uint32_t height) {
+    for (auto& pass : _passes) {
+        pass->on_viewport_resize(width, height);
+    }
+}
+
+void WgpuRenderGraph::clear() {
+    _passes.clear();
+}
+
+} // namespace raktr::render::backend::wgpu
+```
+
+##### Step 2.3: Create WgpuRenderPass Base Class
+
+**File**: `raktr/render/src/backend/wgpu/wgpu_render_pass.h` (NEW)
+
+**Action**: Backend-specific pass interface.
+
+**Code**:
+```cpp
+namespace raktr::render::backend::wgpu {
+
+/*!
+ * @brief WebGPU-specific render pass interface.
+ * 
+ * Extends IRenderPass with WebGPU execute() signature.
+ */
+class WgpuRenderPass : public IRenderPass {
+public:
+    virtual ~WgpuRenderPass() = default;
+    
+    /*!
+     * @brief Execute pass with WebGPU context.
+     */
+    virtual void execute(WgpuPassContext& ctx) = 0;
+};
+
+} // namespace raktr::render::backend::wgpu
+```
+
+##### Step 2.4: Move Existing Passes to WebGPU Backend
+
+**Action**: Rename and move existing pass files.
+
+**File Moves**:
+```
+src/passes/hi_z_occlusion_pass.h     → src/backend/wgpu/passes/wgpu_hi_z_occlusion_pass.h
+src/passes/hi_z_occlusion_pass.cpp   → src/backend/wgpu/passes/wgpu_hi_z_occlusion_pass.cpp
+src/passes/geometry_pass.h           → src/backend/wgpu/passes/wgpu_geometry_pass.h
+src/passes/geometry_pass.cpp         → src/backend/wgpu/passes/wgpu_geometry_pass.cpp
+src/passes/instanced_geometry_pass.h → src/backend/wgpu/passes/wgpu_instanced_geometry_pass.h
+src/passes/instanced_geometry_pass.cpp → src/backend/wgpu/passes/wgpu_instanced_geometry_pass.cpp
+src/passes/hi_z_pyramid_pass.h       → src/backend/wgpu/passes/wgpu_hi_z_pyramid_pass.h
+src/passes/hi_z_pyramid_pass.cpp     → src/backend/wgpu/passes/wgpu_hi_z_pyramid_pass.cpp
+```
+
+**Code Changes** (Example: HiZOcclusionPass):
+
+**Before** (`src/passes/hi_z_occlusion_pass.h`):
+```cpp
+namespace raktr::render {
+    class HiZOcclusionPass final : public IRenderPass {
+        void execute(PassContext& ctx) override;
+    };
+}
+```
+
+**After** (`src/backend/wgpu/passes/wgpu_hi_z_occlusion_pass.h`):
+```cpp
+namespace raktr::render::backend::wgpu {
+    class WgpuHiZOcclusionPass final : public WgpuRenderPass {
+        void execute(WgpuPassContext& ctx) override;
+    };
+}
+```
+
+**Update Namespaces**: Change `raktr::render` → `raktr::render::backend::wgpu` in all moved files.
+
+---
+
+#### **Phase 3: Implement Fake Backend Components**
+
+**Goal**: Create minimal SoftBackend render graph for testing.
+
+##### Step 3.1: Create SoftPassContext
+
+**File**: `raktr/render/src/backend/soft/fake_pass_context.h` (NEW)
+
+**Code**:
+```cpp
+namespace raktr::render::backend::fake {
+
+class SoftDevice;
+
+/*!
+ * @brief Fake backend pass context (minimal for testing).
+ */
+struct SoftPassContext {
+    uint32_t frame_index = 0;
+    uint32_t viewport_width = 0;
+    uint32_t viewport_height = 0;
+    
+    SoftDevice* device = nullptr;
+    const RendererConfig* config = nullptr;
+};
+
+} // namespace raktr::render::backend::fake
+```
+
+##### Step 3.2: Create SoftRenderGraph
+
+**File**: `raktr/render/src/backend/soft/fake_render_graph.h` (NEW)
+
+**Code**:
+```cpp
+namespace raktr::render::backend::fake {
+
+class SoftRenderPass;
+
+/*!
+ * @brief Fake render graph (no-op or minimal implementation).
+ */
+class SoftRenderGraph {
+public:
+    explicit SoftRenderGraph(SoftDevice* device);
+    
+    SoftRenderGraph& add_pass(std::unique_ptr<SoftRenderPass> pass);
+    void execute(SoftPassContext& ctx);
+    void on_viewport_resize(uint32_t width, uint32_t height);
+    
+    [[nodiscard]] size_t pass_count() const { return _passes.size(); }
+    void clear();
+    [[nodiscard]] SoftDevice* device() const { return _device; }
+    
+private:
+    SoftDevice* _device{nullptr};
+    std::vector<std::unique_ptr<SoftRenderPass>> _passes;
+};
+
+} // namespace raktr::render::backend::fake
+```
+
+**File**: `raktr/render/src/backend/soft/fake_render_graph.cpp` (NEW)
+
+**Implementation**: Similar to WgpuRenderGraph but for SoftBackend.
+
+##### Step 3.3: Create SoftRenderPass Base Class
+
+**File**: `raktr/render/src/backend/soft/fake_render_pass.h` (NEW)
+
+**Code**:
+```cpp
+namespace raktr::render::backend::fake {
+
+class SoftRenderPass : public IRenderPass {
+public:
+    virtual ~SoftRenderPass() = default;
+    virtual void execute(SoftPassContext& ctx) = 0;
+};
+
+} // namespace raktr::render::backend::fake
+```
+
+---
+
+#### **Phase 4: Update Device Integration**
+
+**Goal**: Connect backend-specific RenderGraphs to Device implementations.
+
+##### Step 4.1: Add RenderGraph to WgpuDevice
+
+**File**: `raktr/render/src/backend/wgpu/wgpu_device.h`
+
+**Changes**:
+```cpp
+#include "wgpu_render_graph.h"
+
+class WgpuDevice {
+public:
+    // ... existing methods ...
+    
+    /*!
+     * @brief Get WebGPU render graph for this device.
+     */
+    [[nodiscard]] WgpuRenderGraph& render_graph() { return _render_graph; }
+    [[nodiscard]] const WgpuRenderGraph& render_graph() const { return _render_graph; }
+    
+private:
+    WgpuRenderGraph _render_graph{this};  // Initialized with device pointer
+    // ... existing members ...
+};
+```
+
+##### Step 4.2: Add RenderGraph to SoftDevice (Optional)
+
+**File**: `raktr/render/src/backend/soft/fake_device.h`
+
+**Changes**: Similar to WgpuDevice, add SoftRenderGraph member.
+
+---
+
+#### **Phase 5: Update Tests**
+
+**Goal**: Migrate existing tests to use backend-specific components.
+
+##### Step 5.1: Update RenderGraph Tests
+
+**File**: `raktr/render/tests/test_render_graph.cpp`
+
+**Changes**:
+- Replace `#include "render_graph.h"` with `#include "backend/wgpu/wgpu_render_graph.h"`
+- Replace `RenderGraph` with `wgpu::WgpuRenderGraph`
+- Replace `PassContext` with `wgpu::WgpuPassContext`
+- Update mock passes to use `WgpuRenderPass`
+
+##### Step 5.2: Update Temporal Occlusion Integration Tests
+
+**File**: `raktr/render/tests/test_temporal_occlusion_integration.cpp`
+
+**Changes**: Similar namespace and type updates.
+
+##### Step 5.3: Update Visual Demo
+
+**File**: `raktr/editor/tests/test_visual_triangle.cpp`
+
+**Changes**:
+```cpp
+// Before
+#include "render_graph.h"
+RenderGraph temporal_occlusion_graph(device);
+
+// After
+#include "backend/wgpu/wgpu_render_graph.h"
+using namespace raktr::render::backend::wgpu;
+WgpuRenderGraph temporal_occlusion_graph(device);
+```
+
+---
+
+#### **Phase 6: Remove Shared Components**
+
+**Goal**: Delete old shared RenderGraph/PassContext files.
+
+##### Step 6.1: Remove Old Files
+
+**Delete**:
+- `raktr/render/src/render_graph.h`
+- `raktr/render/src/render_graph.cpp`
+- `raktr/render/public/pass_context.h`
+- `raktr/render/src/passes/` (entire directory)
+
+##### Step 6.2: Update CMakeLists.txt
+
+**File**: `raktr/render/src/CMakeLists.txt`
+
+**Changes**:
+```cmake
+# Remove old sources
+# render_graph.cpp  # DELETE
+# passes/*.cpp      # DELETE
+
+# Add backend-specific sources
+backend/wgpu/wgpu_render_graph.cpp
+backend/wgpu/passes/wgpu_hi_z_occlusion_pass.cpp
+backend/wgpu/passes/wgpu_geometry_pass.cpp
+backend/wgpu/passes/wgpu_instanced_geometry_pass.cpp
+backend/wgpu/passes/wgpu_hi_z_pyramid_pass.cpp
+
+backend/soft/fake_render_graph.cpp
+```
+
+---
+
+#### **Phase 7: Build and Test**
+
+##### Step 7.1: Incremental Build Verification
+
+1. Build after each phase to catch errors early
+2. Fix compilation errors immediately
+3. Run tests after each phase
+
+##### Step 7.2: Full Test Suite
+
+Run all tests to ensure no regressions:
+```powershell
+cmake --build build/Release --target render_tests
+.\build\Release\render\tests\render_tests.exe
+```
+
+Expected: All 307+ tests passing.
+
+---
+
+## 2025-11-19 — Klaus Iglberger's Type Erasure Pattern for RenderPass
+
+### Context
+
+The current implementation plan (Phase 1) proposes creating an `IRenderPass` interface for backend-agnostic render passes:
+
+```cpp
+class IRenderPass {
+public:
+    virtual ~IRenderPass() = default;
+    virtual std::string_view name() const = 0;
+    virtual void on_viewport_resize(uint32_t width, uint32_t height) = 0;
+    // Note: No execute() method - backend-specific PassContext makes this impossible
+};
+```
+
+**Problem**: This is the traditional OOP approach with **inheritance-based polymorphism**, which has several drawbacks:
+
+1. **Intrusive** - Render passes must inherit from `IRenderPass`
+2. **Virtual dispatch overhead** - Every call goes through vtable
+3. **Rigid interface** - All passes must implement the same methods
+4. **Not idiomatic modern C++** - Violates "prefer composition over inheritance"
+
+**Solution**: Use **Klaus Iglberger's Type Erasure Pattern** (also called **External Polymorphism** or **Concept-Model-Object** pattern).
+
+### What is Type Erasure?
+
+Type erasure is a technique that provides runtime polymorphism **without requiring inheritance**. It bridges static polymorphism (templates) with dynamic polymorphism (virtual functions) by:
+
+1. Accepting any type that satisfies compile-time requirements (duck typing)
+2. Wrapping it in a type-erased container
+3. Providing a uniform interface without the wrapped type needing to know about it
+
+**Key Insight**: The polymorphic behavior is achieved through an **internal implementation detail**, not through the public API.
+
+### Klaus Iglberger's Pattern
+
+The pattern uses three components:
+
+1. **Concept** (internal) - Abstract interface with pure virtual functions
+2. **Model<T>** (internal) - Template class that wraps concrete types
+3. **Object** (public) - Type-erased wrapper that holds `unique_ptr<Concept>`
+
+**Architecture**:
+
+```
+┌─────────────────────────────────────────────────┐
+│           RenderPass (public API)               │
+│  - Non-template, type-erased wrapper            │
+│  - Holds unique_ptr<Concept>                    │
+│  - Provides public interface: name(), execute() │
+└─────────────────────────────────────────────────┘
+                    │
+                    │ holds
+                    ▼
+┌─────────────────────────────────────────────────┐
+│         Concept (internal interface)            │
+│  - Pure virtual interface                       │
+│  - virtual name() = 0                          │
+│  - virtual execute(...) = 0                    │
+└─────────────────────────────────────────────────┘
+                    ▲
+                    │ implements
+                    │
+┌─────────────────────────────────────────────────┐
+│       Model<ConcretePass> (internal)            │
+│  - Template wrapping any pass type              │
+│  - Forwards calls to wrapped pass               │
+│  - ConcretePass doesn't know about Concept      │
+└─────────────────────────────────────────────────┘
+                    │
+                    │ wraps
+                    ▼
+┌─────────────────────────────────────────────────┐
+│     Concrete Pass (e.g., WgpuGeometryPass)      │
+│  - NO INHERITANCE required                      │
+│  - Just implements: name(), execute()           │
+│  - Completely independent                       │
+└─────────────────────────────────────────────────┘
+```
+
+### Implementation
+
+#### Current Device Implementation (Reference)
+
+The codebase **already uses this pattern** for `Device`:
+
+```cpp
+// raktr/render/public/device.h
+class Device {
+public:
+    template <typename T>
+    Device(T device_impl)
+        : _impl(std::make_unique<Model<T>>(std::move(device_impl)))
+    {}
+
+    // Public interface
+    bool supports<Capability>() const;
+    Capability capability<Capability>() const;
+
+private:
+    // Internal Concept interface
+    struct Concept {
+        virtual ~Concept() = default;
+        virtual bool supports(std::type_index) const = 0;
+        // ... more virtuals
+    };
+
+    // Internal Model wrapper
+    template<typename T>
+    struct Model : Concept {
+        Model(T impl) : _impl(std::move(impl)) {}
+        
+        bool supports(std::type_index idx) const override {
+            return _impl.supports(idx); // Forward to concrete impl
+        }
+        
+    private:
+        T _impl; // Wrapped concrete device (WgpuDevice, SoftDevice, etc.)
+    };
+
+    std::unique_ptr<Concept> _impl; // Type-erased storage
+};
+```
+
+**Key Points**:
+- ✅ `WgpuDevice`, `SoftDevice` do NOT inherit from anything
+- ✅ `Concept` and `Model` are **internal implementation details**
+- ✅ Public API is clean: `Device device = WgpuDevice{...};`
+- ✅ No virtual dispatch in concrete device code
+
+#### Proposed RenderPass Implementation
+
+Following the same pattern:
+
+```cpp
+// raktr/render/public/render_pass.h
+#pragma once
+
+#include <memory>
+#include <string_view>
+
+namespace raktr::render {
+
+// Forward declarations (backend-specific contexts are internal)
+namespace backend::wgpu { struct WgpuPassContext; }
+namespace backend::soft { struct SoftPassContext; }
+
+/*!
+ * @brief Type-erased render pass using external polymorphism.
+ *
+ * This class can wrap any concrete pass type (WgpuGeometryPass, SoftGeometryPass, etc.)
+ * without requiring them to inherit from a common base class.
+ *
+ * Concrete passes only need to implement:
+ * - std::string_view name() const
+ * - void execute(PassContext& ctx)
+ * - void on_viewport_resize(uint32_t width, uint32_t height)
+ *
+ * @example
+ * // Concrete pass (no inheritance!)
+ * class WgpuGeometryPass {
+ * public:
+ *     std::string_view name() const { return "Geometry Pass"; }
+ *     void execute(WgpuPassContext& ctx) { /* render */ }
+ *     void on_viewport_resize(uint32_t w, uint32_t h) { /* resize */ }
+ * };
+ *
+ * // Usage
+ * RenderPass pass = WgpuGeometryPass{};
+ * pass.name(); // "Geometry Pass"
+ */
+class RenderPass {
+public:
+    /*!
+     * @brief Construct from any concrete pass type.
+     * @tparam PassType Concrete pass type (e.g., WgpuGeometryPass).
+     * @param pass Concrete pass instance.
+     *
+     * Requirements:
+     * - PassType must have: std::string_view name() const
+     * - PassType must have: void execute(PassContextType& ctx)
+     * - PassType must have: void on_viewport_resize(uint32_t, uint32_t)
+     */
+    template <typename PassType>
+    RenderPass(PassType pass)
+        : _impl(std::make_unique<Model<PassType>>(std::move(pass)))
+    {}
+
+    // Non-copyable (some passes may hold GPU resources)
+    RenderPass(const RenderPass&) = delete;
+    RenderPass& operator=(const RenderPass&) = delete;
+
+    // Movable
+    RenderPass(RenderPass&&) noexcept = default;
+    RenderPass& operator=(RenderPass&&) noexcept = default;
+
+    ~RenderPass() = default;
+
+    /*!
+     * @brief Get the human-readable pass name.
+     */
+    [[nodiscard]] std::string_view name() const {
+        return _impl->do_name();
+    }
+
+    /*!
+     * @brief Notify pass of viewport resize.
+     */
+    void on_viewport_resize(uint32_t width, uint32_t height) {
+        _impl->do_on_viewport_resize(width, height);
+    }
+
+    /*!
+     * @brief Execute pass with backend-specific context.
+     * @tparam PassContextType Backend-specific context (WgpuPassContext, SoftPassContext).
+     * @param ctx Backend pass context.
+     *
+     * Note: This is a template method because PassContext type varies per backend.
+     */
+    template <typename PassContextType>
+    void execute(PassContextType& ctx) {
+        _impl->do_execute(&ctx);
+    }
+
+private:
+    /*!
+     * @brief Internal polymorphic interface (Concept).
+     *
+     * This is the abstract base class that enables polymorphism.
+     * It is an **implementation detail** not exposed to users.
+     */
+    struct Concept {
+        virtual ~Concept() = default;
+        virtual std::string_view do_name() const = 0;
+        virtual void do_on_viewport_resize(uint32_t width, uint32_t height) = 0;
+        virtual void do_execute(void* ctx) = 0; // Type-erased context
+    };
+
+    /*!
+     * @brief Internal wrapper for concrete pass types (Model).
+     *
+     * This template class wraps any concrete pass type and forwards
+     * calls to it. The concrete pass does NOT need to inherit from anything.
+     */
+    template <typename PassType>
+    struct Model : Concept {
+        explicit Model(PassType pass) : _pass(std::move(pass)) {}
+
+        std::string_view do_name() const override {
+            return _pass.name();
+        }
+
+        void do_on_viewport_resize(uint32_t width, uint32_t height) override {
+            _pass.on_viewport_resize(width, height);
+        }
+
+        void do_execute(void* ctx) override {
+            // Deduce context type from pass's execute() signature
+            using ContextType = typename PassTraits<PassType>::ContextType;
+            _pass.execute(*static_cast<ContextType*>(ctx));
+        }
+
+    private:
+        PassType _pass; // Wrapped concrete pass
+    };
+
+    /*!
+     * @brief Type trait to deduce PassContext type from pass's execute() method.
+     */
+    template <typename PassType>
+    struct PassTraits {
+        // Deduced by looking at execute(ContextType& ctx) signature
+        // This uses SFINAE / concepts to extract context type
+        using ContextType = typename PassType::ContextType;
+    };
+
+    std::unique_ptr<Concept> _impl; // Type-erased storage
+};
+
+} // namespace raktr::render
+```
+
+#### Concrete Pass Implementation (No Inheritance!)
+
+With type erasure, concrete passes are **completely independent**:
+
+```cpp
+// raktr/render/src/backend/wgpu/passes/wgpu_geometry_pass.h
+#pragma once
+
+#include "backend/wgpu/wgpu_pass_context.h"
+#include <string_view>
+
+namespace raktr::render::backend::wgpu {
+
+/*!
+ * @brief WebGPU geometry rendering pass.
+ *
+ * Note: Does NOT inherit from any base class!
+ * Just implements the required duck-typed interface.
+ */
+class WgpuGeometryPass {
+public:
+    using ContextType = WgpuPassContext; // Type trait for context deduction
+
+    WgpuGeometryPass() = default;
+
+    /*!
+     * @brief Get pass name.
+     */
+    [[nodiscard]] std::string_view name() const {
+        return "WebGPU Geometry Pass";
+    }
+
+    /*!
+     * @brief Execute geometry rendering.
+     * @param ctx WebGPU-specific pass context.
+     */
+    void execute(WgpuPassContext& ctx) {
+        // Actual rendering logic
+        WGPURenderPassEncoder pass = wgpuCommandEncoderBeginRenderPass(
+            ctx.command_encoder, &render_pass_desc);
+        
+        // Draw calls...
+        wgpuRenderPassEncoderEnd(pass);
+    }
+
+    /*!
+     * @brief Handle viewport resize.
+     */
+    void on_viewport_resize(uint32_t width, uint32_t height) {
+        _viewport_width = width;
+        _viewport_height = height;
+    }
+
+private:
+    uint32_t _viewport_width = 800;
+    uint32_t _viewport_height = 600;
+};
+
+} // namespace raktr::render::backend::wgpu
+```
+
+**Benefits**:
+- ✅ **No inheritance** - `WgpuGeometryPass` is a plain class
+- ✅ **No virtual functions** - All methods are regular functions
+- ✅ **Type-safe** - `execute()` takes concrete `WgpuPassContext&`
+- ✅ **Non-intrusive** - Pass doesn't know about `RenderPass` wrapper
+- ✅ **Zero runtime overhead** in concrete pass code
+
+### Comparison: Traditional OOP vs Type Erasure
+
+| Aspect | Traditional OOP (IRenderPass) | Type Erasure (Concept-Model-Object) |
+|--------|-------------------------------|-------------------------------------|
+| **Inheritance** | ✗ Required (`class Pass : public IRenderPass`) | ✅ Not needed |
+| **Virtual dispatch** | ✗ In concrete pass code | ✅ Only in wrapper (internal) |
+| **Intrusiveness** | ✗ Pass must know about base class | ✅ Pass is independent |
+| **Type safety** | ✗ `execute(void* ctx)` requires cast | ✅ `execute(ConcreteContext& ctx)` |
+| **Flexibility** | ✗ All passes must match interface | ✅ Duck typing - any type works |
+| **Testability** | ✗ Need mocks inheriting from base | ✅ Any test double works |
+| **Modernness** | ✗ Old-style OOP | ✅ Modern C++ idiom |
+
+### Real-World Example: std::function
+
+The C++ standard library uses type erasure extensively:
+
+```cpp
+// std::function is type-erased!
+std::function<int(int, int)> op;
+
+// Can hold lambda (no inheritance!)
+op = [](int a, int b) { return a + b; };
+
+// Can hold function pointer
+int multiply(int a, int b) { return a * b; }
+op = multiply;
+
+// Can hold functor (no inheritance!)
+struct Divider {
+    int operator()(int a, int b) { return a / b; }
+};
+op = Divider{};
+
+// All work through same interface
+int result = op(10, 5);
+```
+
+**How it works**: Internally, `std::function` uses the **exact same** Concept-Model-Object pattern!
+
+### Integration with RenderGraph
+
+**Before (with IRenderPass interface)**:
+```cpp
+class RenderGraph {
+public:
+    void add_pass(std::unique_ptr<IRenderPass> pass) {
+        _passes.push_back(std::move(pass));
+    }
+
+    void execute(PassContext& ctx) {
+        for (auto& pass : _passes) {
+            pass->execute(ctx); // ❌ Can't do this - PassContext is backend-specific!
+        }
+    }
+
+private:
+    std::vector<std::unique_ptr<IRenderPass>> _passes;
+};
+```
+
+**After (with Type Erasure)**:
+```cpp
+// raktr/render/src/backend/wgpu/wgpu_render_graph.h
+class WgpuRenderGraph {
+public:
+    /*!
+     * @brief Add render pass (accepts any type).
+     * @tparam PassType Concrete pass type (WgpuGeometryPass, WgpuHiZOcclusionPass, etc.).
+     */
+    template <typename PassType>
+    void add_pass(PassType pass) {
+        _passes.emplace_back(std::move(pass));
+    }
+
+    /*!
+     * @brief Execute all passes with WebGPU context.
+     */
+    void execute(WgpuPassContext& ctx) {
+        for (auto& pass : _passes) {
+            pass.execute(ctx); // ✅ Type-safe, concrete context
+        }
+    }
+
+private:
+    std::vector<RenderPass> _passes; // Type-erased storage
+};
+```
+
+**Key Improvements**:
+1. ✅ `add_pass()` is a **template** - accepts any pass type
+2. ✅ `execute()` takes **concrete** `WgpuPassContext&` - type-safe!
+3. ✅ No need for `std::unique_ptr` - `RenderPass` is movable
+4. ✅ Clean, modern C++ API
+
+### Benefits Summary
+
+**Why Type Erasure is Better**:
+
+1. **Non-Intrusive**
+   - Passes don't need to know about any base class
+   - Can use third-party pass implementations unchanged
+   - Easier to test (no mock inheritance needed)
+
+2. **Type Safety**
+   - `execute(WgpuPassContext&)` instead of `execute(void*)`
+   - Compile-time errors for missing methods
+   - No runtime casts
+
+3. **Performance**
+   - Virtual dispatch only in **wrapper code** (internal)
+   - Concrete pass code has **zero virtual overhead**
+   - Compiler can inline pass methods
+
+4. **Flexibility**
+   - Passes can have different interfaces (duck typing)
+   - Easy to add new pass types
+   - No rigid base class contract
+
+5. **Modern C++**
+   - Follows "prefer composition over inheritance"
+   - Same pattern as `std::function`, `std::any`
+   - Aligns with Copilot guidelines (SOLID, DDD)
+
+### Implementation Plan (Revised Phase 1)
+
+**Phase 1: Replace IRenderPass with Type-Erased RenderPass**
+
+1. **Create** `raktr/render/public/render_pass.h` (type-erased wrapper)
+2. **Delete** old `IRenderPass` interface (not needed)
+3. **Update** `WgpuGeometryPass` - remove inheritance, add `ContextType` typedef
+4. **Update** `WgpuHiZOcclusionPass` - remove inheritance
+5. **Update** `WgpuInstancedGeometryPass` - remove inheritance
+6. **Update** `WgpuHiZPyramidPass` - remove inheritance
+7. **Update** `WgpuRenderGraph` - use `std::vector<RenderPass>` instead of `std::vector<std::unique_ptr<IRenderPass>>`
+8. **Build and test** - should compile cleanly
+
+**Migration Example**:
+
+**Before**:
+```cpp
+class WgpuGeometryPass : public IRenderPass {
+public:
+    std::string_view name() const override;
+    void on_viewport_resize(uint32_t w, uint32_t h) override;
+    // Can't have execute() - PassContext is backend-specific!
+};
+```
+
+**After**:
+```cpp
+class WgpuGeometryPass {
+public:
+    using ContextType = WgpuPassContext;
+    
+    std::string_view name() const;
+    void execute(WgpuPassContext& ctx);
+    void on_viewport_resize(uint32_t w, uint32_t h);
+};
+```
+
+**Result**: Clean, modern, type-safe, non-intrusive render pass architecture!
+
+### References
+
+1. **Klaus Iglberger's Talks**:
+   - CppCon 2021: "Breaking Dependencies: Type Erasure"
+   - CppCon 2022: "Back to Basics: Polymorphism"
+
+2. **Articles**:
+   - Rainer Grimm: "C++ Core Guidelines: Type Erasure with Templates"
+   - https://www.modernescpp.com/index.php/c-core-guidelines-type-erasure-with-templates/
+
+3. **Books**:
+   - Klaus Iglberger: "C++ Software Design" (2022)
+   - Chapter on Type Erasure and External Polymorphism
+
+4. **Standard Library Examples**:
+   - `std::function` - Type-erased callable
+   - `std::any` - Type-erased storage
+   - `std::shared_ptr` - Type-erased deleter
+
+---
+
+### Migration Checklist
+
+**Phase 1: Abstraction Layer**
+- [ ] Create `public/render_pass.h` with backend-agnostic IRenderPass
+- [ ] Create `src/backend/backend_traits.h` with type traits
+- [ ] Build and verify compilation
+
+**Phase 2: WebGPU Backend**
+- [ ] Create `backend/wgpu/wgpu_pass_context.h`
+- [ ] Create `backend/wgpu/wgpu_render_graph.h/.cpp`
+- [ ] Create `backend/wgpu/wgpu_render_pass.h`
+- [ ] Move passes to `backend/wgpu/passes/`
+- [ ] Rename pass classes (add `Wgpu` prefix)
+- [ ] Update namespaces in all moved files
+- [ ] Build and verify WebGPU backend
+
+**Phase 3: Fake Backend**
+- [ ] Create `backend/soft/fake_pass_context.h`
+- [ ] Create `backend/soft/fake_render_graph.h/.cpp`
+- [ ] Create `backend/soft/fake_render_pass.h`
+- [ ] Build and verify Fake backend
+
+**Phase 4: Device Integration**
+- [ ] Add render_graph() to WgpuDevice
+- [ ] Add render_graph() to SoftDevice (optional)
+- [ ] Build and verify integration
+
+**Phase 5: Update Tests**
+- [ ] Update `test_render_graph.cpp`
+- [ ] Update `test_temporal_occlusion_integration.cpp`
+- [ ] Update `test_visual_triangle.cpp` (OcclusionCullingDemo)
+- [ ] Build and run tests (should pass)
+
+**Phase 6: Cleanup**
+- [ ] Delete `src/render_graph.h/.cpp`
+- [ ] Delete `public/pass_context.h`
+- [ ] Delete `src/passes/` directory
+- [ ] Update CMakeLists.txt
+- [ ] Build and verify no references to old files
+
+**Phase 7: Final Verification**
+- [ ] Build entire project clean
+- [ ] Run all render tests (307+ passing)
+- [ ] Run visual demo (should work unchanged)
+- [ ] Verify no compilation warnings
+- [ ] Review code for consistency
+
+---
+
+### Future Backend Addition Guide
+
+When adding a new backend (e.g., OpenGL), follow this pattern:
+
+1. **Create backend directory**: `src/backend/opengl/`
+
+2. **Define PassContext**:
+```cpp
+// backend/opengl/opengl_pass_context.h
+struct OpenGLPassContext {
+    uint32_t frame_index;
+    GLuint framebuffer;
+    GLuint depth_texture;
+    OpenGLDevice* device;
+    const RendererConfig* config;
+};
+```
+
+3. **Define RenderGraph**:
+```cpp
+// backend/opengl/opengl_render_graph.h
+class OpenGLRenderGraph {
+    void execute(OpenGLPassContext& ctx);
+};
+```
+
+4. **Define RenderPass**:
+```cpp
+// backend/opengl/opengl_render_pass.h
+class OpenGLRenderPass : public IRenderPass {
+    virtual void execute(OpenGLPassContext& ctx) = 0;
+};
+```
+
+5. **Add BackendTraits specialization**:
+```cpp
+// backend/backend_traits.h
+template<>
+struct BackendTraits<opengl::OpenGLDevice> {
+    using PassContext = opengl::OpenGLPassContext;
+    using RenderGraph = opengl::OpenGLRenderGraph;
+};
+```
+
+6. **Implement passes**: Create OpenGL-specific passes in `backend/opengl/passes/`
+
+---
+
+### Benefits of This Architecture
+
+✅ **Complete Backend Isolation** - Each backend is self-contained
+✅ **No Abstraction Overhead** - Direct use of backend types
+✅ **Easy to Add Backends** - Just add new backend directory and traits
+✅ **Compile-Time Safety** - Type traits enforce correct usage
+✅ **Testable** - Each backend can be tested independently
+✅ **Maintainable** - Clear separation, no shared state
+✅ **Optimizable** - Backend-specific optimizations possible
+
+---
+
+### Estimated Effort
+
+- **Phase 1**: 1-2 hours (abstraction layer)
+- **Phase 2**: 3-4 hours (WebGPU backend migration)
+- **Phase 3**: 1-2 hours (Fake backend)
+- **Phase 4**: 1 hour (device integration)
+- **Phase 5**: 2-3 hours (test updates)
+- **Phase 6**: 1 hour (cleanup)
+- **Phase 7**: 1-2 hours (verification)
+
+**Total**: ~10-15 hours
+
+---
+
+### Risk Mitigation
+
+| Risk | Mitigation |
+|------|------------|
+| Breaking existing tests | Build/test after each phase |
+| Namespace confusion | Use consistent naming (Wgpu prefix) |
+| Missing includes | Incremental compilation catches early |
+| CMake issues | Update CMakeLists.txt incrementally |
+| Merge conflicts | Work in feature branch, frequent commits |
+
+---
+
+### Success Criteria
+
+**Phase Complete When**:
+- ✅ All 307+ tests passing
+- ✅ Visual demo works unchanged
+- ✅ No compilation warnings
+- ✅ Clean separation between backends
+- ✅ Easy to add new backend (documented pattern)
+- ✅ No references to old shared render_graph files
+
+### Recommended Solution
+
+**Use Option 1: Keep PassContext Backend-Specific (Internal)**
+
+**Justification**:
+
+1. **PassContext is NOT public API** - It lives in `raktr/render/src/`, never exposed to engine
+2. **Current architecture already separates layers properly**:
+   - Engine → Device (type-erased public API) ✅
+   - Device → Backend (internal implementation with RenderGraph/PassContext) ✅
+3. **No abstraction needed** - RenderGraph and passes are implementation details of the backend
+4. **Performance** - Direct access to backend resources without indirection
+5. **Simplicity** - Fewer abstractions = easier to understand and maintain
+
+**File Structure**:
+```
+raktr/render/
+├── public/              # Public API - Engine uses this
+│   ├── device.h         # Type-erased device (✅ backend-agnostic)
+│   ├── buffer.h         # Buffer handle (✅ backend-agnostic)
+│   ├── render_context.h # Factory (✅ backend-agnostic)
+│   └── render_error.h   # Error codes (✅ backend-agnostic)
+│
+└── src/                 # Internal implementation
+    ├── backend/
+    │   ├── wgpu/
+    │   │   ├── wgpu_device.h          # WebGPU device impl
+    │   │   ├── wgpu_backend.h         # WebGPU backend
+    │   │   └── wgpu_pass_context.h    # ✅ Backend-specific OK
+    │   └── fake/
+    │       ├── fake_device.h
+    │       └── fake_backend.h
+    ├── render_graph.h    # Uses PassContext (internal)
+    ├── render_graph.cpp
+    ├── pass_context.h    # ✅ Backend-specific types OK (internal)
+    └── passes/           # Render passes (internal)
+        ├── hi_z_occlusion_pass.h
+        ├── geometry_pass.h
+        └── hi_z_pyramid_pass.h
+```
+
+**Key Points**:
+
+1. **PassContext location**: `raktr/render/src/pass_context.h` (NOT in public/)
+2. **Backend-specific types**: Allowed in src/, forbidden in public/
+3. **Engine isolation**: Engine never includes src/ headers, only public/
+4. **Future backends**: Each backend (OpenGL, Vulkan) implements its own PassContext
+5. **No breaking changes**: Current architecture already correct
+
+### Implementation Guidelines
+
+**DO**:
+- ✅ Keep PassContext in `src/` directory
+- ✅ Use backend-specific types in PassContext (WGPUCommandEncoder, etc.)
+- ✅ Have RenderGraph use PassContext internally
+- ✅ Let passes receive PassContext in execute()
+- ✅ Use Device (type-erased) in public API
+
+**DON'T**:
+- ❌ Expose PassContext in public/ headers
+- ❌ Let engine code include pass_context.h
+- ❌ Try to make PassContext backend-agnostic (not needed)
+- ❌ Over-engineer with std::any or complex type erasure
+
+### Current Status
+
+**Already Correct**:
+- ✅ PassContext is in `raktr/render/public/pass_context.h` with forward declarations
+- ✅ Backend-specific types are forward-declared, not exposing full WebGPU headers
+- ✅ Device is type-erased in public API
+- ✅ Engine uses Device, not PassContext
+
+**Minor Issue**:
+- ⚠️ PassContext is in `public/` but should probably be in `src/` since it's internal
+- ⚠️ Forward declarations hide the dependency, but ideally PassContext shouldn't be public
+
+**Action Items**:
+1. **If PassContext is used by engine**: Keep it in public/ with forward declarations ✅ (current)
+2. **If PassContext is only used by render subsystem**: Move to src/ (better isolation)
+3. **Document** that PassContext is backend-specific by design
+
+### Conclusion
+
+**PassContext containing backend-specific types is acceptable and correct** because:
+
+1. It's part of the render subsystem's internal implementation
+2. Engine code uses Device (type-erased), not PassContext
+3. Separation of concerns is maintained through directory structure
+4. Forward declarations prevent header pollution in public API
+5. No additional abstraction is needed - current architecture is sound
+
+The concern about backend-specific types in PassContext is valid for **public API**, but PassContext is **internal implementation**. The existing architecture already handles this correctly through the Device abstraction layer.
+
+---
+
+## 2025-11-19 — Real-Time Renderer Configuration from GUI/Editor
+
+### Problem Statement
+
+**Goal**: Enable GUI/Editor to toggle renderer features in real-time (e.g., occlusion culling on/off, wireframe mode, debug visualization) without exposing internal render subsystem implementation details.
+
+**Requirements**:
+1. **Layer isolation** - GUI/Editor should not depend on render subsystem internals
+2. **Type-safe** - Use enums/flags, not magic strings
+3. **Real-time** - Changes take effect immediately (same frame or next frame)
+4. **Extensible** - Easy to add new toggleable features
+5. **Thread-safe** - GUI runs on main thread, render may use worker threads
+
+### Architectural Options
+
+#### Option 1: Renderer Configuration Object (RECOMMENDED)
+
+**Rationale**: Expose a configuration object through the Device API that GUI can modify.
+
+**Architecture**:
+```cpp
+// raktr/render/public/renderer_config.h
+namespace raktr::render {
+
+/*!
+ * @brief Runtime configuration for renderer features.
+ * 
+ * Thread-safe configuration object that can be modified by GUI/Editor
+ * and consumed by render subsystem. Changes take effect on next frame.
+ */
+struct RendererConfig {
+    // Culling options
+    bool enable_frustum_culling = true;
+    bool enable_occlusion_culling = true;
+    
+    // Debug visualization
+    bool show_wireframe = false;
+    bool show_bounding_boxes = false;
+    bool show_occlusion_buffer = false;
+    
+    // Performance options
+    bool enable_vsync = true;
+    bool enable_multithreading = true;
+    uint32_t target_fps = 60;
+    
+    // Quality settings
+    enum class ShadowQuality { Off, Low, Medium, High, Ultra };
+    ShadowQuality shadow_quality = ShadowQuality::High;
+    
+    enum class AntiAliasing { None, FXAA, TAA, MSAA_2x, MSAA_4x, MSAA_8x };
+    AntiAliasing anti_aliasing = AntiAliasing::TAA;
+    
+    // Hi-Z occlusion settings
+    uint32_t hi_z_mip_levels = 0;  // 0 = auto-calculate
+    bool hi_z_conservative = true;
+};
+
+} // namespace raktr::render
+```
+
+**Device API Extension**:
+```cpp
+// raktr/render/public/device.h
+namespace raktr::render {
+
+class Device {
+public:
+    // ... existing methods ...
+    
+    /*!
+     * @brief Get current renderer configuration.
+     * @return Reference to configuration (thread-safe).
+     */
+    [[nodiscard]] const RendererConfig& config() const;
+    
+    /*!
+     * @brief Update renderer configuration.
+     * Changes take effect on next frame.
+     * @param config New configuration.
+     */
+    void set_config(const RendererConfig& config);
+    
+    /*!
+     * @brief Update a specific config field.
+     * @param updater Callback to modify config.
+     * @example
+     * device->update_config([](RendererConfig& cfg) {
+     *     cfg.enable_occlusion_culling = !cfg.enable_occlusion_culling;
+     * });
+     */
+    void update_config(std::function<void(RendererConfig&)> updater);
+    
+private:
+    // Thread-safe config storage (uses mutex or atomic operations)
+    mutable std::mutex _config_mutex;
+    RendererConfig _config;
+};
+
+} // namespace raktr::render
+```
+
+**GUI/Editor Usage**:
+```cpp
+// raktr/editor/src/renderer_panel.cpp
+namespace raktr::editor {
+
+class RendererPanel {
+public:
+    void on_gui(Device* device) {
+        ImGui::Begin("Renderer Settings");
+        
+        // Get current config
+        auto config = device->config();
+        
+        // Toggle occlusion culling
+        if (ImGui::Checkbox("Occlusion Culling", &config.enable_occlusion_culling)) {
+            device->set_config(config);
+        }
+        
+        // Toggle wireframe
+        if (ImGui::Checkbox("Wireframe", &config.show_wireframe)) {
+            device->set_config(config);
+        }
+        
+        // Shadow quality dropdown
+        const char* shadow_items[] = { "Off", "Low", "Medium", "High", "Ultra" };
+        int shadow_idx = static_cast<int>(config.shadow_quality);
+        if (ImGui::Combo("Shadow Quality", &shadow_idx, shadow_items, 5)) {
+            config.shadow_quality = static_cast<RendererConfig::ShadowQuality>(shadow_idx);
+            device->set_config(config);
+        }
+        
+        ImGui::End();
+    }
+};
+
+} // namespace raktr::editor
+```
+
+**Render Subsystem Consumption**:
+```cpp
+// raktr/render/src/render_graph.cpp
+namespace raktr::render {
+
+void RenderGraph::execute(PassContext& ctx) {
+    // Get current config from device
+    const auto& config = _device->config();
+    
+    for (auto& pass : _passes) {
+        // Skip occlusion pass if disabled
+        if (pass->name() == "HiZOcclusionPass" && !config.enable_occlusion_culling) {
+            continue;
+        }
+        
+        pass->execute(ctx);
+    }
+}
+
+} // namespace raktr::render
+
+// raktr/render/src/passes/hi_z_occlusion_pass.cpp
+void HiZOcclusionPass::execute(PassContext& ctx) {
+    const auto& config = ctx.device->config();
+    
+    if (!config.enable_occlusion_culling) {
+        // Mark all objects visible
+        _visibility_results.assign(_aabbs.size(), true);
+        return;
+    }
+    
+    // Perform occlusion culling...
+}
+```
+
+**Benefits**:
+- ✅ **Type-safe** - Enums and booleans, no magic strings
+- ✅ **Thread-safe** - Mutex protects config updates
+- ✅ **Discoverable** - IDE autocomplete shows all options
+- ✅ **Extensible** - Add new fields without breaking existing code
+- ✅ **Layer separation** - GUI uses Device API, not internal types
+- ✅ **Real-time** - Changes take effect on next frame
+- ✅ **Testable** - Easy to unit test with different configs
+
+**Thread Safety**:
+```cpp
+// Thread-safe implementation
+const RendererConfig& Device::config() const {
+    std::lock_guard lock(_config_mutex);
+    return _config;
+}
+
+void Device::set_config(const RendererConfig& config) {
+    std::lock_guard lock(_config_mutex);
+    _config = config;
+}
+
+void Device::update_config(std::function<void(RendererConfig&)> updater) {
+    std::lock_guard lock(_config_mutex);
+    updater(_config);
+}
+```
+
+#### Option 2: Command Pattern (Event-Driven)
+
+**Rationale**: GUI sends commands to renderer, which processes them asynchronously.
+
+**Architecture**:
+```cpp
+// raktr/render/public/renderer_command.h
+namespace raktr::render {
+
+enum class RendererCommandType {
+    ToggleOcclusionCulling,
+    ToggleWireframe,
+    SetShadowQuality,
+    SetAntiAliasing,
+    // ... more commands
+};
+
+struct RendererCommand {
+    RendererCommandType type;
+    std::variant<bool, int, float, std::string> payload;
+};
+
+class Device {
+public:
+    void submit_command(RendererCommand cmd);
+    
+private:
+    std::queue<RendererCommand> _command_queue;
+    std::mutex _queue_mutex;
+};
+
+} // namespace raktr::render
+```
+
+**GUI Usage**:
+```cpp
+// Toggle occlusion culling
+device->submit_command({
+    .type = RendererCommandType::ToggleOcclusionCulling,
+    .payload = true
+});
+```
+
+**Render Subsystem**:
+```cpp
+void Device::process_commands() {
+    std::lock_guard lock(_queue_mutex);
+    
+    while (!_command_queue.empty()) {
+        auto cmd = _command_queue.front();
+        _command_queue.pop();
+        
+        switch (cmd.type) {
+            case RendererCommandType::ToggleOcclusionCulling:
+                _config.enable_occlusion_culling = std::get<bool>(cmd.payload);
+                break;
+            // ... handle other commands
+        }
+    }
+}
+```
+
+**Trade-offs**:
+- ✅ Decoupled - Commands can be queued and batched
+- ✅ Async-friendly - Commands processed on render thread
+- ❌ Less type-safe - Variant payload can be error-prone
+- ❌ Harder to query current state - Need separate getter API
+- ❌ More boilerplate - Command creation/dispatch code
+
+#### Option 3: Direct Pass Configuration (NOT RECOMMENDED)
+
+**Rationale**: GUI directly configures render passes.
+
+**Problem**: Violates layer separation - GUI would depend on internal render passes.
+
+```cpp
+// ❌ BAD - Exposes internal implementation
+class Device {
+public:
+    HiZOcclusionPass* get_occlusion_pass();  // ❌ Leaks internals
+};
+
+// GUI code
+auto occlusion_pass = device->get_occlusion_pass();
+occlusion_pass->set_enabled(false);  // ❌ Direct coupling
+```
+
+**Why This is Bad**:
+- ❌ Tight coupling between GUI and render internals
+- ❌ GUI depends on specific pass implementations
+- ❌ Hard to refactor render subsystem
+- ❌ Violates dependency inversion principle
+
+### Recommended Implementation Plan
+
+**Phase 1: Basic Configuration**
+1. Create `RendererConfig` struct in `raktr/render/public/`
+2. Add config getters/setters to Device API
+3. Implement thread-safe config storage in Device
+4. Update render passes to read config from `ctx.device->config()`
+
+**Phase 2: GUI Integration**
+1. Create `RendererPanel` in editor
+2. Use ImGui checkboxes/combos to modify config
+3. Call `device->set_config()` on changes
+4. Show real-time stats (FPS, culling efficiency)
+
+**Phase 3: Advanced Features**
+1. Add config presets (Low/Medium/High/Ultra)
+2. Save/load config from JSON
+3. Add config validation (e.g., MSAA not supported on some devices)
+4. Add change listeners for config updates
+
+### Example: Complete Integration
+
+**1. Config Definition**:
+```cpp
+// raktr/render/public/renderer_config.h
+struct RendererConfig {
+    // Culling
+    bool enable_frustum_culling = true;
+    bool enable_occlusion_culling = true;
+    
+    // Debug
+    bool show_wireframe = false;
+    bool show_bounding_boxes = false;
+};
+```
+
+**2. Device API**:
+```cpp
+// raktr/render/public/device.h
+class Device {
+public:
+    const RendererConfig& config() const;
+    void set_config(const RendererConfig& config);
+};
+```
+
+**3. Backend Implementation**:
+```cpp
+// raktr/render/src/backend/wgpu/wgpu_device.cpp
+const RendererConfig& WgpuDevice::config() const {
+    std::lock_guard lock(_config_mutex);
+    return _config;
+}
+
+void WgpuDevice::set_config(const RendererConfig& config) {
+    std::lock_guard lock(_config_mutex);
+    _config = config;
+    
+    // Optionally log changes
+    spdlog::info("Renderer config updated: occlusion_culling={}", 
+                 config.enable_occlusion_culling);
+}
+```
+
+**4. Render Pass Usage**:
+```cpp
+// raktr/render/src/passes/hi_z_occlusion_pass.cpp
+void HiZOcclusionPass::execute(PassContext& ctx) {
+    const auto& config = ctx.device->config();
+    
+    if (!config.enable_occlusion_culling) {
+        _visibility_results.assign(_aabbs.size(), true);
+        return;
+    }
+    
+    // Perform culling...
+}
+```
+
+**5. GUI Panel**:
+```cpp
+// raktr/editor/src/panels/renderer_panel.cpp
+void RendererPanel::render(Device* device) {
+    ImGui::Begin("Renderer");
+    
+    auto config = device->config();
+    bool changed = false;
+    
+    if (ImGui::Checkbox("Occlusion Culling", &config.enable_occlusion_culling)) {
+        changed = true;
+    }
+    
+    if (ImGui::Checkbox("Wireframe", &config.show_wireframe)) {
+        changed = true;
+    }
+    
+    if (changed) {
+        device->set_config(config);
+    }
+    
+    ImGui::End();
+}
+```
+
+**6. Visual Demo Integration** (Already Working!):
+```cpp
+// raktr/editor/tests/test_visual_triangle.cpp (OcclusionCullingDemo)
+bool occlusion_culling_enabled = true;
+
+while (!window->should_close()) {
+    auto input_state = input_system.process_events();
+    
+    // Toggle with 'O' key
+    if (input_state.keys[KeyCode::O] && !last_o_pressed) {
+        occlusion_culling_enabled = !occlusion_culling_enabled;
+        
+        // Option 1: Direct toggle (current implementation) ✅
+        spdlog::info("Occlusion Culling: {}", 
+                     occlusion_culling_enabled ? "ON" : "OFF");
+        
+        // Option 2: Use Device config (future enhancement)
+        device->update_config([&](RendererConfig& cfg) {
+            cfg.enable_occlusion_culling = occlusion_culling_enabled;
+        });
+    }
+    
+    // Use config in render logic
+    if (occlusion_culling_enabled && hi_z_buffer) {
+        // Perform culling...
+    }
+}
+```
+
+### Performance Considerations
+
+**Config Access Frequency**:
+```cpp
+// ❌ BAD - Lock contention on every frame
+void execute(PassContext& ctx) {
+    auto config = ctx.device->config();  // Mutex lock
+    if (config.enable_culling) {
+        // ...
+    }
+}
+
+// ✅ GOOD - Cache config at frame start
+struct PassContext {
+    RendererConfig config;  // Copy at frame start
+};
+
+void RenderGraph::execute(PassContext& ctx) {
+    ctx.config = _device->config();  // Single lock
+    
+    for (auto& pass : _passes) {
+        pass->execute(ctx);  // Passes use cached config
+    }
+}
+```
+
+**Atomic Config Updates** (Lock-Free Alternative):
+```cpp
+// For simple boolean flags, use atomics instead of mutex
+struct RendererConfig {
+    std::atomic<bool> enable_occlusion_culling{true};
+    std::atomic<bool> show_wireframe{false};
+};
+
+// No mutex needed for reads/writes
+bool culling_enabled = device->config().enable_occlusion_culling.load();
+device->config().enable_occlusion_culling.store(false);
+```
+
+### Testing Strategy
+
+**Unit Tests**:
+```cpp
+TEST(Device, ConfigUpdate_ImmediatelyVisible) {
+    auto device = create_wgpu_device();
+    
+    RendererConfig config;
+    config.enable_occlusion_culling = false;
+    device->set_config(config);
+    
+    auto retrieved = device->config();
+    EXPECT_FALSE(retrieved.enable_occlusion_culling);
+}
+
+TEST(Device, ConfigUpdate_ThreadSafe) {
+    auto device = create_wgpu_device();
+    
+    // Spawn multiple threads updating config
+    std::vector<std::thread> threads;
+    for (int i = 0; i < 10; ++i) {
+        threads.emplace_back([&]() {
+            for (int j = 0; j < 1000; ++j) {
+                device->update_config([](RendererConfig& cfg) {
+                    cfg.enable_occlusion_culling = !cfg.enable_occlusion_culling;
+                });
+            }
+        });
+    }
+    
+    for (auto& t : threads) t.join();
+    
+    // Should not crash or corrupt data
+}
+```
+
+**Integration Tests**:
+```cpp
+TEST(OcclusionCulling, ConfigToggle_AffectsVisibility) {
+    auto device = create_wgpu_device();
+    auto graph = RenderGraph(device);
+    
+    // Add occlusion pass
+    std::vector<bool> visibility;
+    graph.add_pass(std::make_unique<HiZOcclusionPass>(
+        hi_z_buffer, aabbs, vp, visibility));
+    
+    // All visible when disabled
+    device->update_config([](auto& cfg) { 
+        cfg.enable_occlusion_culling = false; 
+    });
+    
+    PassContext ctx;
+    graph.execute(ctx);
+    EXPECT_EQ(visibility, std::vector<bool>(aabbs.size(), true));
+    
+    // Culling when enabled
+    device->update_config([](auto& cfg) { 
+        cfg.enable_occlusion_culling = true; 
+    });
+    
+    graph.execute(ctx);
+    EXPECT_LT(std::count(visibility.begin(), visibility.end(), true),
+              aabbs.size());
+}
+```
+
+### Benefits Summary
+
+| Aspect | Benefit |
+|--------|---------|
+| **Layer Separation** | GUI uses Device API, never touches render internals |
+| **Type Safety** | Enums and structs, compiler-checked |
+| **Thread Safety** | Mutex or atomics prevent race conditions |
+| **Real-Time** | Changes visible on next frame |
+| **Extensibility** | Add new config fields without breaking API |
+| **Testability** | Easy to unit test with different configs |
+| **Discoverability** | IDE autocomplete shows all options |
+| **Performance** | Config cached per-frame, minimal overhead |
+
+### Migration Path
+
+**Current State** (Manual Toggle):
+```cpp
+// Local variable in demo
+bool occlusion_culling_enabled = true;
+
+if (input.key_pressed('O')) {
+    occlusion_culling_enabled = !occlusion_culling_enabled;
+}
+
+if (occlusion_culling_enabled) {
+    // Perform culling
+}
+```
+
+**Future State** (Config-Based):
+```cpp
+// Device holds config
+device->update_config([](auto& cfg) {
+    cfg.enable_occlusion_culling = !cfg.enable_occlusion_culling;
+});
+
+// Render passes read config
+void HiZOcclusionPass::execute(PassContext& ctx) {
+    if (!ctx.config.enable_occlusion_culling) return;
+    // Perform culling
+}
+```
+
+**No Breaking Changes**:
+- Current demos continue to work
+- Config system is additive enhancement
+- Can be adopted incrementally  
+✅ **Maintainable** - Each pass is independent  
+✅ **Debuggable** - Clear execution flow  
+✅ **Reusable** - Passes work with any scene  
+✅ **Type-safe** - Compile-time pass validation  
+✅ **Profiler-friendly** - Per-pass timing  
+✅ **Temporal-ready** - Frame resources built-in  
+
+### Implementation Plan
+
+#### Phase 1: Core Infrastructure (This Session)
+1. Create `IRenderPass` interface
+2. Create `PassContext` struct
+3. Create `RenderPassBuilder` class
+4. Create `FrameResources` class
+5. Create `RenderGraph` class
+
+#### Phase 2: Concrete Passes
+1. Implement `HiZOcclusionPass`
+2. Implement `GeometryPass`
+3. Implement `HiZPyramidPass`
+
+#### Phase 3: Integration
+1. Update `Renderer` to use render graph
+2. Wire up temporal occlusion (previous frame pyramid)
+3. Update visual tests to use new architecture
+
+### File Structure
+
+```
+raktr/render/
+├── public/
+│   └── raktr/render/
+│       ├── pass_context.h
+│       ├── render_pass.h
+│       ├── render_pass_builder.h
+│       ├── render_graph.h
+│       └── frame_resources.h
+└── src/
+    ├── render_pass_builder.cpp
+    ├── render_graph.cpp
+    ├── frame_resources.cpp
+    └── passes/
+        ├── hi_z_occlusion_pass.h
+        ├── hi_z_occlusion_pass.cpp
+        ├── geometry_pass.h
+        ├── geometry_pass.cpp
+        ├── hi_z_pyramid_pass.h
+        └── hi_z_pyramid_pass.cpp
+```
+
+### Next Steps
+
+1. Implement core infrastructure classes
+2. Add unit tests for `RenderPassBuilder` and `RenderGraph`
+3. Migrate existing Hi-Z code to pass-based architecture
+4. Update `OcclusionCullingDemo` test to use new system
+5. Verify temporal occlusion works correctly (60-80% culling rate)
+
+**Sample GLFW Action Codes:**
+```cpp
+#define GLFW_RELEASE                0
+#define GLFW_PRESS                  1
+#define GLFW_REPEAT                 2
+```
+
+**Sample GLFW Modifier Bitfield:**
+```cpp
+#define GLFW_MOD_SHIFT           0x0001
+#define GLFW_MOD_CONTROL         0x0002
+#define GLFW_MOD_ALT             0x0004
+#define GLFW_MOD_SUPER           0x0008
+```
+
+---
+
+### Implementation Plan
+
+#### Phase 1: `render/window` — Raw Callback API ✅ (Next TODO)
+
+**Files to modify:**
+- `raktr/render/public/window/window.h` — Add callback setters
+- `raktr/render/src/window/glfw_window.h` — Add callback storage
+- `raktr/render/src/window/glfw_window.cpp` — Implement GLFW callback registration
+
+**Testing:**
+- Add unit tests verifying callbacks are invoked with correct GLFW values
+- Mock GLFW window and trigger events manually
+- Verify callback unsubscription (set to `nullptr`)
+
+**Success Criteria:**
+- `Window::set_key_callback(...)` triggers on GLFW key events
+- `Window::set_mouse_button_callback(...)` triggers on GLFW mouse events
+- `Window::set_cursor_pos_callback(...)` triggers on GLFW cursor movement
+- `Window::set_scroll_callback(...)` triggers on GLFW scroll events
+- All GLFW key codes, mouse buttons, actions, and mods passed unchanged
+
+---
+
+#### Phase 2: `engine/input` — Event Processing (Future TODO)
+
+**Files to create:**
+- `raktr/engine/public/input/key_event.h` — `KeyCode`, `KeyEvent`, `KeyAction`, `KeyModifiers`
+- `raktr/engine/public/input/mouse_event.h` — `MouseButton`, `MouseButtonEvent`, `MouseMoveEvent`, `MouseScrollEvent`
+- `raktr/engine/public/input/input_event.h` — `InputEvent` variant
+- `raktr/engine/public/input/input_system.h` — `InputSystem` class
+- `raktr/engine/src/input/input_system.cpp` — Implementation
+
+**Implementation Details:**
+1. Create `InputSystem` constructor that subscribes to `Window` callbacks
+2. Implement GLFW → Engine code mapping functions
+3. Store input state (key pressed/released, mouse position, etc.)
+4. Provide query API (`is_key_pressed`, `get_mouse_position`)
+5. Add thread-safe event queue for multithreaded processing
+
+**Testing:**
+- Unit tests for GLFW → Engine code mapping
+- Integration tests simulating key presses and verifying state updates
+- Multithreading tests ensuring thread-safe event queue access
+
+**Success Criteria:**
+- GLFW key codes correctly mapped to `KeyCode` enum
+- GLFW mouse buttons correctly mapped to `MouseButton` enum
+- Input state accurately reflects keyboard/mouse events
+- Event queue supports concurrent access from multiple threads
+
+---
+
+#### Phase 3: High-Level Input Features (Future TODO)
+
+**Features:**
+- Action mapping (e.g., "Jump" → Space or Gamepad A)
+- Input contexts (e.g., "Menu", "Gameplay", "Dialogue")
+- Chord detection (e.g., Ctrl+S)
+- Dead zones for analog input (future gamepad support)
+
+**Files to create:**
+- `raktr/engine/public/input/action_map.h`
+- `raktr/engine/public/input/input_context.h`
+
+**Success Criteria:**
+- Define actions in configuration file (JSON/YAML)
+- Bind multiple inputs to single action
+- Switch input contexts dynamically
+- Detect modifier key chords
+
+---
+
+### Thread Safety Considerations
+
+**GLFW Threading Model:**
+- GLFW is **not thread-safe** — all GLFW calls must be on **main thread**
+- `glfwPollEvents()` triggers callbacks on **main thread**
+- Window callbacks fire synchronously during `poll_events()`
+
+**Multithreaded Engine Design:**
+
+1. **Main Thread (Render/Window):**
+   - Calls `window.poll_events()` (triggers GLFW callbacks)
+   - GLFW callbacks invoke `InputSystem` callbacks
+   - `InputSystem` **enqueues** events to thread-safe queue
+
+2. **Worker Thread (Engine/Input Processing):**
+   - `InputSystem::process_events()` dequeues events
+   - Maps GLFW codes → Engine codes
+   - Updates input state
+   - Dispatches to game logic
+
+**Thread-Safe Event Queue Implementation:**
+
+```cpp
+// In raktr/engine/src/input/input_system.cpp
+
+void InputSystem::on_key(int key, int scancode, int action, int mods) {
+    // Called on main thread (GLFW callback)
+    KeyEvent event{
+        .key = map_glfw_key(key),
+        .scancode = scancode,
+        .action = static_cast<KeyAction>(action),
+        .mods = map_glfw_mods(mods)
+    };
+
+    std::lock_guard<std::mutex> lock(_event_queue_mutex);
+    _event_queue.emplace_back(std::move(event));
+}
+
+void InputSystem::process_events() {
+    // Called on worker thread (or main thread if single-threaded)
+    std::vector<InputEvent> events;
+    {
+        std::lock_guard<std::mutex> lock(_event_queue_mutex);
+        events = std::move(_event_queue);
+        _event_queue.clear();
+    }
+
+    for (const auto& event : events) {
+        std::visit([this](const auto& e) {
+            handle_event(e);
+        }, event);
+    }
+}
+```
+
+**Key Points:**
+- Minimize time holding lock (only copy/move queue)
+- Avoid blocking main thread in callbacks
+- Process events in batch on worker thread
+
+---
+
+### Testing Strategy
+
+#### Unit Tests (`raktr/render/tests/window/`)
+
+**Test File:** `test_glfw_window_input_callbacks.cpp`
+
+```cpp
+#include "gtest/gtest.h"
+#include "gmock/gmock.h"
+#include "raktr/render/window/glfw_window.h"
+
+using namespace raktr::render;
+
+TEST(GLFWWindow_set_key_callback, invokes_callback_on_key_press) {
+    // Arrange
+    GLFWWindow window{800, 600, "Test Window"};
+    int captured_key = -1;
+    int captured_action = -1;
+
+    window.set_key_callback([&](int key, int scancode, int action, int mods) {
+        captured_key = key;
+        captured_action = action;
+    });
+
+    // Act
+    // Simulate GLFW key event (requires GLFW mock or integration test)
+    // For unit test: trigger callback manually via GLFWWindow test interface
+    // window.simulate_key_event(GLFW_KEY_A, 0, GLFW_PRESS, 0);
+
+    // Assert
+    // EXPECT_EQ(captured_key, GLFW_KEY_A);
+    // EXPECT_EQ(captured_action, GLFW_PRESS);
+}
+
+TEST(GLFWWindow_set_key_callback, unsubscribes_when_set_to_nullptr) {
+    GLFWWindow window{800, 600, "Test Window"};
+    bool callback_invoked = false;
+
+    window.set_key_callback([&](int, int, int, int) {
+        callback_invoked = true;
+    });
+
+    window.set_key_callback(nullptr);
+
+    // Simulate GLFW key event
+    // window.simulate_key_event(GLFW_KEY_A, 0, GLFW_PRESS, 0);
+
+    EXPECT_FALSE(callback_invoked);
+}
+```
+
+**Testing Challenges:**
+- GLFW requires OpenGL context → integration test preferred
+- Unit tests need GLFW mock or test harness
+- Alternatively: expose `trigger_key_callback(...)` for testing (conditional compile)
+
+#### Integration Tests (`raktr/render/tests/integration/`)
+
+**Test File:** `test_window_input_integration.cpp`
+
+```cpp
+TEST(WindowInput_integration, key_callback_receives_glfw_events) {
+    // Arrange
+    GLFWWindow window{800, 600, "Integration Test"};
+    int received_key = -1;
+
+    window.set_key_callback([&](int key, int, int, int) {
+        received_key = key;
+    });
+
+    // Act
+    // Programmatically send key event to GLFW window
+    // (Requires GLFW test utilities or manual testing)
+
+    // Assert
+    // EXPECT_EQ(received_key, GLFW_KEY_SPACE);
+}
+```
+
+---
+
+### Success Criteria Summary
+
+**`render/window` (Phase 1):**
+- ✅ `Window` interface exposes `set_key_callback`, `set_mouse_button_callback`, `set_cursor_pos_callback`, `set_scroll_callback`
+- ✅ `GLFWWindow` registers GLFW callbacks and forwards events unchanged
+- ✅ Callbacks pass raw GLFW `int` codes (no abstraction)
+- ✅ Callbacks can be unsubscribed via `nullptr`
+- ✅ Unit tests verify callback invocation
+
+**`engine/input` (Phase 2 — Future):**
+- ✅ `KeyCode`, `MouseButton` enums defined in `engine/input`
+- ✅ GLFW → Engine code mapping functions implemented
+- ✅ `InputEvent` variant supports all event types
+- ✅ `InputSystem` subscribes to `Window` callbacks
+- ✅ Thread-safe event queue supports multithreaded processing
+- ✅ Input state query API (`is_key_pressed`, etc.) works correctly
+
+**Phase 3 (Future):**
+- ✅ Action mapping system allows binding multiple inputs to actions
+- ✅ Input contexts enable switching between different input schemes
+- ✅ Chord detection supports modifier key combinations
+
+---
+
+### Next Steps
+
+1. **Implement Phase 1** — Add callback API to `Window` and `GLFWWindow`
+2. **Write tests** — Unit tests for callback registration and invocation
+3. **Document API** — Add Doxygen comments to public callback setters
+4. **Update TODO** — Mark "Research input event handling" as complete
+5. **Begin Phase 2** — Create `engine/input` subsystem (next TODO)
+
+---
+
+### References
+
+- **GLFW Input Guide:** https://www.glfw.org/docs/latest/input_guide.html
+- **GLFW Callback Reference:** https://www.glfw.org/docs/latest/group__input.html
+- **C++23 `std::variant`:** https://en.cppreference.com/w/cpp/utility/variant
+- **Raktr Coding Standards:** `.github/copilot-instructions.md`
+
+---
+
+## 2025-11-07 — Camera Class with Frustum and Input Control
+
+### Context
+
+Need to implement a `Camera` class in `raktr::engine::scene` that:
+1. Uses perspective projection (frustum-based)
+2. Integrates with the existing `InputSystem` (WASD + mouse)
+3. Works with the type-safe transform system (`View`, `Perspective` from `raktr::render::math`)
+4. Follows TDD approach with unit tests first
+5. Updates the visual test `DISABLED_SpinningCubeTypeSafe` to use camera controls
+
+### Design Decisions
+
+**Location:**  
+Place in `raktr/engine/public/scene/camera.h` and `raktr/engine/src/scene/camera.cpp`
+
+**API Design:**
+```cpp
+namespace raktr::engine::scene {
+    class Camera {
+    public:
+        // Construction
+        Camera(const glm::vec3& position, 
+               float fov_degrees, 
+               float aspect_ratio,
+               float near_plane = 0.1f, 
+               float far_plane = 1000.0f);
+        
+        // Input processing
+        void process_input(const InputState& input, float delta_time);
+        
+        // Camera control
+        void set_position(const glm::vec3& pos);
+        void set_rotation(float yaw, float pitch); // Euler angles
+        void set_movement_speed(float speed);
+        void set_mouse_sensitivity(float sensitivity);
+        
+        // Getters
+        [[nodiscard]] glm::vec3 position() const;
+        [[nodiscard]] glm::vec3 forward() const;
+        [[nodiscard]] glm::vec3 right() const;
+        [[nodiscard]] glm::vec3 up() const;
+        [[nodiscard]] float yaw() const;
+        [[nodiscard]] float pitch() const;
+        
+        // Matrix generation
+        [[nodiscard]] raktr::render::math::View view() const;
+        [[nodiscard]] raktr::render::math::Perspective projection() const;
+        
+        // Projection updates
+        void set_aspect_ratio(float aspect);
+        void set_fov(float fov_degrees);
+    };
+}
+```
+
+**Camera Controls:**
+- **WASD** — Forward/Left/Back/Right movement (relative to camera orientation)
+  - W: Forward (+Z in view space = -forward in world space)
+  - S: Backward
+  - A: Strafe left
+  - D: Strafe right
+- **Mouse** — Look around (FPS-style)
+  - Mouse X delta: Yaw (rotate around Y-axis)
+  - Mouse Y delta: Pitch (rotate around X-axis, clamped to prevent gimbal lock)
+- **Space/Shift** (optional future): Up/down movement
+
+**Coordinate System:**
+- Right-handed coordinate system (matches Raktr convention)
+- Camera forward = -Z in view space
+- Yaw = rotation around Y-axis (0° = looking -Z, 90° = looking +X)
+- Pitch = rotation around X-axis (clamped to [-89°, 89°] to avoid gimbal lock)
+
+**Input Integration:**
+```cpp
+// In game loop:
+InputState input = input_system.process_events();
+camera.process_input(input, delta_time);
+View view = camera.view();
+Perspective proj = camera.projection();
+ModelViewProjection mvp = proj * view * model;
+```
+
+**Implementation Details:**
+
+1. **State Management:**
+   - Store position (glm::vec3)
+   - Store yaw/pitch (float, in degrees)
+   - Calculate forward/right/up vectors from yaw/pitch
+   - Store FOV, aspect ratio, near/far planes
+
+2. **Input Processing:**
+   - Check InputState for WASD keys
+   - Calculate movement vector in camera space
+   - Transform to world space using right/forward vectors
+   - Update position based on movement speed and delta time
+   - Track mouse position delta for look rotation
+   - Update yaw/pitch, clamp pitch to [-89, 89]
+
+3. **View Matrix:**
+   - Use `View::look_at(position, position + forward, up)`
+   - Recompute when position or orientation changes
+
+4. **Projection Matrix:**
+   - Use `Perspective::from_fov_degrees(fov, aspect, near, far)`
+   - Recreate when FOV or aspect ratio changes
+
+**Test Strategy:**
+
+Unit tests in `test_camera.cpp`:
+1. **Construction** — Verify default values, initial position/orientation
+2. **Movement** — Test WASD keys update position correctly
+3. **Rotation** — Test mouse input updates yaw/pitch
+4. **Matrix Generation** — Verify view/projection matrices match expected GLM results
+5. **Clamping** — Verify pitch is clamped to [-89, 89]
+6. **Edge Cases** — Zero delta time, no input, extreme values
+
+Integration test:
+- Update `DISABLED_SpinningCubeTypeSafe` to create Camera and process InputSystem events
+- Verify camera can orbit/move around the cube
+
+**Dependencies:**
+- `raktr::engine::input::InputSystem` and `InputState`
+- `raktr::render::math::View` and `Perspective`
+- `glm::vec3`, `glm::mat4`
+- `<cmath>` for sin/cos/radians
+
+**Implementation Plan:**
+
+1. Write test cases first (TDD)
+2. Implement Camera class to pass tests
+3. Add to CMakeLists.txt
+4. Integrate with visual test
+5. Manual verification of controls
+
+**Potential Enhancements (Future):**
+- Smooth camera movement (interpolation/damping)
+- Multiple camera modes (orbit, fly, first-person)
+- Zoom support
+- Camera serialization
+- Frustum culling helpers
+
+---
+
+### References
+
+- **GLM lookAt:** https://glm.g-truc.net/0.9.9/api/a00668.html
+- **GLM perspective:** https://glm.g-truc.net/0.9.9/api/a00243.html
+- **Camera Tutorial:** https://learnopengl.com/Getting-started/Camera
+- **Euler Angles:** https://en.wikipedia.org/wiki/Euler_angles
+
+---
 
 ## 2025-01-XX — Multithreaded Octree for Spatial Partitioning
 
@@ -3656,7 +7243,7 @@ Follow TDD with Triple-A (Arrange / Act / Assert):
 3. **Phase 3**: Thread safety
    - Add std::shared_mutex
    - Verify lock granularity
-   - Write threading tests (use std::thread, not FakeDevice)
+   - Write threading tests (use std::thread, not SoftDevice)
 
 4. **Phase 4**: Optimization (if profiling shows need)
    - Pool allocation for nodes
@@ -3699,4 +7286,574 @@ aktr/engine/src/scene/octree.cpp - Implementation
 aktr/engine/tests/scene/test_octree_*.cpp - Test suite
 - Updated glossary.md with Octree terminology
 - This research document
+
+
+
+---
+
+## 2025-11-14 � WebGPU Instance Rendering Implementation
+
+### Overview
+
+Implemented complete instance rendering support for the WebGPU (WGPU) backend, enabling efficient rendering of hundreds of objects with a single draw call. This was critical for the FrustumCullingDemo which previously could only render 1 cube due to surface acquisition limitations.
+
+### Problem Statement
+
+**Original Issue**: `wgpuSurfaceGetCurrentTexture()` can only be called once per frame, limiting rendering to a single object. Attempted workaround of creating multiple windows was impractical and violated the API contract.
+
+**Solution**: Instance rendering allows drawing multiple copies of the same geometry with different per-instance data (transforms, colors) in a single draw call.
+
+### Architecture & Implementation
+
+#### Phase 1: API Layer (Public Interface)
+
+**1. Buffer Type Extension** (`buffer.h`)
+- Added `BufferType::Instance` enum value
+- GPU buffer type for storing per-instance data
+
+**2. Instance Data Structure** (`instance_data.h`)
+- `glm::mat4 model_matrix` (64 bytes)
+- `glm::vec4 color` (16 bytes)
+- Total: 80 bytes per instance
+- Helper method: `to_bytes()` for GPU upload
+
+**3. Capability Interface** (`device_capabilities.h`)
+- New `InstancingOps` capability struct
+- Functions: `create_instance_buffer`, `update_instance_buffer`, `draw_indexed_instanced`
+- Type-erased via `std::function` for device abstraction
+
+**4. Device Integration** (`device.h`)
+- Added `do_capability_instancingops()` virtual method
+- Implemented capability detection in `Model<T>` wrapper
+- Added convenience methods forwarding to capability interface
+
+#### Phase 2: Backend Implementation (WebGPU)
+
+**1. Instance Buffer Creation** (`wgpu_device.cpp` lines 706-738)
+- Creates buffer with `WGPUBufferUsage_Vertex | WGPUBufferUsage_CopyDst`
+- Writes data via `wgpuQueueWriteBuffer`
+- Returns `Buffer` handle with `BufferType::Instance`
+
+**2. WGSL Shader Updates** (`wgpu_device.cpp` lines 275-305)
+- Added `InstanceInput` struct with 5 vertex attributes
+  - `@location(1-4)`: mat4 decomposed into 4 � vec4
+  - `@location(5)`: vec4 color
+- Reconstructs matrix in shader: `mat4x4<f32>(instance.model_matrix_0, ...)`
+- **Backward compatibility**: Alpha channel as mode selector
+  - `alpha == 0.0`: Compute color from vertex position
+  - `alpha > 0.0`: Use per-instance color
+
+**3. Pipeline Configuration** (`wgpu_device.cpp` lines 430-480)
+- Two vertex buffer layouts:
+  - Slot 0: Geometry (stepMode=Vertex, stride=12 bytes)
+  - Slot 1: Instances (stepMode=Instance, stride=80 bytes)
+- 5 instance attributes (@location 1-5)
+
+**4. Draw Call Implementation** (`wgpu_device.cpp` lines 761-941)
+- Binds geometry buffer to slot 0
+- Binds instance buffer to slot 1
+- Calls `wgpuRenderPassEncoderDrawIndexed(pass, index_count, instance_count, 0, 0, 0)`
+
+**5. Backward Compatibility** (`wgpu_device.cpp` lines 340-360)
+- Default instance buffer with identity matrix and `(0,0,0,0)` color
+- `draw_indexed()` automatically binds default instance buffer
+- Move constructor/assignment updated to transfer default buffer
+
+#### Phase 3: Testing
+
+**1. SoftDevice Extension**
+- `create_instance_buffer()` - stores instance data
+- `update_instance_buffer()` - updates stored data
+- `draw_indexed_instanced()` - simplified implementation (calls draw_indexed N times)
+
+**2. Comprehensive Unit Tests** (`test_instance_rendering.cpp` - 19 tests)
+- Buffer creation: valid data, multiple instances, empty data error
+- Buffer updates: valid updates, invalid buffer, wrong buffer type
+- Draw calls: valid buffers, invalid buffers, zero counts
+- Capability interface: availability, create/update/draw
+- InstanceData helpers: byte conversion, size, data preservation
+
+**3. Visual Testing** (`test_visual_triangle.cpp`)
+- Updated `FrustumCullingDemo` with 500-cube instance rendering
+- Per-frame frustum culling via octree
+- Dynamic instance data building for visible cubes
+- Per-instance rotation and color gradient
+
+**Results**:
+- ? All 250 render tests passing (19 new + 231 existing)
+- ? FrustumCullingDemo: 500 cubes with dynamic culling (26-61 visible)
+- ? 60 FPS sustained performance
+- ? Backward compatibility verified
+
+### Key Technical Decisions
+
+**1. Instance Data Layout**: 80 bytes = mat4 (64) + vec4 (16)
+- Rationale: GPU-aligned, simple, extensible
+- Alternative rejected: Compressed transforms (too complex)
+
+**2. Capability Pattern**: Type-erased interface via `std::function`
+- Rationale: Maintains Device abstraction, runtime capability detection
+- Benefit: SoftDevice can support instancing for testing
+
+**3. Backward Compatibility**: Default instance buffer + alpha-based mode
+- Rationale: Single pipeline for both instanced and non-instanced
+- Alternative rejected: Separate pipelines (complexity)
+
+**4. Buffer Update Pattern**: Rebuild instance data per frame
+- Rationale: Simple, correct, sufficient for 500 instances at 60 FPS
+- Future: Persistent buffers, partial updates, double-buffering
+
+### Performance Characteristics
+
+**Before**: 1 cube max per frame, surface acquisition limitation
+**After**: 500 cubes, 1 draw call, 26-61 visible via frustum culling, 60 FPS
+
+**Bottleneck Analysis**:
+- CPU: Octree query (~1ms), instance data build (~0.5ms)
+- GPU: Minimal overhead, efficient per-instance transform processing
+- Memory: 80 bytes � 500 = 40 KB per frame (negligible)
+
+### Integration Points
+
+- **Octree**: `query_frustum()` ? filter visible ? build instance data
+- **Camera**: MVP matrix as uniform, per-instance model matrices
+- **Future ECS**: Entity transforms ? InstanceData conversion
+
+### Lessons Learned
+
+1. WebGPU surface is single-use per frame - instance rendering is the solution
+2. WGSL requires mat4 decomposition to 4 � vec4 in vertex input
+3. Single pipeline with conditional logic cheaper than separate pipelines
+4. SoftDevice simplified testing enabled comprehensive coverage
+
+### Future Work
+
+**Optimization**:
+- Persistent instance buffers (avoid realloc)
+- Partial buffer updates
+- SIMD for instance data construction
+
+**Features**:
+- Additional per-instance data (UV offsets, animation state)
+- Indirect drawing (GPU-driven culling)
+- Multi-draw indirect (batch multiple meshes)
+
+### Deliverables
+
+? API Layer: buffer.h, instance_data.h, device_capabilities.h, device.h
+? Backend: wgpu_device.h/cpp (create/update/draw methods, shader, pipeline)
+? Testing: fake_device.h/cpp, test_instance_rendering.cpp (19 tests)
+? Visual: test_visual_triangle.cpp (FrustumCullingDemo with 500 cubes)
+? Validation: 250 tests passing, 60 FPS with frustum culling
+? Documentation: This research document, inline comments
+
+---
+
+## 2025-01-18 — Temporal Hi-Z Occlusion Culling with OOP Render Pass Architecture
+
+### Problem Statement
+
+**Issue**: Original Hi-Z occlusion culling implementation had **0% culling rate** due to circular dependency:
+- Built depth pyramid from ALL geometry (including occluded objects)
+- Used same frame's pyramid for occlusion testing
+- Result: Pyramid contains occluded objects' depth → they pass occlusion test → not culled
+
+**Goal**: Implement temporal occlusion culling using **previous frame's depth pyramid** to break circular dependency and achieve 60-80% culling rate in test scenes.
+
+### Research: nanite-webgpu Architecture Analysis
+
+**Key Findings from nanite-webgpu Reference Implementation**:
+
+1. **Temporal Occlusion Strategy**
+   - Uses PREVIOUS frame's Hi-Z pyramid for current frame's culling
+   - No two-pass required within single frame
+   - First frame: all objects visible (no pyramid yet)
+   - Subsequent frames: use N-1 pyramid for frame N
+
+2. **Pass Object Pattern** (Command Pattern)
+   - Each rendering technique encapsulated in `IRenderPass` interface
+   - `execute(PassContext&)` method performs work
+   - Enables composition, testing, profiling
+
+3. **PassContext Data Carrier**
+   - Struct carrying all per-frame state
+   - Replaces scattered function parameters
+   - Fields: command_encoder, color/depth targets, previous pyramid, viewport dims
+
+4. **Explicit LoadOp Control**
+   - Key feature: `WGPULoadOp_Clear` vs `WGPULoadOp_Load`
+   - Enables multiple render passes to same target
+   - Builder pattern for type-safe pass construction
+
+5. **FrameResources for Temporal Techniques**
+   - Double/triple buffering of GPU resources
+   - `current()` / `previous()` accessors
+   - `advance_frame()` moves ring buffer forward
+
+### OOP Design Patterns Applied
+
+**1. Command Pattern** (`IRenderPass` interface)
+```cpp
+class IRenderPass {
+    virtual void execute(PassContext& ctx) = 0;
+    virtual void on_viewport_resize() = 0;
+    virtual std::string_view name() const = 0;
+};
+```
+- Encapsulates rendering action
+- Uniform interface for all passes
+- Supports undo/redo, logging, profiling
+
+**2. Builder Pattern** (`RenderPassBuilder`)
+```cpp
+builder.color_attachment(view, WGPULoadOp_Clear, {0.1f, 0.1f, 0.15f, 1.0f})
+       .depth_attachment(view, WGPULoadOp_Clear, 1.0f)
+       .label("MyPass")
+       .begin(encoder);
+```
+- Fluent API for render pass construction
+- Type-safe, readable, extensible
+- Prevents invalid configurations
+
+**3. Composite Pattern** (`RenderGraph`)
+```cpp
+RenderGraph graph;
+graph.add_pass(std::make_unique<HiZOcclusionPass>(...))
+     .add_pass(std::make_unique<GeometryPass>(...))
+     .add_pass(std::make_unique<HiZPyramidPass>(...));
+graph.execute(ctx);
+```
+- Manages pass execution order
+- Treats single pass and graph uniformly
+- Supports nesting, conditional passes
+
+**4. Strategy Pattern** (Concrete Pass Implementations)
+- Different culling strategies: frustum, Hi-Z, portal
+- Different pyramid build strategies: compute, raster
+- Runtime swap without changing client code
+
+### Implementation
+
+#### Phase 1: Core Infrastructure
+
+**Created Files**:
+
+1. **`render_pass.h`** (58 lines)
+   - `IRenderPass` interface with `execute()`, `on_viewport_resize()`, `name()`
+   - Pure virtual, virtual destructor
+   - Base class for all render passes
+
+2. **`pass_context.h`** (56 lines)
+   - `PassContext` struct with frame state
+   - Members: frame_index, command_encoder, color/depth targets, prev_frame_hi_z_pyramid, viewport dims, device
+   - Forward declared WGPU types (avoids exposing webgpu.h in public API)
+   - All members have default values
+
+3. **`render_pass_builder.h/cpp`** (98 + 110 lines)
+   - Fluent API: `color_attachment()`, `depth_attachment()`, `label()`, `begin()`
+   - Returns `WGPURenderPassEncoder`
+   - Uses `optional<>` for attachment descriptors
+   - Handles `WGPUStringView` assignment correctly
+
+4. **`render_graph.h/cpp`** (69 + 43 lines)
+   - Composite pattern implementation
+   - Methods: `add_pass()`, `execute()`, `on_viewport_resize()`, `clear()`
+   - Stores `vector<unique_ptr<IRenderPass>>`
+   - Iterates passes in order, hooks for profiler
+
+5. **`frame_resources.h/cpp`** (169 + 139 lines)
+   - Manages double/triple buffering
+   - Methods: `current()`, `previous()`, `advance_frame()`, `recreate_resources()`, `wait_idle()`
+   - Creates Hi-Z pyramid textures with mip levels
+   - Ring buffer logic: `(current + size - 1) % size`
+
+**Design Decisions**:
+- Non-copyable, non-movable passes (due to reference members)
+- Forward declarations minimize header dependencies
+- `[[maybe_unused]]` for unused parameters (clean warnings)
+- `std::string_view` return type for `name()` (no allocation)
+
+#### Phase 2: Concrete Pass Implementations
+
+**Created Files**:
+
+1. **`hi_z_occlusion_pass.h/cpp`** (77 + 93 lines)
+   - Performs GPU frustum + occlusion culling
+   - Uses **previous frame's pyramid** via `ctx.prev_frame_hi_z_pyramid`
+   - Outputs `vector<bool>& visibility_results` (filled by execute)
+   - Logs culling statistics: visible count, culling rate, test time
+   - Fallback: marks all visible if Hi-Z unavailable
+
+2. **`geometry_pass.h/cpp`** (84 + 105 lines)
+   - Renders visible geometry to color + depth
+   - Uses visibility results from occlusion pass
+   - Per-instance drawing: `wgpuRenderPassEncoderDrawIndexed(pass, indices, 1, 0, 0, i)`
+   - Skips occluded instances (no GPU work wasted)
+   - Uses `RenderPassBuilder` for pass construction
+   - Logs draw statistics: drawn count, culling rate
+
+3. **`hi_z_pyramid_pass.h/cpp`** (69 + 64 lines)
+   - Builds Hi-Z pyramid for **next frame**
+   - Uses compute shader via `hi_z_buffer->build_pyramid(depth_texture)`
+   - Stores maximum depth at each mip level
+   - Runs AFTER geometry pass completes
+   - Logs pyramid statistics: dimensions, mip levels, build time
+
+**Architecture Flow**:
+```
+Frame N-1:  GeometryPass → HiZPyramidPass → (pyramid stored in frame_resources)
+            ↓
+Frame N:    HiZOcclusionPass (uses N-1 pyramid) → GeometryPass → HiZPyramidPass
+            ↓                                                      ↓
+            60-80% culled                                    pyramid for N+1
+```
+
+**Key Implementation Details**:
+- Occlusion pass: `hi_z_buffer->test_visibility(aabbs, view_projection)`
+- Geometry pass: `reinterpret_cast<WGPUBuffer>(buffer.id())` for WebGPU API
+- Pyramid pass: `hi_z_buffer->build_pyramid(ctx.depth_target)` after rendering
+- All passes: `[[maybe_unused]] PassContext& ctx` for unused parameter
+- Return type fix: `std::string_view name()` not `const char*`
+
+#### Phase 3: Integration Example
+
+**Created File**: `render_pass_integration_example.cpp` (205 lines)
+
+**`TemporalOcclusionExample` Class**:
+- Demonstrates proper integration pattern
+- `setup_render_graph()`: Assembles 3-pass pipeline
+- `execute_frame()`: Builds `PassContext` with previous pyramid
+- `on_resize()`: Recreates frame resources and notifies passes
+
+**Usage Pattern**:
+```cpp
+// Setup
+auto example = std::make_unique<TemporalOcclusionExample>(
+    device, hi_z_buffer.get(), vertex_buffer, index_buffer, 
+    instance_buffer, pipeline);
+
+example->setup_render_graph(scene_aabbs, view_projection, 
+                            instance_count, index_count);
+
+// Render loop
+while (rendering) {
+    update_scene_data(camera, objects);
+    example->execute_frame(command_encoder, color_target, 
+                          depth_target, width, height);
+}
+```
+
+**Critical Integration Points**:
+1. `ctx.prev_frame_hi_z_pyramid = frame_resources->previous().hi_z_pyramid`
+2. `frame_resources->advance_frame()` after execute
+3. `frame_resources->recreate_resources(width, height)` on resize
+
+### Technical Challenges & Solutions
+
+**Challenge 1: Return Type Mismatch**
+- Error: `const char* name()` vs `std::string_view name()` override
+- Solution: Changed all passes to return `std::string_view`
+- Benefit: No allocation, matches interface
+
+**Challenge 2: Move Assignment with Reference Members**
+- Error: `operator=(T&&) = default` implicitly deleted
+- Cause: `const vector<bool>& _visibility` reference member
+- Solution: Deleted move assignment operator explicitly
+- Rationale: Passes don't need to be movable post-construction
+
+**Challenge 3: Buffer Native Handle**
+- Error: `Buffer` has no `native_handle()` method
+- Solution: Use `reinterpret_cast<WGPUBuffer>(buffer.id())`
+- Note: `Buffer::id()` returns `uint64_t` pointer cast to WGPU handle
+
+**Challenge 4: WGPUStringView Assignment**
+- Error: Cannot assign `const char*` to `WGPUStringView` directly
+- Solution: Initialize struct: `label_view.data = str; label_view.length = len;`
+- Context: WebGPU native API uses struct, not pointer
+
+**Challenge 5: Unused Parameter Warnings**
+- Error: `-Werror,-Wunused-parameter` in strict builds
+- Solution: `[[maybe_unused]]` attribute on unused `PassContext& ctx`
+- Context: Some passes don't use all context fields yet
+
+### Build System Integration
+
+**CMakeLists.txt Configuration**:
+```cmake
+target_include_directories(raktr_render
+    PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/public
+    PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+file(GLOB_RECURSE raktr_render_sources CONFIGURE_DEPENDS "src/*.cpp")
+```
+- `GLOB_RECURSE` automatically picks up new source files
+- Public headers directly in `public/` (not subdirectory)
+- Include pattern: `#include "render_pass.h"` (no prefix)
+
+**Build Verification**:
+```
+? raktr_render.lib built successfully
+? All new files compile without errors
+? 15 object files generated (core + passes)
+? Link time: <1 second
+```
+
+### Performance Characteristics
+
+**Expected Performance** (based on nanite-webgpu and theory):
+
+1. **Pyramid Build**: 0.5-1.0ms for 1920×1080 depth buffer
+2. **Visibility Test**: 0.2-0.5ms for 10,000 AABBs
+3. **Culling Rate**: 60-80% in typical scenes with large occluders
+4. **First Frame**: 0% culling (no previous pyramid)
+5. **Steady State**: High culling after frame 2+
+
+**Memory Overhead**:
+- Frame resources: 2× pyramid texture (mip chain)
+- Pyramid texture: ~8 MB for 1920×1080 (R32Float, full mip chain)
+- Total: ~16 MB for double buffering
+
+**Trade-offs**:
+- ✅ Eliminates circular dependency
+- ✅ No two-pass required
+- ⚠️ 1-frame latency (uses old pyramid)
+- ⚠️ First frame: all visible
+- ⚠️ Fast camera motion: potential false positives
+
+### Comparison: Old vs New Implementation
+
+| Aspect | Old (Circular) | New (Temporal) |
+|--------|---------------|----------------|
+| Pyramid Source | Current frame ALL geometry | Previous frame depth |
+| Culling Rate | **0%** (circular dependency) | **60-80%** (expected) |
+| Passes per Frame | 2 (depth pre-pass + main) | 3 (cull + geometry + pyramid) |
+| Latency | 0 frames | 1 frame |
+| First Frame | 0% culled (no pyramid) | 0% culled (no pyramid) |
+| Architecture | Monolithic | Modular (OOP passes) |
+| Testability | Low (tightly coupled) | High (isolated passes) |
+| Extensibility | Hard (modify device) | Easy (add new pass) |
+
+### Future Enhancements
+
+**Optimization**:
+1. **Two-Phase Culling**: Frustum first (CPU), Hi-Z second (GPU)
+2. **Persistent Pyramids**: Avoid recreate on every frame
+3. **Async Compute**: Pyramid build in parallel with geometry
+4. **Mip Streaming**: Build high mips first, low mips async
+
+**Features**:
+1. **Multi-View Rendering**: VR stereo, shadow maps
+2. **Portal Culling**: Combine with Hi-Z for interior scenes
+3. **Software Occlusion**: CPU fallback for integrated GPUs
+4. **Occluder Mesh**: Simplified geometry for pyramid building
+
+**Quality**:
+1. **Temporal Reprojection**: Use motion vectors to reproject pyramid
+2. **Confidence Heuristic**: Discard old pyramid if camera moved too much
+3. **Conservative Depth**: Dilate pyramid to reduce false negatives
+4. **Hierarchical Frustum**: Frustum test per mip level
+
+### Integration with OcclusionCullingDemo
+
+**Current State**: Demo uses old approach (builds pyramid from all geometry)
+
+**Required Changes** (for full integration):
+1. Replace manual Hi-Z calls with `RenderGraph`
+2. Create `FrameResources` for double buffering
+3. Build `PassContext` with previous pyramid
+4. Update scene AABBs to `std::span<const AABB>`
+5. Use visibility results from `HiZOcclusionPass`
+6. Remove manual `build_pyramid()` call after rendering
+7. Call `frame_resources->advance_frame()` per iteration
+
+**Simplified Integration** (via example class):
+- Use `TemporalOcclusionExample` wrapper
+- Minimal changes to existing demo
+- Preserves backward compatibility
+
+### Deliverables
+
+✅ **Core Infrastructure** (5 files, 585 lines)
+   - `render_pass.h`, `pass_context.h`, `render_pass_builder.h/cpp`, `render_graph.h/cpp`, `frame_resources.h/cpp`
+
+✅ **Concrete Passes** (6 files, 611 lines)
+   - `hi_z_occlusion_pass.h/cpp`, `geometry_pass.h/cpp`, `hi_z_pyramid_pass.h/cpp`
+
+✅ **Integration Example** (1 file, 205 lines)
+   - `render_pass_integration_example.cpp`
+
+✅ **Documentation** (this research document)
+   - Architecture analysis, design patterns, implementation details, performance characteristics
+
+✅ **Build System** (verified)
+   - CMake configured, all files compile, library links
+
+⏳ **Demo Integration** (pending)
+   - Full OcclusionCullingDemo refactor required
+   - Example class provides integration pattern
+
+⏳ **Performance Validation** (pending)
+   - Run demo, measure culling rate
+   - Expected: 60-80% in test scene
+   - Compare with 0% baseline
+
+### Lessons Learned
+
+1. **Temporal Techniques Require Frame Buffering**
+   - Double buffering essential for "previous frame" access
+   - Ring buffer pattern: `(current + size - 1) % size`
+
+2. **OOP Enables Composition**
+   - Pass interface enables testing, profiling, swapping
+   - Builder pattern improves safety and readability
+
+3. **Forward Declarations Minimize Dependencies**
+   - Public API doesn't expose WebGPU types
+   - Faster compilation, cleaner includes
+
+4. **Reference Members Complicate Movability**
+   - Cannot default move assignment with reference members
+   - Acceptable trade-off: passes don't need to move
+
+5. **Type Aliases vs Real Types**
+   - Don't alias enums (causes conflicts with real definition)
+   - Forward declare pointer types only
+
+6. **WebGPU API Quirks**
+   - `WGPUStringView` is struct, not pointer
+   - Buffer IDs are `uint64_t` cast to pointer
+   - LoadOp control is key for multi-pass rendering
+
+### Success Criteria
+
+| Criterion | Status | Notes |
+|-----------|--------|-------|
+| Core infrastructure implemented | ✅ | IRenderPass, PassContext, Builder, Graph, FrameResources |
+| Concrete passes implemented | ✅ | HiZOcclusionPass, GeometryPass, HiZPyramidPass |
+| All files compile | ✅ | raktr_render.lib builds successfully |
+| Integration example provided | ✅ | TemporalOcclusionExample class |
+| OcclusionCullingDemo updated | ⏳ | Pattern documented, refactor pending |
+| 60-80% culling achieved | ⏳ | Requires running updated demo |
+| No visual artifacts | ⏳ | Requires visual validation |
+| Performance acceptable | ⏳ | Requires profiling (expected <2ms total) |
+
+### Next Steps
+
+**Immediate**:
+1. Update `OcclusionCullingDemo` to use `TemporalOcclusionExample`
+2. Run demo, verify culling rate improves from 0% to 60-80%
+3. Profile pyramid build and visibility test times
+4. Validate no popping/disappearing artifacts
+
+**Short Term**:
+1. Add unit tests for render passes (mock PassContext)
+2. Add RenderGraph tests (pass ordering, resize handling)
+3. Benchmark: compare temporal vs non-temporal performance
+4. Document integration pattern in README
+
+**Long Term**:
+1. Implement two-phase culling (frustum + Hi-Z)
+2. Add async compute for pyramid generation
+3. Explore software occlusion for low-end GPUs
+4. Integrate with ECS for entity culling
 

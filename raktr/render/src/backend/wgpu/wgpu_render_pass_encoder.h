@@ -12,7 +12,7 @@
 #include <vector>
 #include <webgpu/webgpu.h>
 
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
     /*!
      * @brief WebGPU render pass encoder implementation.
@@ -156,6 +156,6 @@ namespace raktr::render::backend
         const std::vector<WGPUBuffer>* _buffers; // Device's buffer storage
     };
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu
 
 #endif // RAKTR_RENDER_WGPU_RENDER_PASS_H

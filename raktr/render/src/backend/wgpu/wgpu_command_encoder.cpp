@@ -7,8 +7,8 @@
 #include "wgpu_compute_pass_encoder.h"
 #include "wgpu_render_pass_encoder.h"
 #include <spdlog/spdlog.h>
+namespace raktr::render::backend::wgpu
 
-namespace raktr::render::backend
 {
     render::RenderPassEncoder WgpuCommandEncoder::begin_render_pass(const render::RenderPassDescriptor& descriptor) const
     {
@@ -177,4 +177,4 @@ namespace raktr::render::backend
         return render::CommandBuffer(cmd_buffer_id);
     }
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu

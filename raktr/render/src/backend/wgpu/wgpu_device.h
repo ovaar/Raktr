@@ -24,8 +24,7 @@ namespace raktr::render
     // Forward declaration
     class Window;
 } // namespace raktr::render
-
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
 
     /*!
@@ -429,6 +428,6 @@ namespace raktr::render::backend
         WGPUTextureView _current_surface_texture_view = nullptr;
     };
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu
 
 #endif // RAKTR_RENDER_WGPU_DEVICE_H

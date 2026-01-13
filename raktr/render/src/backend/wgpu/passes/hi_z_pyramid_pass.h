@@ -5,11 +5,10 @@
 
 #pragma once
 
-#include "../wgpu_pass_context.h"
+#include "backend/wgpu/wgpu_pass_context.h"
 #include "occlusion/hi_z_buffer.h"
 #include <string_view>
 #include <webgpu/webgpu.h>
-
 
 namespace raktr::render::backend::wgpu
 {

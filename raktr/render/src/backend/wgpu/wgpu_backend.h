@@ -11,8 +11,8 @@
 #include "window/window.h"
 #include <memory>
 #include <optional>
+namespace raktr::render::backend::wgpu
 
-namespace raktr::render::backend
 {
     /*!
      * @brief WebGPU backend using wgpu-native library.
@@ -48,6 +48,6 @@ namespace raktr::render::backend
         std::optional<Device>       _device;      // Type-erased wrapper (references _wgpu_device)
     };
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu
 
 #endif // RAKTR_RENDER_BACKEND_WGPU_BACKEND_H

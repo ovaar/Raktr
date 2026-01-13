@@ -9,8 +9,7 @@
 #include "bind_group.h"
 #include "compute_pipeline.h"
 #include <webgpu/webgpu.h>
-
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
     /*!
      * @brief WebGPU compute pass encoder implementation.
@@ -102,6 +101,6 @@ namespace raktr::render::backend
         mutable WGPUComputePassEncoder _encoder; // Mutable for recording
     };
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu
 
 #endif // RAKTR_RENDER_WGPU_COMPUTE_PASS_H

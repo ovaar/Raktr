@@ -5,8 +5,7 @@
 
 #include "wgpu_compute_pass_encoder.h"
 #include <spdlog/spdlog.h>
-
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
     void WgpuComputePassEncoder::set_pipeline(const render::ComputePipeline& pipeline) const
     {
@@ -68,4 +67,4 @@ namespace raktr::render::backend
         _encoder = nullptr; // Mark as ended
     }
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu

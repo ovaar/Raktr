@@ -6,8 +6,7 @@
 #include "backend/wgpu/wgpu_backend.h"
 #include "render_error.h"
 #include <spdlog/spdlog.h>
-
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
 
     WgpuBackend::WgpuBackend()
@@ -100,4 +99,4 @@ namespace raktr::render::backend
         return _wgpu_device.get();
     }
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu

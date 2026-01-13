@@ -13,8 +13,7 @@
 #include <vector>
 
 using namespace raktr::render;
-using namespace raktr::render::backend;
-using namespace raktr::render::backend::webgpu;
+using namespace raktr::render::backend::wgpu;
 using namespace raktr::render::occlusion;
 
 class WgpuHiZBufferTest : public ::testing::Test

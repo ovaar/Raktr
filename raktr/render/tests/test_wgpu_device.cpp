@@ -13,7 +13,7 @@
 #endif
 
 using namespace raktr::render;
-using namespace raktr::render::backend;
+using namespace raktr::render::backend::wgpu;
 
 class WgpuDeviceTest : public ::testing::Test
 {

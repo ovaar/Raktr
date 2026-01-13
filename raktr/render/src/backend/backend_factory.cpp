@@ -18,7 +18,7 @@ namespace raktr::render::backend
                 return std::make_unique<SoftBackend>();
 
             case BackendType::WebGPU:
-                return std::make_unique<WgpuBackend>();
+                return std::make_unique<wgpu::WgpuBackend>();
 
             case BackendType::OpenGL:
             case BackendType::Vulkan:

@@ -12,8 +12,7 @@
 #include "render_pass_encoder.h"
 #include <vector>
 #include <webgpu/webgpu.h>
-
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
     /*!
      * @brief WebGPU command encoder implementation.
@@ -119,6 +118,6 @@ namespace raktr::render::backend
         std::vector<WGPUCommandBuffer>* _command_buffers; // Device's command buffer storage
     };
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu
 
 #endif // RAKTR_RENDER_WGPU_COMMAND_ENCODER_H

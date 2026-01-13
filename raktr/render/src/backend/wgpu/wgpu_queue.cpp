@@ -7,7 +7,7 @@
 #include "wgpu_device.h"
 #include <spdlog/spdlog.h>
 
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
     void WgpuQueue::submit(std::span<const render::CommandBuffer> commands) const
     {
@@ -96,4 +96,4 @@ namespace raktr::render::backend
                       offset);
     }
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu

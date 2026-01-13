@@ -11,8 +11,7 @@
 #include <span>
 #include <vector>
 #include <webgpu/webgpu.h>
-
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
     /*!
      * @brief WebGPU queue implementation.
@@ -64,6 +63,6 @@ namespace raktr::render::backend
         const std::vector<WGPUCommandBuffer>* _command_buffers; // Device's command buffer storage
     };
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu
 
 #endif // RAKTR_RENDER_WGPU_QUEUE_H

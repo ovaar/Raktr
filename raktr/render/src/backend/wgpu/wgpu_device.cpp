@@ -21,8 +21,7 @@
 #ifdef _WIN32
 #include <windows.h>
 #endif
-
-namespace raktr::render::backend
+namespace raktr::render::backend::wgpu
 {
 
     // Helper to create WGPUStringView from C string
@@ -1580,11 +1579,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         if (!_queue)
         {
             spdlog::error("WgpuDevice::queue: Queue not initialized");
-            return Queue(backend::WgpuQueue(nullptr, nullptr, nullptr));
+            return Queue(WgpuQueue(nullptr, nullptr, nullptr));
         }
 
         // Create WgpuQueue wrapper with pointers to device storage
-        backend::WgpuQueue wgpu_queue(_queue, &_buffers, &_command_buffers);
+        WgpuQueue wgpu_queue(_queue, &_buffers, &_command_buffers);
         return Queue(std::move(wgpu_queue));
     }
 
@@ -1603,7 +1602,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         if (!_device)
         {
             spdlog::error("WgpuDevice::create_command_encoder: Device not initialized");
-            return CommandEncoder(backend::WgpuCommandEncoder(nullptr, nullptr, nullptr));
+            return CommandEncoder(WgpuCommandEncoder(nullptr, nullptr, nullptr));
         }
 
         WGPUCommandEncoderDescriptor encoder_desc = {};
@@ -1615,11 +1614,11 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         if (!wgpu_encoder)
         {
             spdlog::error("WgpuDevice::create_command_encoder: Failed to create command encoder");
-            return CommandEncoder(backend::WgpuCommandEncoder(nullptr, nullptr, nullptr));
+            return CommandEncoder(WgpuCommandEncoder(nullptr, nullptr, nullptr));
         }
 
         // Create WgpuCommandEncoder wrapper with pointers to device storage
-        backend::WgpuCommandEncoder encoder(wgpu_encoder, &_buffers, &_command_buffers);
+        WgpuCommandEncoder encoder(wgpu_encoder, &_buffers, &_command_buffers);
         return CommandEncoder(std::move(encoder));
     }
 
@@ -1767,4 +1766,4 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         return BindGroup(std::move(wgpu_bind_group));
     }
 
-} // namespace raktr::render::backend
+} // namespace raktr::render::backend::wgpu
