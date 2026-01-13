@@ -3,7 +3,7 @@
  * @brief Unit tests for WebGPU Hi-Z occlusion culling implementation.
  */
 
-#include "backend/webgpu/occlusion/wgpu_hi_z_buffer.h"
+#include "backend/wgpu/occlusion/wgpu_hi_z_buffer.h"
 #include "backend/wgpu/wgpu_device.h"
 #include "window/window.h"
 #include <chrono>

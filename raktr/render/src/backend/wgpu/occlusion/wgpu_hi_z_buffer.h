@@ -8,7 +8,7 @@
 #include <vector>
 #include <webgpu/webgpu.h>
 
-namespace raktr::render::backend::webgpu
+namespace raktr::render::backend::wgpu
 {
 
     /*!
@@ -104,4 +104,4 @@ namespace raktr::render::backend::webgpu
         Stats _stats{};
     };
 
-} // namespace raktr::render::backend::webgpu
+} // namespace raktr::render::backend::wgpu

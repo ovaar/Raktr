@@ -14,7 +14,7 @@
 #include <thread>
 #include <vector>
 
-namespace raktr::render::backend::webgpu
+namespace raktr::render::backend::wgpu
 {
 
     namespace
@@ -178,7 +178,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
     // Object is OCCLUDED if ALL of it is behind the occluder
     // Object is VISIBLE if ANY of it is in front of or at the same depth as the occluder
     // Conservative test: visible if min_depth (closest point) <= hi_z_depth (farthest occluder)
-    let is_visible = screen_aabb.min_depth <= hi_z_depth + 0.001;
+    // Standard depth: 0.0 = near, 1.0 = far
+    let is_visible = screen_aabb.min_depth <= hi_z_depth;
     
     let word_idx = aabb_idx / 32u;
     let bit_idx = aabb_idx % 32u;
@@ -941,6 +942,8 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
             return std::unexpected(make_error_code(RenderError::InitializationFailed));
         }
 
+        spdlog::debug("Building Hi-Z pyramid from depth texture: {}x{}, {} mip levels", _width, _height, _mip_levels);
+
         auto start_time = std::chrono::high_resolution_clock::now();
 
         WGPUTexture input_texture = static_cast<WGPUTexture>(depth_texture);
@@ -978,6 +981,7 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         WGPUCommandEncoder encoder = wgpuDeviceCreateCommandEncoder(_device, &encoder_desc);
 
         // Copy Depth32Float texture to R32Float texture for compute shader access
+        spdlog::debug("Copying depth texture (Depth32Float -> R32Float)");
         copy_depth_to_r32float(encoder, input_texture);
 
         uint32_t src_width  = _width;
@@ -995,6 +999,10 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
                 dst_width,
                 dst_height
             };
+            if (mip == 0)
+            {
+                spdlog::debug("Building pyramid mip {} -> {}: {}x{} -> {}x{}", mip, mip + 1, src_width, src_height, dst_width, dst_height);
+            }
 
             wgpuQueueWriteBuffer(_queue, _uniform_buffer, 0, &constants, sizeof(PushConstants));
 
@@ -1087,6 +1095,11 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
 
         auto end_time           = std::chrono::high_resolution_clock::now();
         _stats.pyramid_build_ms = std::chrono::duration<float, std::milli>(end_time - start_time).count();
+
+        spdlog::debug("Hi-Z pyramid built successfully in {:.3f}ms", _stats.pyramid_build_ms);
+
+        // TODO: Add depth value sampling/readback here for debugging if needed
+        // This would require creating a readback buffer and reading back pyramid data
 
         return {};
     }
@@ -1398,4 +1411,4 @@ fn main(@builtin(global_invocation_id) global_id: vec3<u32>) {
         return visibility;
     }
 
-} // namespace raktr::render::backend::webgpu
+} // namespace raktr::render::backend::wgpu

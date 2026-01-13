@@ -278,6 +278,26 @@ namespace raktr::render::backend
         }
 
         /*!
+         * @brief Get the default render pipeline.
+         * @return WGPURenderPipeline handle (may be null if not initialized).
+         * @note Used by passes that need the default instancing-enabled pipeline.
+         */
+        [[nodiscard]] WGPURenderPipeline wgpu_render_pipeline() const
+        {
+            return _render_pipeline;
+        }
+
+        /*!
+         * @brief Get the current bind group (uniforms).
+         * @return WGPUBindGroup handle (may be null if not initialized).
+         * @note Used by passes that need to bind uniform buffers.
+         */
+        [[nodiscard]] WGPUBindGroup wgpu_current_bind_group() const
+        {
+            return _current_bind_group;
+        }
+
+        /*!
          * @brief Get the device's queue for submitting commands.
          * @return Type-erased Queue wrapper.
          */

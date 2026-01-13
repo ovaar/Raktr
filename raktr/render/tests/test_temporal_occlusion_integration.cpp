@@ -130,7 +130,6 @@ namespace
         ctx.prev_frame_hi_z_pyramid = nullptr;
         ctx.viewport_width          = 1920;
         ctx.viewport_height         = 1080;
-        ctx.device                  = nullptr;
         return ctx;
     }
 } // namespace

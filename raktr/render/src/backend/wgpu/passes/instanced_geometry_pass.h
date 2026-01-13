@@ -5,18 +5,18 @@
 
 #pragma once
 
-#include "../wgpu_pass_context.h"
 #include "buffer.h"
-#include "device.h"
 #include "instance_data.h"
 #include <glm/glm.hpp>
 #include <string_view>
 #include <vector>
 #include <webgpu/webgpu.h>
 
-
 namespace raktr::render::backend::wgpu
 {
+    // Forward declarations
+    class WgpuDevice;
+    struct WgpuPassContext;
 
     class InstancedGeometryPass final
     {
@@ -24,7 +24,7 @@ namespace raktr::render::backend::wgpu
         using ContextType = WgpuPassContext; // Required for type erasure
 
         InstancedGeometryPass(
-            Device*                          device,
+            WgpuDevice*                      device,
             Buffer                           vertex_buffer,
             Buffer                           index_buffer,
             Buffer                           instance_buffer,
@@ -53,7 +53,7 @@ namespace raktr::render::backend::wgpu
         }
 
     private:
-        Device*                          _device{ nullptr };
+        WgpuDevice*                      _device{ nullptr };
         Buffer                           _vertex_buffer;
         Buffer                           _index_buffer;
         Buffer                           _instance_buffer;

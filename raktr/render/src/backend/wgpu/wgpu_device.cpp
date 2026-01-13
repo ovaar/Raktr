@@ -4,7 +4,7 @@
  */
 
 #include "wgpu_device.h"
-#include "backend/webgpu/occlusion/wgpu_hi_z_buffer.h"
+#include "backend/wgpu/occlusion/wgpu_hi_z_buffer.h"
 #include "buffer.h"
 #include "command_encoder.h"
 #include "queue.h"
@@ -1184,7 +1184,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
 
         try
         {
-            return std::make_unique<backend::webgpu::WgpuHiZBuffer>(_instance, _device, _queue, width, height);
+            return std::make_unique<backend::wgpu::WgpuHiZBuffer>(_instance, _device, _queue, width, height);
         }
         catch (...)
         {

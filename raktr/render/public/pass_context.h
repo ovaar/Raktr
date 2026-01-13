@@ -14,11 +14,6 @@ using WGPUTextureView    = struct WGPUTextureViewImpl*;
 
 namespace raktr::render
 {
-    // Forward declarations
-    namespace backend
-    {
-        class WgpuDevice;
-    }
 
     /*!
      * @brief Context object passed to render passes during execution.
@@ -49,9 +44,6 @@ namespace raktr::render
         //! Viewport dimensions
         uint32_t viewport_width  = 0;
         uint32_t viewport_height = 0;
-
-        //! GPU device access (non-owning reference)
-        backend::WgpuDevice* device = nullptr;
 
         // Future extensions:
         // UniformBuffer& global_uniforms;

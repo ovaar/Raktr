@@ -4,13 +4,15 @@
  */
 
 #include "instanced_geometry_pass.h"
-#include "device.h"
+#include "backend/wgpu/wgpu_device.h"
+#include "backend/wgpu/wgpu_pass_context.h"
+#include "render_pass_builder.h"
 #include <spdlog/spdlog.h>
 
 namespace raktr::render::backend::wgpu
 {
 
-    InstancedGeometryPass::InstancedGeometryPass(Device*                          device,
+    InstancedGeometryPass::InstancedGeometryPass(WgpuDevice*                      device,
                                                  Buffer                           vertex_buffer,
                                                  Buffer                           index_buffer,
                                                  Buffer                           instance_buffer,
@@ -28,7 +30,7 @@ namespace raktr::render::backend::wgpu
     {
     }
 
-    void InstancedGeometryPass::execute([[maybe_unused]] WgpuPassContext& ctx)
+    void InstancedGeometryPass::execute(WgpuPassContext& ctx)
     {
         // Build instance data for visible objects only
         std::vector<InstanceData> visible_instances;
@@ -63,19 +65,51 @@ namespace raktr::render::backend::wgpu
             return;
         }
 
-        // TODO: Use PassContext command encoder and render targets to record draw commands
-        // For now, fall back to device draw (which will acquire surface - needs refactoring)
-        auto draw_result = _device->draw_indexed_instanced(
-            _vertex_buffer,
-            _index_buffer,
-            _instance_buffer,
-            _index_count,
-            _last_drawn_count);
+        // Build render pass using PassContext's command encoder and targets
+        RenderPassBuilder builder;
+        builder.color_attachment(ctx.color_target, WGPULoadOp_Clear, { 0.1f, 0.2f, 0.3f, 1.0f })
+            .depth_attachment(ctx.depth_target, WGPULoadOp_Clear, 1.0f)
+            .label("InstancedGeometryPass");
 
-        if (!draw_result.has_value())
-        {
-            spdlog::error("InstancedGeometryPass: Failed to draw instances");
-        }
+        WGPURenderPassEncoder pass = builder.begin(ctx.command_encoder);
+
+        // Set pipeline and bind group (get from device)
+        wgpuRenderPassEncoderSetPipeline(pass, _device->wgpu_render_pipeline());
+        wgpuRenderPassEncoderSetBindGroup(pass, 0, _device->wgpu_current_bind_group(), 0, nullptr);
+
+        // Set viewport to maintain aspect ratio (use full context viewport)
+        wgpuRenderPassEncoderSetViewport(pass,
+                                         0.0f,
+                                         0.0f,
+                                         static_cast<float>(ctx.viewport_width),
+                                         static_cast<float>(ctx.viewport_height),
+                                         0.0f,
+                                         1.0f);
+
+        // Set scissor rect
+        wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, ctx.viewport_width, ctx.viewport_height);
+
+        // Bind vertex, index, and instance buffers
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, reinterpret_cast<WGPUBuffer>(_vertex_buffer.id()), 0, WGPU_WHOLE_SIZE);
+        wgpuRenderPassEncoderSetVertexBuffer(pass, 1, reinterpret_cast<WGPUBuffer>(_instance_buffer.id()), 0, WGPU_WHOLE_SIZE);
+        wgpuRenderPassEncoderSetIndexBuffer(pass,
+                                            reinterpret_cast<WGPUBuffer>(_index_buffer.id()),
+                                            WGPUIndexFormat_Uint32,
+                                            0,
+                                            WGPU_WHOLE_SIZE);
+
+        // Draw all visible instances in one call (they're already filtered in the instance buffer)
+        wgpuRenderPassEncoderDrawIndexed(
+            pass,
+            _index_count,      // indexCount
+            _last_drawn_count, // instanceCount (number of visible instances)
+            0,                 // firstIndex
+            0,                 // baseVertex
+            0                  // firstInstance
+        );
+
+        wgpuRenderPassEncoderEnd(pass);
+        wgpuRenderPassEncoderRelease(pass);
 
         // Calculate and log culling statistics
         uint32_t total_count  = static_cast<uint32_t>(_all_instances->size());
@@ -84,10 +118,10 @@ namespace raktr::render::backend::wgpu
                                     ? (100.0f * culled_count / total_count)
                                     : 0.0f;
 
-        spdlog::debug("InstancedGeometryPass: Drew {}/{} instances ({:.1f}% culled)",
-                      _last_drawn_count,
-                      total_count,
-                      culling_rate);
+        spdlog::info("InstancedGeometryPass: Drew {}/{} instances ({:.1f}% culled)",
+                     _last_drawn_count,
+                     total_count,
+                     culling_rate);
     }
 
     void InstancedGeometryPass::on_viewport_resize([[maybe_unused]] uint32_t width, [[maybe_unused]] uint32_t height)
