@@ -1,13 +1,12 @@
 /*!
  * @file test_frame_resources.cpp
- * @brief Unit tests for FrameResources.
+ * @brief Unit tests for WgpuFrameResources.
  */
 
-#include "frame_resources.h"
+#include "backend/wgpu/wgpu_frame_resources.h"
 #include "gtest/gtest.h"
 
-
-using namespace raktr::render;
+using namespace raktr::render::backend::wgpu;
 
 // Note: These tests use nullptr for WGPUDevice since we're testing
 // the ring buffer logic, not actual GPU resource creation.

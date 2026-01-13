@@ -6,7 +6,7 @@
 #include "wgpu_instanced_geometry_pass.h"
 #include "backend/wgpu/wgpu_device.h"
 #include "backend/wgpu/wgpu_pass_context.h"
-#include "render_pass_builder.h"
+#include "backend/wgpu/wgpu_render_pass_builder.h"
 #include <spdlog/spdlog.h>
 
 namespace raktr::render::backend::wgpu
@@ -66,7 +66,7 @@ namespace raktr::render::backend::wgpu
         }
 
         // Build render pass using PassContext's command encoder and targets
-        RenderPassBuilder builder;
+        WgpuRenderPassBuilder builder;
         builder.color_attachment(ctx.color_target, WGPULoadOp_Clear, { 0.1f, 0.2f, 0.3f, 1.0f })
             .depth_attachment(ctx.depth_target, WGPULoadOp_Clear, 1.0f)
             .label("WgpuInstancedGeometryPass");

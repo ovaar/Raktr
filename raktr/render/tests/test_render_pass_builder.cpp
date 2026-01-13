@@ -1,14 +1,13 @@
 /*!
  * @file test_render_pass_builder.cpp
- * @brief Unit tests for RenderPassBuilder.
+ * @brief Unit tests for WgpuRenderPassBuilder.
  */
 
-#include "render_pass_builder.h"
+#include "backend/wgpu/wgpu_render_pass_builder.h"
 #include "gtest/gtest.h"
 #include <webgpu/webgpu.h>
 
-
-using namespace raktr::render;
+using namespace raktr::render::backend::wgpu;
 
 // Mock WebGPU objects for testing
 namespace
@@ -31,11 +30,11 @@ namespace
     }
 } // namespace
 
-TEST(RenderPassBuilder_ColorAttachment, ValidView_ReturnsBuilder)
+TEST(WgpuRenderPassBuilder_ColorAttachment, ValidView_ReturnsBuilder)
 {
     // Arrange
-    auto              view = create_mock_texture_view();
-    RenderPassBuilder builder;
+    auto                  view = create_mock_texture_view();
+    WgpuRenderPassBuilder builder;
 
     // Act
     auto& result = builder.color_attachment(view, WGPULoadOp_Clear, { 0.0f, 0.0f, 0.0f, 1.0f });
@@ -49,8 +48,8 @@ TEST(RenderPassBuilder_ColorAttachment, ValidView_ReturnsBuilder)
 TEST(RenderPassBuilder_ColorAttachment, LoadOpLoad_ConfiguresCorrectly)
 {
     // Arrange
-    auto              view = create_mock_texture_view();
-    RenderPassBuilder builder;
+    auto                  view = create_mock_texture_view();
+    WgpuRenderPassBuilder builder;
 
     // Act
     builder.color_attachment(view, WGPULoadOp_Load, { 0.5f, 0.5f, 0.5f, 1.0f });
@@ -64,8 +63,8 @@ TEST(RenderPassBuilder_ColorAttachment, LoadOpLoad_ConfiguresCorrectly)
 TEST(RenderPassBuilder_DepthAttachment, ValidView_ReturnsBuilder)
 {
     // Arrange
-    auto              view = create_mock_texture_view();
-    RenderPassBuilder builder;
+    auto                  view = create_mock_texture_view();
+    WgpuRenderPassBuilder builder;
 
     // Act
     auto& result = builder.depth_attachment(view, WGPULoadOp_Clear, 1.0f);
@@ -79,8 +78,8 @@ TEST(RenderPassBuilder_DepthAttachment, ValidView_ReturnsBuilder)
 TEST(RenderPassBuilder_DepthAttachment, CustomClearValue_ConfiguresCorrectly)
 {
     // Arrange
-    auto              view = create_mock_texture_view();
-    RenderPassBuilder builder;
+    auto                  view = create_mock_texture_view();
+    WgpuRenderPassBuilder builder;
 
     // Act
     builder.depth_attachment(view, WGPULoadOp_Clear, 0.5f);
@@ -94,7 +93,7 @@ TEST(RenderPassBuilder_DepthAttachment, CustomClearValue_ConfiguresCorrectly)
 TEST(RenderPassBuilder_Label, EmptyString_ReturnsBuilder)
 {
     // Arrange
-    RenderPassBuilder builder;
+    WgpuRenderPassBuilder builder;
 
     // Act
     auto& result = builder.label("");
@@ -106,7 +105,7 @@ TEST(RenderPassBuilder_Label, EmptyString_ReturnsBuilder)
 TEST(RenderPassBuilder_Label, NonEmptyString_ReturnsBuilder)
 {
     // Arrange
-    RenderPassBuilder builder;
+    WgpuRenderPassBuilder builder;
 
     // Act
     auto& result = builder.label("TestPass");
@@ -118,9 +117,9 @@ TEST(RenderPassBuilder_Label, NonEmptyString_ReturnsBuilder)
 TEST(RenderPassBuilder_FluentChaining, MultipleAttachments_ChainsCorrectly)
 {
     // Arrange
-    auto              color_view = create_mock_texture_view();
-    auto              depth_view = create_mock_texture_view();
-    RenderPassBuilder builder;
+    auto                  color_view = create_mock_texture_view();
+    auto                  depth_view = create_mock_texture_view();
+    WgpuRenderPassBuilder builder;
 
     // Act
     auto& result = builder
@@ -138,8 +137,8 @@ TEST(RenderPassBuilder_FluentChaining, MultipleAttachments_ChainsCorrectly)
 TEST(RenderPassBuilder_ColorAttachment, ClearColorComponents_AllValid)
 {
     // Arrange
-    auto              view = create_mock_texture_view();
-    RenderPassBuilder builder;
+    auto                  view = create_mock_texture_view();
+    WgpuRenderPassBuilder builder;
 
     // Act - test extreme values
     builder.color_attachment(view, WGPULoadOp_Clear, { 0.0f, 0.5f, 1.0f, 0.25f });
@@ -153,8 +152,8 @@ TEST(RenderPassBuilder_ColorAttachment, ClearColorComponents_AllValid)
 TEST(RenderPassBuilder_DepthAttachment, ClearDepthRange_ValidValues)
 {
     // Arrange
-    auto              view = create_mock_texture_view();
-    RenderPassBuilder builder;
+    auto                  view = create_mock_texture_view();
+    WgpuRenderPassBuilder builder;
 
     // Act - test depth range
     builder.depth_attachment(view, WGPULoadOp_Clear, 0.0f); // near
@@ -170,10 +169,10 @@ TEST(RenderPassBuilder_DepthAttachment, ClearDepthRange_ValidValues)
 TEST(RenderPassBuilder_MultipleBuilders, IndependentInstances_DoNotInterfere)
 {
     // Arrange
-    auto              view1 = create_mock_texture_view();
-    auto              view2 = create_mock_texture_view();
-    RenderPassBuilder builder1;
-    RenderPassBuilder builder2;
+    auto                  view1 = create_mock_texture_view();
+    auto                  view2 = create_mock_texture_view();
+    WgpuRenderPassBuilder builder1;
+    WgpuRenderPassBuilder builder2;
 
     // Act
     builder1.color_attachment(view1, WGPULoadOp_Clear, { 1.0f, 0.0f, 0.0f, 1.0f })
@@ -191,7 +190,7 @@ TEST(RenderPassBuilder_MultipleBuilders, IndependentInstances_DoNotInterfere)
 TEST(RenderPassBuilder_DefaultConstructor, EmptyBuilder_CanBeConfigured)
 {
     // Arrange & Act
-    RenderPassBuilder builder;
+    WgpuRenderPassBuilder builder;
 
     // Assert - can add attachments to default-constructed builder
     auto view = create_mock_texture_view();
@@ -200,4 +199,3 @@ TEST(RenderPassBuilder_DefaultConstructor, EmptyBuilder_CanBeConfigured)
 
     destroy_mock_texture_view(view);
 }
-

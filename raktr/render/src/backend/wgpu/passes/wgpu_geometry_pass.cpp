@@ -4,7 +4,7 @@
  */
 
 #include "wgpu_geometry_pass.h"
-#include "render_pass_builder.h"
+#include "backend/wgpu/wgpu_render_pass_builder.h"
 #include <spdlog/spdlog.h>
 
 namespace raktr::render::backend::wgpu
@@ -25,7 +25,7 @@ namespace raktr::render::backend::wgpu
     void WgpuGeometryPass::execute(WgpuPassContext& ctx)
     {
         // Build render pass descriptor
-        RenderPassBuilder builder;
+        WgpuRenderPassBuilder builder;
         builder.color_attachment(ctx.color_target, WGPULoadOp_Clear, { 0.1f, 0.1f, 0.15f, 1.0f })
             .depth_attachment(ctx.depth_target, WGPULoadOp_Clear, 1.0f)
             .label("WgpuGeometryPass");

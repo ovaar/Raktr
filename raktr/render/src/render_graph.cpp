@@ -5,7 +5,6 @@
 
 #include "render_graph.h"
 #include "device.h"
-#include "pass_context.h"
 
 namespace raktr::render
 {

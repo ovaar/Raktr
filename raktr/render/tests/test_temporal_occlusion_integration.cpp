@@ -7,13 +7,14 @@
 #include "backend/wgpu/passes/wgpu_geometry_pass.h"
 #include "backend/wgpu/passes/wgpu_hi_z_occlusion_pass.h"
 #include "backend/wgpu/passes/wgpu_hi_z_pyramid_pass.h"
+#include "backend/wgpu/wgpu_frame_resources.h"
 #include "backend/wgpu/wgpu_pass_context.h"
-#include "frame_resources.h"
 #include "occlusion/hi_z_buffer.h"
 #include "render_graph.h"
 #include "gtest/gtest.h"
 #include <memory>
 #include <vector>
+
 
 using namespace raktr::render;
 using namespace raktr::render::backend::wgpu;
