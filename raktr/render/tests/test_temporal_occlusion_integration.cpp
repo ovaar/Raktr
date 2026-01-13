@@ -4,9 +4,9 @@
  */
 
 #include "backend/soft/soft_device.h"
-#include "backend/wgpu/passes/geometry_pass.h"
-#include "backend/wgpu/passes/hi_z_occlusion_pass.h"
-#include "backend/wgpu/passes/hi_z_pyramid_pass.h"
+#include "backend/wgpu/passes/wgpu_geometry_pass.h"
+#include "backend/wgpu/passes/wgpu_hi_z_occlusion_pass.h"
+#include "backend/wgpu/passes/wgpu_hi_z_pyramid_pass.h"
 #include "backend/wgpu/wgpu_pass_context.h"
 #include "frame_resources.h"
 #include "occlusion/hi_z_buffer.h"
@@ -146,8 +146,8 @@ TEST(TemporalOcclusion_Integration, TwoPassPipeline_ExecutesInOrder)
 
     // Build 2-pass pipeline: occlusion test + pyramid build
     auto mock_depth = create_mock_depth_texture();
-    graph.add_pass(HiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results))
-        .add_pass(HiZPyramidPass(&hi_z, mock_depth));
+    graph.add_pass(WgpuHiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results))
+        .add_pass(WgpuHiZPyramidPass(&hi_z, mock_depth));
 
     auto ctx = create_integration_test_context();
 
@@ -175,7 +175,7 @@ TEST(TemporalOcclusion_Integration, OcclusionPass_CullsHalfOfObjects)
     std::vector<bool> visibility_results;
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results));
+    graph.add_pass(WgpuHiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results));
 
     auto ctx = create_integration_test_context();
 
@@ -203,7 +203,7 @@ TEST(TemporalOcclusion_Integration, MultipleFrames_PyramidBuiltEachFrame)
     auto          mock_depth = create_mock_depth_texture();
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZPyramidPass(&hi_z, mock_depth));
+    graph.add_pass(WgpuHiZPyramidPass(&hi_z, mock_depth));
 
     auto ctx = create_integration_test_context();
 
@@ -227,7 +227,7 @@ TEST(TemporalOcclusion_Integration, EmptyAABBList_HandledGracefully)
     std::vector<bool>            visibility_results;
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZOcclusionPass(&hi_z, &empty_aabbs, view_projection, &visibility_results));
+    graph.add_pass(WgpuHiZOcclusionPass(&hi_z, &empty_aabbs, view_projection, &visibility_results));
 
     auto ctx = create_integration_test_context();
 
@@ -243,7 +243,7 @@ TEST(TemporalOcclusion_Integration, NullHiZBuffer_FallsBackToAllVisible)
     std::vector<bool>            visibility_results;
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZOcclusionPass(nullptr, &aabbs, glm::mat4(1.0f), &visibility_results));
+    graph.add_pass(WgpuHiZOcclusionPass(nullptr, &aabbs, glm::mat4(1.0f), &visibility_results));
 
     auto ctx = create_integration_test_context();
 
@@ -269,8 +269,8 @@ TEST(TemporalOcclusion_Integration, ViewportResize_NotifiesAllPasses)
     auto mock_depth = create_mock_depth_texture();
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results))
-        .add_pass(HiZPyramidPass(&hi_z, mock_depth));
+    graph.add_pass(WgpuHiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results))
+        .add_pass(WgpuHiZPyramidPass(&hi_z, mock_depth));
 
     // Act & Assert - should not crash
     EXPECT_NO_THROW(graph.on_viewport_resize(1920, 1080));
@@ -285,7 +285,7 @@ TEST(TemporalOcclusion_Integration, GraphClear_CanRebuildPipeline)
     std::vector<bool>            visibility_results1, visibility_results2;
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results1));
+    graph.add_pass(WgpuHiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results1));
 
     auto ctx = create_integration_test_context();
     graph.execute(ctx);
@@ -294,7 +294,7 @@ TEST(TemporalOcclusion_Integration, GraphClear_CanRebuildPipeline)
 
     // Act - clear and rebuild
     graph.clear();
-    graph.add_pass(HiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results2));
+    graph.add_pass(WgpuHiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results2));
     graph.execute(ctx);
 
     // Assert
@@ -312,7 +312,7 @@ TEST(TemporalOcclusion_Integration, PassUpdate_ChangesSceneData)
     std::vector<bool>            visibility_results;
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZOcclusionPass(&hi_z, &aabbs1, view_projection, &visibility_results));
+    graph.add_pass(WgpuHiZOcclusionPass(&hi_z, &aabbs1, view_projection, &visibility_results));
 
     auto ctx = create_integration_test_context();
 
@@ -345,7 +345,7 @@ TEST(TemporalOcclusion_Integration, LargeScene_HandlesThousandsOfObjects)
     std::vector<bool> visibility_results;
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results));
+    graph.add_pass(WgpuHiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results));
 
     auto ctx = create_integration_test_context();
 
@@ -373,8 +373,8 @@ TEST(TemporalOcclusion_Integration, PassNames_CorrectlyReported)
     glm::mat4                    view_projection(1.0f);
     std::vector<bool>            visibility_results;
 
-    auto occlusion_pass_ptr = new HiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results);
-    auto pyramid_pass_ptr   = new HiZPyramidPass(&hi_z, nullptr);
+    auto occlusion_pass_ptr = new WgpuHiZOcclusionPass(&hi_z, &aabbs, view_projection, &visibility_results);
+    auto pyramid_pass_ptr   = new WgpuHiZPyramidPass(&hi_z, nullptr);
 
     auto* occlusion_pass = occlusion_pass_ptr;
     auto* pyramid_pass   = pyramid_pass_ptr;
@@ -384,8 +384,8 @@ TEST(TemporalOcclusion_Integration, PassNames_CorrectlyReported)
     std::string_view pyramid_name   = pyramid_pass->name();
 
     // Assert
-    EXPECT_EQ(occlusion_name, "HiZOcclusionPass");
-    EXPECT_EQ(pyramid_name, "HiZPyramidPass");
+    EXPECT_EQ(occlusion_name, "WgpuHiZOcclusionPass");
+    EXPECT_EQ(pyramid_name, "WgpuHiZPyramidPass");
 
     delete occlusion_pass_ptr;
     delete pyramid_pass_ptr;
@@ -398,7 +398,7 @@ TEST(TemporalOcclusion_Integration, FrameIndexProgression_TrackedCorrectly)
     auto          mock_depth = create_mock_depth_texture();
 
     RenderGraph graph(nullptr);
-    graph.add_pass(HiZPyramidPass(&hi_z, mock_depth));
+    graph.add_pass(WgpuHiZPyramidPass(&hi_z, mock_depth));
 
     auto ctx = create_integration_test_context();
 
