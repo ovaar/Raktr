@@ -5,6 +5,6 @@ description = "The next generation modern c++ 3D game engine — Where Worlds Ta
 readme = "README.md"
 requires-python = ">=3.13"
 dependencies = [
-    "cmake>=4.1.2",
-    "conan>=2.21.0",
+    "cmake>=4.2.1",
+    "conan>=2.25.2",
 ]
