@@ -50,7 +50,7 @@ namespace raktr::render::backend
         /*!
          * @brief Get the device abstraction.
          */
-        virtual Device* device() = 0;
+        virtual DeviceView device() = 0;
 
         /*!
          * @brief Get pointer to backend-specific device (for PassContext setup).

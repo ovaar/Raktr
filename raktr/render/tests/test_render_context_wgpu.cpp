@@ -39,7 +39,7 @@ TEST_F(RenderContextWgpuTest, GetDevice_ReturnsValidDevice)
     auto result = context->initialize(config);
     ASSERT_TRUE(result.has_value());
 
-    Device* device = context->device();
+    DeviceView device = context->device();
     EXPECT_NE(device, nullptr);
 }
 
@@ -55,7 +55,7 @@ TEST_F(RenderContextWgpuTest, DeviceOperations_DoNotCrash)
     auto result = context->initialize(config);
     ASSERT_TRUE(result.has_value());
 
-    Device* device = context->device();
+    DeviceView device = context->device();
     ASSERT_NE(device, nullptr);
 
     // Test basic device operations
@@ -77,7 +77,7 @@ TEST_F(RenderContextWgpuTest, CreateBuffers_Succeeds)
     auto result = context->initialize(config);
     ASSERT_TRUE(result.has_value());
 
-    Device* device = context->device();
+    DeviceView device = context->device();
     ASSERT_NE(device, nullptr);
 
     // Create vertex buffer

@@ -30,12 +30,12 @@ namespace raktr::render::backend
             const RenderConfig& config,
             Window*             window) override;
 
-        void                  shutdown() override;
-        [[nodiscard]] Device* device() override;
-        void*                 backend_device_ptr() override;
+        void                     shutdown() override;
+        [[nodiscard]] DeviceView device() override;
+        void*                    backend_device_ptr() override;
 
     private:
-        std::optional<Device> _device;
+        std::unique_ptr<SoftDevice> _soft_device;
     };
 
 } // namespace raktr::render::backend

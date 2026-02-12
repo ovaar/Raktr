@@ -121,13 +121,13 @@ namespace raktr::render
         }
     }
 
-    Device* RenderContext::device() const
+    DeviceView RenderContext::device() const
     {
         if (_impl->initialized && _impl->backend)
         {
             return _impl->backend->device();
         }
-        return nullptr;
+        return DeviceView();
     }
 
     bool RenderContext::is_initialized() const

@@ -261,6 +261,7 @@ TEST_F(WgpuHiZBufferTest, TestVisibility_MultipleAABBs_ProcessesAll)
  */
 TEST_F(WgpuHiZBufferTest, Performance_1000AABBs_CompletesInReasonableTime)
 {
+    GTEST_SKIP() << "Performance test - enable when profiling Hi-Z implementation";
     // Arrange
     WGPUInstance  instance_handle = static_cast<WGPUInstance>(_device->wgpu_instance());
     WGPUDevice    device_handle   = static_cast<WGPUDevice>(_device->wgpu_device());

@@ -6,15 +6,14 @@
 #ifndef RAKTR_RENDER_RENDER_GRAPH_H
 #define RAKTR_RENDER_RENDER_GRAPH_H
 
+#include "device.h"
 #include "render_pass.h"
 #include <memory>
 #include <vector>
 
+
 namespace raktr::render
 {
-    // Forward declaration
-    class Device;
-
     /*!
      * @brief Manages execution order and lifecycle of render passes.
      *
@@ -42,9 +41,9 @@ namespace raktr::render
     public:
         /*!
          * @brief Construct a RenderGraph with device dependency injection.
-         * @param device GPU device (non-owning pointer, must outlive graph).
+         * @param device GPU device view.
          */
-        explicit RenderGraph(Device* device);
+        explicit RenderGraph(DeviceView device);
 
         /*!
          * @brief Add a pass to the execution graph (type-erased).
@@ -105,16 +104,16 @@ namespace raktr::render
 
         /*!
          * @brief Get the injected device.
-         * @return Non-owning pointer to device.
+         * @return Device view.
          */
-        [[nodiscard]] Device* device() const
+        [[nodiscard]] DeviceView device() const
         {
             return _device;
         }
 
     private:
-        Device*                 _device{ nullptr }; // Non-owning, injected dependency
-        std::vector<RenderPass> _passes;            // Type-erased passes (value semantics!)
+        DeviceView              _device; // Non-owning, injected dependency
+        std::vector<RenderPass> _passes; // Type-erased passes (value semantics!)
     };
 
 } // namespace raktr::render

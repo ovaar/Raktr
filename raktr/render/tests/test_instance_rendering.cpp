@@ -30,7 +30,7 @@ protected:
     }
 
     std::unique_ptr<RenderContext> _ctx;
-    Device*                        _device = nullptr;
+    DeviceView                     _device;
 };
 
 // ============================================================================

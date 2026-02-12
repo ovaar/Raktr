@@ -10,7 +10,7 @@ namespace raktr::render::backend
 {
 
     SoftBackend::SoftBackend()
-        : _device(std::nullopt)
+        : _soft_device(nullptr)
     {
     }
 
@@ -21,7 +21,7 @@ namespace raktr::render::backend
 
     std::expected<void, std::error_code> SoftBackend::initialize(const RenderConfig& /* config */)
     {
-        _device = Device(SoftDevice());
+        _soft_device = std::make_unique<SoftDevice>();
         return {};
     }
 
@@ -30,7 +30,7 @@ namespace raktr::render::backend
         const WindowConfig& /* window_config */)
     {
         // SoftBackend is software rendering - doesn't use window
-        _device = Device(SoftDevice());
+        _soft_device = std::make_unique<SoftDevice>();
         return {};
     }
 
@@ -39,24 +39,23 @@ namespace raktr::render::backend
         Window* /* window */)
     {
         // SoftBackend is software rendering - doesn't use window
-        _device = Device(SoftDevice());
+        _soft_device = std::make_unique<SoftDevice>();
         return {};
     }
 
     void SoftBackend::shutdown()
     {
-        _device = std::nullopt;
+        _soft_device.reset();
     }
 
-    Device* SoftBackend::device()
+    DeviceView SoftBackend::device()
     {
-        return _device.has_value() ? &_device.value() : nullptr;
+        return _soft_device ? DeviceView(*_soft_device) : DeviceView();
     }
 
     void* SoftBackend::backend_device_ptr()
     {
-        // TODO: Return pointer to SoftDevice inside _device
-        return nullptr;
+        return _soft_device.get();
     }
 
 } // namespace raktr::render::backend

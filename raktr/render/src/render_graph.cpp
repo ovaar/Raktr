@@ -9,7 +9,7 @@
 namespace raktr::render
 {
 
-    RenderGraph::RenderGraph(Device* device)
+    RenderGraph::RenderGraph(DeviceView device)
         : _device(device)
     {
     }

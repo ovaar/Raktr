@@ -88,9 +88,9 @@ namespace raktr::render
 
         /*!
          * @brief Get the initialized device.
-         * @return Pointer to the device, or nullptr if not initialized.
+         * @return Device view (check for validity with operator bool).
          */
-        [[nodiscard]] Device* device() const;
+        [[nodiscard]] DeviceView device() const;
 
         /*!
          * @brief Check if context is successfully initialized.

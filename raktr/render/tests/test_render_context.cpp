@@ -59,7 +59,7 @@ namespace raktr::render::test
         auto ctx = create_render_context();
 
         // Act
-        auto* dev = ctx->device();
+        auto dev = ctx->device();
 
         // Assert
         EXPECT_EQ(dev, nullptr);

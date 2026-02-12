@@ -10,7 +10,7 @@ namespace raktr::render::backend::wgpu
 {
 
     WgpuBackend::WgpuBackend()
-        : _window(nullptr), _wgpu_device(nullptr), _device(std::nullopt)
+        : _window(nullptr), _wgpu_device(nullptr)
     {
     }
 
@@ -75,8 +75,6 @@ namespace raktr::render::backend::wgpu
 
         // Store device in unique_ptr
         _wgpu_device = std::make_unique<WgpuDevice>(std::move(device_result.value()));
-        // Create Device wrapper (non-owning, pointer = observer pattern)
-        _device = Device(_wgpu_device.get());
 
         spdlog::info("WebGPU backend initialized successfully");
         return {};
@@ -84,14 +82,13 @@ namespace raktr::render::backend::wgpu
 
     void WgpuBackend::shutdown()
     {
-        _device = std::nullopt;
         _wgpu_device.reset();
         _window.reset();
     }
 
-    Device* WgpuBackend::device()
+    DeviceView WgpuBackend::device()
     {
-        return _device.has_value() ? &_device.value() : nullptr;
+        return _wgpu_device ? DeviceView(_wgpu_device.get()) : DeviceView();
     }
 
     void* WgpuBackend::backend_device_ptr()
