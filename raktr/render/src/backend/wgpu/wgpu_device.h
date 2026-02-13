@@ -34,6 +34,8 @@ namespace raktr::render::backend::wgpu
      */
     class WgpuDevice
     {
+        friend class WgpuBackend;
+
     public:
         /*!
          * @brief Create a WebGPU device with window surface.
@@ -148,7 +150,25 @@ namespace raktr::render::backend::wgpu
          * }
          */
         [[nodiscard]] std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>
-        create_hi_z_buffer(uint32_t width, uint32_t height);
+        create_hi_z_buffer(uint32_t width, uint32_t height) const;
+
+        [[nodiscard]] RenderPass create_hi_z_pyramid_pass(
+            occlusion::HiZBuffer* buffer,
+            void*                 depth_texture_handle) const;
+
+        [[nodiscard]] RenderPass create_hi_z_occlusion_pass(
+            occlusion::HiZBuffer*               buffer,
+            const std::vector<occlusion::AABB>* aabbs,
+            const glm::mat4&                    view_projection,
+            std::vector<bool>*                  visibility_results) const;
+
+        [[nodiscard]] RenderPass create_instanced_geometry_pass(
+            Buffer                     vb,
+            Buffer                     ib,
+            Buffer                     instb,
+            std::vector<InstanceData>* cpu_data,
+            std::vector<bool>*         visibility,
+            uint32_t                   index_count) const;
 
         /*!
          * @brief Resize the surface to new dimensions.

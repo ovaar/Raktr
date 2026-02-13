@@ -5,6 +5,9 @@
 
 #include "wgpu_device.h"
 #include "backend/wgpu/occlusion/wgpu_hi_z_buffer.h"
+#include "backend/wgpu/passes/wgpu_hi_z_occlusion_pass.h"
+#include "backend/wgpu/passes/wgpu_hi_z_pyramid_pass.h"
+#include "backend/wgpu/passes/wgpu_instanced_geometry_pass.h"
 #include "buffer.h"
 #include "command_encoder.h"
 #include "queue.h"
@@ -17,6 +20,7 @@
 #include "wgpu_shader_module.h"
 #include "window/window.h"
 #include <spdlog/spdlog.h>
+
 
 #ifdef _WIN32
 #include <windows.h>
@@ -1169,7 +1173,7 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
     }
 
     std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>
-    WgpuDevice::create_hi_z_buffer(uint32_t width, uint32_t height)
+    WgpuDevice::create_hi_z_buffer(uint32_t width, uint32_t height) const
     {
         if (!_device || !_queue)
         {
@@ -1189,6 +1193,43 @@ fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
         {
             return std::unexpected(make_error_code(RenderError::InitializationFailed));
         }
+    }
+
+    RenderPass WgpuDevice::create_hi_z_pyramid_pass(
+        occlusion::HiZBuffer* buffer,
+        void*                 depth_texture_handle) const
+    {
+        // cast void* back to WGPUTexture
+        auto depth_tex = static_cast<WGPUTexture>(depth_texture_handle);
+        return RenderPass(WgpuHiZPyramidPass(buffer, depth_tex));
+    }
+
+    RenderPass WgpuDevice::create_hi_z_occlusion_pass(
+        occlusion::HiZBuffer*               buffer,
+        const std::vector<occlusion::AABB>* aabbs,
+        const glm::mat4&                    view_projection,
+        std::vector<bool>*                  visibility_results) const
+    {
+        return RenderPass(WgpuHiZOcclusionPass(buffer, aabbs, view_projection, visibility_results));
+    }
+
+    RenderPass WgpuDevice::create_instanced_geometry_pass(
+        Buffer                     vb,
+        Buffer                     ib,
+        Buffer                     instb,
+        std::vector<InstanceData>* cpu_data,
+        std::vector<bool>*         visibility,
+        uint32_t                   index_count) const
+    {
+        // Use const_cast because DeviceView typically wraps a mutable pointer for device operations
+        return RenderPass(WgpuInstancedGeometryPass(
+            const_cast<WgpuDevice*>(this),
+            vb,
+            ib,
+            instb,
+            cpu_data,
+            visibility,
+            index_count));
     }
 
     std::expected<void, std::error_code>

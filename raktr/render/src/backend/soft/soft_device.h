@@ -129,6 +129,43 @@ namespace raktr::render::backend
 
         const Viewport& viewport() const;
 
+        void* get_surface_view() const;
+
+        void* get_depth_view() const;
+
+        std::expected<Queue, std::error_code> queue() const;
+
+        std::expected<CommandEncoder, std::error_code> create_command_encoder(std::string_view label) const;
+
+        std::expected<ShaderModule, std::error_code>
+        create_shader_module(const ShaderModuleDescriptor& desc) const;
+
+        std::expected<RenderPipeline, std::error_code>
+        create_render_pipeline(const RenderPipelineDescriptor& desc) const;
+
+        std::expected<ComputePipeline, std::error_code>
+        create_compute_pipeline(const ComputePipelineDescriptor& desc) const;
+
+        std::expected<BindGroupLayout, std::error_code>
+        create_bind_group_layout(const BindGroupLayoutDescriptor& desc) const;
+
+        std::expected<BindGroup, std::error_code>
+        create_bind_group(const BindGroupDescriptor& desc) const;
+
+        std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>
+        create_hi_z_buffer(uint32_t w, uint32_t h) const;
+
+        RenderPass create_hi_z_pyramid_pass(occlusion::HiZBuffer* buffer, void* depth_texture) const;
+
+        RenderPass create_hi_z_occlusion_pass(occlusion::HiZBuffer*               buffer,
+                                              const std::vector<occlusion::AABB>* aabbs,
+                                              const glm::mat4&                    vp,
+                                              std::vector<bool>*                  results) const;
+
+        RenderPass create_instanced_geometry_pass(Buffer vb, Buffer ib, Buffer instb, std::vector<InstanceData>* cpu_data, std::vector<bool>* visibility, uint32_t index_count) const;
+
+        void* get_depth_texture() const;
+
     private:
         // Buffer storage
         struct BufferData

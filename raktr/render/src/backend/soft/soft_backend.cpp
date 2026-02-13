@@ -48,9 +48,14 @@ namespace raktr::render::backend
         _soft_device.reset();
     }
 
+    void SoftBackend::execute(RenderGraph& /*graph*/, bool /*blocking*/)
+    {
+        // No-op for now
+    }
+
     DeviceView SoftBackend::device()
     {
-        return _soft_device ? DeviceView(*_soft_device) : DeviceView();
+        return _soft_device ? DeviceView(_soft_device.get()) : DeviceView();
     }
 
     void* SoftBackend::backend_device_ptr()

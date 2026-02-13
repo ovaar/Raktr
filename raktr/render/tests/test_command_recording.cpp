@@ -258,7 +258,9 @@ TEST(CommandRecording, RenderPassEncoder_SetPipeline)
     RenderPipeline pipeline = std::move(pipeline_result.value());
 
     // Create encoder
-    CommandEncoder encoder = device->create_command_encoder("Test");
+    auto encoder_result = device->create_command_encoder("Test");
+    ASSERT_TRUE(encoder_result.has_value()) << "Failed to create command encoder";
+    CommandEncoder encoder = std::move(encoder_result.value());
 
     // Begin render pass
     RenderPassDescriptor render_desc;
@@ -280,7 +282,9 @@ TEST(CommandRecording, RenderPassEncoder_SetPipeline)
 
     CommandBuffer                commands = encoder.finish();
     std::array<CommandBuffer, 1> command_list{ commands };
-    device->queue().submit(command_list);
+    auto queue_result = device->queue();
+    ASSERT_TRUE(queue_result.has_value()) << "Failed to get queue";
+    queue_result.value().submit(command_list);
 }
 
 /*!

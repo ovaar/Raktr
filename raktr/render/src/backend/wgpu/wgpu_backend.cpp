@@ -4,8 +4,12 @@
  */
 
 #include "backend/wgpu/wgpu_backend.h"
+#include "backend/wgpu/wgpu_pass_context.h"
 #include "render_error.h"
+#include "render_graph.h"
 #include <spdlog/spdlog.h>
+#include <webgpu/webgpu.h>
+
 namespace raktr::render::backend::wgpu
 {
 
@@ -94,6 +98,77 @@ namespace raktr::render::backend::wgpu
     void* WgpuBackend::backend_device_ptr()
     {
         return _wgpu_device.get();
+    }
+
+    void WgpuBackend::execute(RenderGraph& graph, bool present)
+    {
+        if (!_wgpu_device || !_window)
+            return;
+
+        WGPUTextureView depth_view = static_cast<WGPUTextureView>(_wgpu_device->get_depth_view());
+
+        // Start frame if not active
+        if (!_is_frame_active)
+        {
+            WGPUSurface surface = static_cast<WGPUSurface>(_wgpu_device->get_surface_view());
+            wgpuSurfaceGetCurrentTexture(surface, &_current_surface_texture);
+
+            if (_current_surface_texture.status != WGPUSurfaceGetCurrentTextureStatus_SuccessOptimal)
+            {
+                return;
+            }
+
+            WGPUTextureViewDescriptor view_desc = {};
+            view_desc.label                     = { "SurfaceTextureView", WGPU_STRLEN };
+            view_desc.format                    = wgpuTextureGetFormat(_current_surface_texture.texture);
+            view_desc.dimension                 = WGPUTextureViewDimension_2D;
+            view_desc.baseMipLevel              = 0;
+            view_desc.mipLevelCount             = 1;
+            view_desc.baseArrayLayer            = 0;
+            view_desc.arrayLayerCount           = 1;
+            view_desc.aspect                    = WGPUTextureAspect_All;
+            _current_color_view                 = wgpuTextureCreateView(_current_surface_texture.texture, &view_desc);
+
+            _is_frame_active = true;
+        }
+
+        // Create encoder for this batch
+        WGPUCommandEncoderDescriptor encoder_desc = {};
+        encoder_desc.label                        = { "RenderGraph Encoder", WGPU_STRLEN };
+        WGPUCommandEncoder encoder                = wgpuDeviceCreateCommandEncoder(_wgpu_device->_device, &encoder_desc);
+
+        WgpuPassContext ctx;
+        ctx.frame_index     = _frame_index;
+        ctx.command_encoder = encoder;
+        ctx.color_target    = _current_color_view;
+        ctx.depth_target    = depth_view;
+        ctx.viewport_width  = _window->width();
+        ctx.viewport_height = _window->height();
+
+        graph.execute(ctx);
+
+        WGPUCommandBufferDescriptor cmd_buf_desc = {};
+        WGPUCommandBuffer           cmd_buffer   = wgpuCommandEncoderFinish(encoder, &cmd_buf_desc);
+
+        wgpuQueueSubmit(_wgpu_device->_queue, 1, &cmd_buffer);
+
+        wgpuCommandBufferRelease(cmd_buffer);
+        wgpuCommandEncoderRelease(encoder);
+
+        if (present)
+        {
+            WGPUSurface surface = static_cast<WGPUSurface>(_wgpu_device->get_surface_view());
+            wgpuSurfacePresent(surface);
+
+            wgpuTextureViewRelease(_current_color_view);
+            wgpuTextureRelease(_current_surface_texture.texture);
+
+            _current_color_view      = nullptr;
+            _current_surface_texture = {};
+            _is_frame_active         = false;
+
+            _frame_index++;
+        }
     }
 
 } // namespace raktr::render::backend::wgpu

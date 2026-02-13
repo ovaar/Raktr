@@ -29,17 +29,11 @@
 #include "scene/octree.h"
 
 // For render pass architecture
-#include "backend/wgpu/passes/wgpu_geometry_pass.h"
-#include "backend/wgpu/passes/wgpu_hi_z_occlusion_pass.h"
-#include "backend/wgpu/passes/wgpu_hi_z_pyramid_pass.h"
-#include "backend/wgpu/passes/wgpu_instanced_geometry_pass.h"
-#include "backend/wgpu/wgpu_device.h"
-#include "backend/wgpu/wgpu_pass_context.h"
+// Abstractions only
 #include "render_graph.h"
-#include <webgpu/webgpu.h>
+// #include "backend/wgpu/..." removed to enforce separation
 
 using namespace raktr::render;
-using namespace raktr::render::backend::wgpu;
 
 TEST(VisualTest, DISABLED_ManualRenderTriangle)
 {
@@ -852,7 +846,7 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
     auto instance_buffer_result = device->create_instance_buffer(
         std::as_bytes(std::span(instance_data)));
     ASSERT_TRUE(instance_buffer_result.has_value()) << "Failed to create instance buffer";
-    // auto instance_buffer = instance_buffer_result.value();
+    auto instance_buffer = instance_buffer_result.value();
 
     // Create Hi-Z buffer for temporal GPU occlusion culling
     std::unique_ptr<raktr::render::occlusion::HiZBuffer> hi_z_buffer;
@@ -969,115 +963,88 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
 
         // Update uniform buffer with view-projection matrix using Queue
         math::ModelViewProjection vp(view_projection);
-        device->queue().write_buffer(uniform_buffer.value(), 0, vp.to_bytes());
+        device->queue().value().write_buffer(uniform_buffer.value(), 0, vp.to_bytes());
 
         // ========================================================================
         // RenderGraph with Hi-Z Occlusion Culling + Geometry Passes
         // ========================================================================
 
-        // // Rebuild RenderGraph each frame (lightweight - just allocates wrappers)
-        // RenderGraph frame_graph(device);
+        // Pass 1: Hi-Z Occlusion Pass - Test visibility using previous frame's pyramid
+        if (occlusion_culling_enabled && hi_z_buffer)
+        {
+            RenderGraph frame_graph(device);
+            frame_graph.add_pass(device->create_hi_z_occlusion_pass(
+                hi_z_buffer.get(),
+                &scene_aabbs,
+                view_projection,
+                &visibility_results));
 
-        // // Pass 1: Hi-Z Occlusion Pass - Test visibility using previous frame's pyramid
-        // if (occlusion_culling_enabled && hi_z_buffer)
-        // {
-        //     frame_graph.add_pass(WgpuHiZOcclusionPass{
-        //         hi_z_buffer.get(),
-        //         &scene_aabbs,
-        //         view_projection,
-        //         &visibility_results });
+            // Execute pass without presenting to allow reading back results
+            render_context->execute(frame_graph, false);
+        }
+        else
+        {
+            // Fallback: mark all objects visible
+            visibility_results.assign(scene_aabbs.size(), true);
+        }
 
-        //     // Execute occlusion pass first to populate visibility_results
-        //     WgpuPassContext occlusion_ctx{};
-        //     occlusion_ctx.frame_index     = frame_index;
-        //     occlusion_ctx.command_encoder = nullptr;
-        //     occlusion_ctx.color_target    = nullptr;
-        //     occlusion_ctx.depth_target    = nullptr;
-        //     occlusion_ctx.viewport_width  = window_config.width;
-        //     occlusion_ctx.viewport_height = window_config.height;
+        // Map visibility_results (per-AABB) back to per-instance visibility (per scene object)
+        std::vector<bool> per_instance_visibility(scene_objects.size(), false);
 
-        //     frame_graph.execute(occlusion_ctx);
-        // }
-        // else
-        // {
-        //     // Fallback: mark all objects visible
-        //     visibility_results.assign(scene_aabbs.size(), true);
-        // }
+        // Occluders always visible (first 3 objects)
+        for (size_t i = 0; i < 3 && i < scene_objects.size(); ++i)
+        {
+            if (scene_objects[i].is_occluder)
+            {
+                per_instance_visibility[i] = true;
+            }
+        }
 
-        // // Map visibility_results (per-AABB) back to per-instance visibility (per scene object)
-        // std::vector<bool> per_instance_visibility(scene_objects.size(), false);
+        // Map AABB visibility back to scene object indices
+        size_t aabb_index = 0;
+        for (size_t i = 0; i < scene_objects.size(); ++i)
+        {
+            if (!scene_objects[i].is_occluder)
+            {
+                if (aabb_index < visibility_results.size())
+                {
+                    per_instance_visibility[i] = visibility_results[aabb_index];
+                }
+                aabb_index++;
+            }
+        }
 
-        // // Occluders always visible (first 3 objects)
-        // for (size_t i = 0; i < 3 && i < scene_objects.size(); ++i)
-        // {
-        //     if (scene_objects[i].is_occluder)
-        //     {
-        //         per_instance_visibility[i] = true;
-        //     }
-        // }
+        // Pass 2: WgpuInstancedGeometryPass - Render visible objects using GPU instancing
+        // Create new render graph for geometry pass
+        RenderGraph geometry_graph(device);
+        geometry_graph.add_pass(device->create_instanced_geometry_pass(
+            vertex_buffer.value(),
+            index_buffer.value(),
+            instance_buffer,
+            &all_instance_data,
+            &per_instance_visibility,
+            36 // index count per cube
+            ));
 
-        // // Map AABB visibility back to scene object indices
-        // size_t aabb_index = 0;
-        // for (size_t i = 0; i < scene_objects.size(); ++i)
-        // {
-        //     if (!scene_objects[i].is_occluder)
-        //     {
-        //         if (aabb_index < visibility_results.size())
-        //         {
-        //             per_instance_visibility[i] = visibility_results[aabb_index];
-        //         }
-        //         aabb_index++;
-        //     }
-        // }
+        bool present_after_geometry = (!occlusion_culling_enabled || !hi_z_buffer);
+        render_context->execute(geometry_graph, present_after_geometry);
 
-        // // Pass 2: WgpuInstancedGeometryPass - Render visible objects using GPU instancing
-        // // Create new render graph for geometry pass
-        // RenderGraph geometry_graph(device);
-        // geometry_graph.add_pass(WgpuInstancedGeometryPass{
-        //     device,
-        //     vertex_buffer.value(),
-        //     index_buffer.value(),
-        //     instance_buffer,
-        //     &all_instance_data,
-        //     &per_instance_visibility,
-        //     36 // index count per cube
-        // });
+        // ========================================================================
+        // Pass 3: Hi-Z Pyramid Pass - Build pyramid for NEXT frame
+        // ========================================================================
+        // Note: This must happen AFTER geometry rendering so depth buffer is populated
+        if (occlusion_culling_enabled && hi_z_buffer)
+        {
+            // Create separate graph for pyramid building (after present)
+            RenderGraph pyramid_graph(device);
+            pyramid_graph.add_pass(device->create_hi_z_pyramid_pass(
+                hi_z_buffer.get(),
+                device->get_depth_texture()));
 
-        // // Execute geometry rendering pass
-        // WgpuPassContext geometry_ctx{};
-        // geometry_ctx.frame_index     = frame_index;
-        // geometry_ctx.command_encoder = nullptr;
-        // geometry_ctx.color_target    = nullptr;
-        // geometry_ctx.depth_target    = nullptr;
-        // geometry_ctx.viewport_width  = window_config.width;
-        // geometry_ctx.viewport_height = window_config.height;
+            render_context->execute(pyramid_graph, true);
+        }
 
-        // geometry_graph.execute(geometry_ctx);
-
-        // // ========================================================================
-        // // Pass 3: Hi-Z Pyramid Pass - Build pyramid for NEXT frame
-        // // ========================================================================
-        // // Note: This must happen AFTER geometry rendering so depth buffer is populated
-        // if (occlusion_culling_enabled && hi_z_buffer)
-        // {
-        //     // Create separate graph for pyramid building (after present)
-        //     RenderGraph pyramid_graph(device);
-        //     pyramid_graph.add_pass(WgpuHiZPyramidPass{
-        //         hi_z_buffer.get(),
-        //         static_cast<WGPUTexture>(device->get_depth_texture()) });
-
-        //     WgpuPassContext pyramid_ctx{};
-        //     pyramid_ctx.frame_index     = frame_index;
-        //     pyramid_ctx.command_encoder = nullptr;
-        //     pyramid_ctx.color_target    = nullptr;
-        //     pyramid_ctx.depth_target    = static_cast<WGPUTextureView>(device->get_depth_view());
-        //     pyramid_ctx.viewport_width  = window_config.width;
-        //     pyramid_ctx.viewport_height = window_config.height;
-
-        //     pyramid_graph.execute(pyramid_ctx);
-        // }
-
-        // // Present (if rendering to swapchain)
+        // Present (if rendering to swapchain) - handled by execute
         // device->present();
 
         frame_index++;

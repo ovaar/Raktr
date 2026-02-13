@@ -16,6 +16,7 @@ namespace raktr::render
 {
     class Window;        // Forward declaration
     struct WindowConfig; // Forward declaration
+    class RenderGraph;   // Forward declaration
 
     /*!
      * @brief Supported graphics API backends.
@@ -91,6 +92,15 @@ namespace raktr::render
          * @return Device view (check for validity with operator bool).
          */
         [[nodiscard]] DeviceView device() const;
+
+        /*!
+         * @brief Execute a render graph.
+         *
+         * Handles backend-specific context creation and submission.
+         * @param graph The render graph to execute.
+         * @param present Whether to present the frame after execution.
+         */
+        void execute(RenderGraph& graph, bool present = true);
 
         /*!
          * @brief Check if context is successfully initialized.

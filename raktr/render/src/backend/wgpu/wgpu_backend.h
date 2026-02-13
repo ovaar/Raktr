@@ -37,6 +37,7 @@ namespace raktr::render::backend::wgpu
         void       shutdown() override;
         DeviceView device() override;
         void*      backend_device_ptr() override;
+        void       execute(RenderGraph& graph, bool present) override;
 
     private:
         std::expected<void, std::error_code> initialize_device(
@@ -45,6 +46,12 @@ namespace raktr::render::backend::wgpu
 
         std::unique_ptr<Window>     _window;
         std::unique_ptr<WgpuDevice> _wgpu_device; // Raw backend device for backend_device_ptr()
+        uint32_t                    _frame_index = 0;
+
+        // Frame state
+        bool               _is_frame_active         = false;
+        WGPUSurfaceTexture _current_surface_texture = {};
+        WGPUTextureView    _current_color_view      = nullptr;
     };
 
 } // namespace raktr::render::backend::wgpu

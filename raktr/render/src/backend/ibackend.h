@@ -12,6 +12,11 @@
 #include <memory>
 #include <system_error>
 
+namespace raktr::render
+{
+    class RenderGraph;
+}
+
 namespace raktr::render::backend
 {
     /*!
@@ -57,6 +62,8 @@ namespace raktr::render::backend
          * @return Raw pointer to backend device (WgpuDevice*, SoftDevice*, etc).
          */
         virtual void* backend_device_ptr() = 0;
+
+        virtual void execute(RenderGraph& graph, bool present) = 0;
     };
 
     /*!

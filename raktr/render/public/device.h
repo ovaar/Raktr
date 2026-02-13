@@ -1,9 +1,9 @@
 /*!
  * @file device.h
- * @brief Non-owning type-erased Device view.
+ * @brief Type-erased Device value type.
  *
- * This implementation uses a non-owning type erasure pattern (View) to provide
- * polymorphic access to device capabilities without inheritance or heap allocation.
+ * This implementation uses the External Polymorphism Design Pattern with a Bridge (Pimpl)
+ * to provide a value-semantics, type-erased Device class.
  */
 
 #ifndef RAKTR_RENDER_DEVICE_H
@@ -15,583 +15,1049 @@
 #include "command_encoder.h"
 #include "compute_pipeline.h"
 #include "device_capabilities.h"
+#include "instance_data.h"
 #include "queue.h"
+#include "render_pass.h"
 #include "render_pipeline.h"
 #include "shader_module.h"
-#include <any>
+
+
+#include <concepts>
 #include <cstddef>
+#include <expected>
+#include <glm/glm.hpp>
 #include <memory>
 #include <optional>
+#include <span>
+#include <stdexcept>
+#include <string_view>
+#include <system_error>
 #include <type_traits>
 #include <typeindex>
 #include <typeinfo>
 #include <utility>
+#include <vector>
 
 
 namespace raktr::render
 {
+    // Forward declarations of free functions for External Polymorphism
+    // We provide default implementations that forward to member functions if they exist.
+
+    // Buffer Ops
+    template <typename T>
+    auto create_vertex_buffer(const T& t, std::span<const std::byte> data)
+        -> std::expected<Buffer, std::error_code>
+    {
+        if constexpr (requires { t.create_vertex_buffer(data); })
+            return t.create_vertex_buffer(data);
+        else if constexpr (requires { t->create_vertex_buffer(data); })
+            return t->create_vertex_buffer(data);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    auto create_index_buffer(const T& t, std::span<const std::byte> data)
+        -> std::expected<Buffer, std::error_code>
+    {
+        if constexpr (requires { t.create_index_buffer(data); })
+            return t.create_index_buffer(data);
+        else if constexpr (requires { t->create_index_buffer(data); })
+            return t->create_index_buffer(data);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    auto create_uniform_buffer(const T& t, size_t size)
+        -> std::expected<Buffer, std::error_code>
+    {
+        if constexpr (requires { t.create_uniform_buffer(size); })
+            return t.create_uniform_buffer(size);
+        else if constexpr (requires { t->create_uniform_buffer(size); })
+            return t->create_uniform_buffer(size);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    auto update_uniform_buffer(const T& t, const Buffer& buffer, std::span<const std::byte> data)
+        -> std::expected<void, std::error_code>
+    {
+        if constexpr (requires { t.update_uniform_buffer(buffer, data); })
+            return t.update_uniform_buffer(buffer, data);
+        else if constexpr (requires { t->update_uniform_buffer(buffer, data); })
+            return t->update_uniform_buffer(buffer, data);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    void set_uniform_buffer(const T& t, const Buffer& buffer)
+    {
+        if constexpr (requires { t.set_uniform_buffer(buffer); })
+            t.set_uniform_buffer(buffer);
+        else if constexpr (requires { t->set_uniform_buffer(buffer); })
+            t->set_uniform_buffer(buffer);
+    }
+
+    // Draw Ops
+    template <typename T>
+    auto draw_indexed(const T& t, const Buffer& vb, const Buffer& ib, uint32_t count)
+        -> std::expected<void, std::error_code>
+    {
+        if constexpr (requires { t.draw_indexed(vb, ib, count); })
+            return t.draw_indexed(vb, ib, count);
+        else if constexpr (requires { t->draw_indexed(vb, ib, count); })
+            return t->draw_indexed(vb, ib, count);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    void clear(const T& t)
+    {
+        if constexpr (requires { t.clear(); })
+            t.clear();
+        else if constexpr (requires { t->clear(); })
+            t->clear();
+    }
+
+    // Viewport Ops
+    template <typename T>
+    auto resize(const T& t, uint32_t w, uint32_t h) -> std::expected<void, std::error_code>
+    {
+        if constexpr (requires { t.resize(w, h); })
+            return t.resize(w, h);
+        else if constexpr (requires { t->resize(w, h); })
+            return t->resize(w, h);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    void set_aspect_ratio(const T& t, AspectRatio ratio, float custom)
+    {
+        if constexpr (requires { t.set_aspect_ratio(ratio, custom); })
+            t.set_aspect_ratio(ratio, custom);
+        else if constexpr (requires { t->set_aspect_ratio(ratio, custom); })
+            t->set_aspect_ratio(ratio, custom);
+    }
+
+    template <typename T>
+    auto aspect_ratio(const T& t) -> AspectRatio
+    {
+        if constexpr (requires { t.aspect_ratio(); })
+            return t.aspect_ratio();
+        else if constexpr (requires { t->aspect_ratio(); })
+            return t->aspect_ratio();
+        else
+            return AspectRatio::Custom;
+    }
+
+    template <typename T>
+    auto viewport(const T& t) -> const Viewport&
+    {
+        static const Viewport empty_vp{};
+        if constexpr (requires { t.viewport(); })
+            return t.viewport();
+        else if constexpr (requires { t->viewport(); })
+            return t->viewport();
+        else
+            return empty_vp;
+    }
+
+    template <typename T>
+    void* get_surface_view(const T& t)
+    {
+        if constexpr (requires { t.get_surface_view(); })
+            return t.get_surface_view();
+        else if constexpr (requires { t->get_surface_view(); })
+            return t->get_surface_view();
+        else
+            return nullptr;
+    }
+
+    template <typename T>
+    void* get_depth_view(const T& t)
+    {
+        if constexpr (requires { t.get_depth_view(); })
+            return t.get_depth_view();
+        else if constexpr (requires { t->get_depth_view(); })
+            return t->get_depth_view();
+        else
+            return nullptr;
+    }
+
+    // Present Ops
+    template <typename T>
+    void present(const T& t)
+    {
+        if constexpr (requires { t.present(); })
+            t.present();
+        else if constexpr (requires { t->present(); })
+            t->present();
+    }
+
+    // Queue Ops
+    template <typename T>
+    auto queue(const T& t) -> std::expected<Queue, std::error_code>
+    {
+        if constexpr (requires { t.queue(); })
+            return t.queue();
+        else if constexpr (requires { t->queue(); })
+            return t->queue();
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    // Command Encoder Ops
+    template <typename T>
+    auto create_command_encoder(const T& t, std::string_view label) -> std::expected<CommandEncoder, std::error_code>
+    {
+        if constexpr (requires { t.create_command_encoder(label); })
+            return t.create_command_encoder(label);
+        else if constexpr (requires { t->create_command_encoder(label); })
+            return t->create_command_encoder(label);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    // Shader Ops
+    template <typename T>
+    auto create_shader_module(const T& t, const ShaderModuleDescriptor& desc)
+        -> std::expected<ShaderModule, std::error_code>
+    {
+        if constexpr (requires { t.create_shader_module(desc); })
+            return t.create_shader_module(desc);
+        else if constexpr (requires { t->create_shader_module(desc); })
+            return t->create_shader_module(desc);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    // Render Pipeline Ops
+    template <typename T>
+    auto create_render_pipeline(const T& t, const RenderPipelineDescriptor& desc)
+        -> std::expected<RenderPipeline, std::error_code>
+    {
+        if constexpr (requires { t.create_render_pipeline(desc); })
+            return t.create_render_pipeline(desc);
+        else if constexpr (requires { t->create_render_pipeline(desc); })
+            return t->create_render_pipeline(desc);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    // Compute Pipeline Ops
+    template <typename T>
+    auto create_compute_pipeline(const T& t, const ComputePipelineDescriptor& desc)
+        -> std::expected<ComputePipeline, std::error_code>
+    {
+        if constexpr (requires { t.create_compute_pipeline(desc); })
+            return t.create_compute_pipeline(desc);
+        else if constexpr (requires { t->create_compute_pipeline(desc); })
+            return t->create_compute_pipeline(desc);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    // Bind Group Ops
+    template <typename T>
+    auto create_bind_group_layout(const T& t, const BindGroupLayoutDescriptor& desc)
+        -> std::expected<BindGroupLayout, std::error_code>
+    {
+        if constexpr (requires { t.create_bind_group_layout(desc); })
+            return t.create_bind_group_layout(desc);
+        else if constexpr (requires { t->create_bind_group_layout(desc); })
+            return t->create_bind_group_layout(desc);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    auto create_bind_group(const T& t, const BindGroupDescriptor& desc)
+        -> std::expected<BindGroup, std::error_code>
+    {
+        if constexpr (requires { t.create_bind_group(desc); })
+            return t.create_bind_group(desc);
+        else if constexpr (requires { t->create_bind_group(desc); })
+            return t->create_bind_group(desc);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    // Instancing Ops
+    template <typename T>
+    auto create_instance_buffer(const T& t, std::span<const std::byte> data)
+        -> std::expected<Buffer, std::error_code>
+    {
+        if constexpr (requires { t.create_instance_buffer(data); })
+            return t.create_instance_buffer(data);
+        else if constexpr (requires { t->create_instance_buffer(data); })
+            return t->create_instance_buffer(data);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    auto update_instance_buffer(const T& t, const Buffer& buffer, std::span<const std::byte> data)
+        -> std::expected<void, std::error_code>
+    {
+        if constexpr (requires { t.update_instance_buffer(buffer, data); })
+            return t.update_instance_buffer(buffer, data);
+        else if constexpr (requires { t->update_instance_buffer(buffer, data); })
+            return t->update_instance_buffer(buffer, data);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    auto draw_indexed_instanced(const T& t, const Buffer& vb, const Buffer& ib, const Buffer& instb, uint32_t ic, uint32_t instc)
+        -> std::expected<void, std::error_code>
+    {
+        if constexpr (requires { t.draw_indexed_instanced(vb, ib, instb, ic, instc); })
+            return t.draw_indexed_instanced(vb, ib, instb, ic, instc);
+        else if constexpr (requires { t->draw_indexed_instanced(vb, ib, instb, ic, instc); })
+            return t->draw_indexed_instanced(vb, ib, instb, ic, instc);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    // Occlusion Culling Ops
+    template <typename T>
+    auto create_hi_z_buffer(const T& t, uint32_t w, uint32_t h)
+        -> std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>
+    {
+        if constexpr (requires { t.create_hi_z_buffer(w, h); })
+            return t.create_hi_z_buffer(w, h);
+        else if constexpr (requires { t->create_hi_z_buffer(w, h); })
+            return t->create_hi_z_buffer(w, h);
+        else
+            return std::unexpected(std::make_error_code(std::errc::function_not_supported));
+    }
+
+    template <typename T>
+    auto create_hi_z_pyramid_pass(const T& t, occlusion::HiZBuffer* buffer, void* depth_texture)
+        -> RenderPass
+    {
+        if constexpr (requires { t.create_hi_z_pyramid_pass(buffer, depth_texture); })
+            return t.create_hi_z_pyramid_pass(buffer, depth_texture);
+        else if constexpr (requires { t->create_hi_z_pyramid_pass(buffer, depth_texture); })
+            return t->create_hi_z_pyramid_pass(buffer, depth_texture);
+        else
+            throw std::runtime_error("Backend does not support Hi-Z pyramid pass");
+        // Actually RenderPass needs a valid pass object.
+        // If backend doesn't support it, we can't return a valid RenderPass easily unless we have a NullPass.
+        // For now assume support or return a dummy.
+        // But RenderPass constructor is template. RenderPass(0) might fail or be weird.
+        // Let's assume we return a valid pass or throw?
+        // Existing code returns std::unexpected for others. RenderPass is not expected-wrapped here.
+        // Let's wrap in expected? Not requested in plan but safer.
+        // Plan said "RenderPass create...".
+        // I'll assume support for now or simple "fail".
+        // RenderPass constructor from int is likely invalid.
+        // Let's try to match existing pattern. If return type is RenderPass, we can't use unexpected.
+    }
+
+    template <typename T>
+    auto create_hi_z_occlusion_pass(const T& t, occlusion::HiZBuffer* buffer, const std::vector<occlusion::AABB>* aabbs, const glm::mat4& vp, std::vector<bool>* results)
+        -> RenderPass
+    {
+        if constexpr (requires { t.create_hi_z_occlusion_pass(buffer, aabbs, vp, results); })
+            return t.create_hi_z_occlusion_pass(buffer, aabbs, vp, results);
+        else if constexpr (requires { t->create_hi_z_occlusion_pass(buffer, aabbs, vp, results); })
+            return t->create_hi_z_occlusion_pass(buffer, aabbs, vp, results);
+        else
+            throw std::runtime_error("Backend does not support Hi-Z occlusion pass");
+    }
+
+    class RenderPass;
+    struct InstanceData; // forward declare? public/instance_data.h is likely needed if used in sig.
+
+    // ... inside Device ...
+    template <typename T>
+    auto get_depth_texture(const T& t) -> void*
+    {
+        if constexpr (requires { t.wgpu_depth_texture(); })
+            return t.wgpu_depth_texture();
+        else if constexpr (requires { t->wgpu_depth_texture(); })
+            return t->wgpu_depth_texture();
+        else if constexpr (requires { t.get_depth_texture(); })
+            return t.get_depth_texture();
+        else if constexpr (requires { t->get_depth_texture(); })
+            return t->get_depth_texture();
+        else
+            return nullptr;
+    }
+
+    template <typename T>
+    auto create_instanced_geometry_pass(const T&                   t,
+                                        Buffer                     vb,
+                                        Buffer                     ib,
+                                        Buffer                     instb,
+                                        std::vector<InstanceData>* cpu_data,
+                                        std::vector<bool>*         visibility,
+                                        uint32_t                   index_count)
+        -> RenderPass
+    {
+        if constexpr (requires { t.create_instanced_geometry_pass(vb, ib, instb, cpu_data, visibility, index_count); })
+            return t.create_instanced_geometry_pass(vb, ib, instb, cpu_data, visibility, index_count);
+        else if constexpr (requires { t->create_instanced_geometry_pass(vb, ib, instb, cpu_data, visibility, index_count); })
+            return t->create_instanced_geometry_pass(vb, ib, instb, cpu_data, visibility, index_count);
+        else
+            throw std::runtime_error("Backend does not support Instanced Geometry pass");
+    }
+
+    template <typename T>
+    concept IsDevice = true;
+
     /*!
-     * @brief Non-owning type-erased view of a GPU device.
-     *
-     * This class does not own the underlying device. It provides a polymorphic
-     * interface to any compatible device implementation (e.g. WgpuDevice, SoftDevice).
-     * It is lightweight and copyable.
+     * @brief Type-erased Device class.
      */
-    class DeviceView
+    class Device
     {
     public:
-        // Default constructor creates an empty/invalid view
-        DeviceView() = default;
+        // Default constructor creates invalid device
+        Device() = default;
 
-        // Constructor from reference
-        template <typename T>
-            requires(!std::is_same_v<std::remove_cvref_t<T>, DeviceView>)
-        DeviceView(T& device)
-            : _object(const_cast<void*>(static_cast<const void*>(&device))), _vtable(&vtable_for<std::remove_cvref_t<T>>)
+        // Constructor from value (owning) or pointer (view)
+        template <IsDevice T>
+            requires(!std::is_same_v<std::remove_cvref_t<T>, Device>)
+        Device(T x) : _pimpl{ std::make_unique<DeviceModel<T>>(std::move(x)) }
         {
         }
 
-        // Constructor from pointer (allows null)
-        template <typename T>
-        DeviceView(T* device)
-        {
-            if (device)
-            {
-                _object = const_cast<void*>(static_cast<const void*>(device));
-                _vtable = &vtable_for<std::remove_cvref_t<T>>;
-            }
-        }
-
-        // Constructor from nullptr
-        DeviceView(std::nullptr_t) : DeviceView()
+        // Copy operations - Deep copy via clone
+        Device(const Device& other) : _pimpl(other._pimpl ? other._pimpl->clone() : nullptr)
         {
         }
+        Device& operator=(const Device& other)
+        {
+            _pimpl = other._pimpl ? other._pimpl->clone() : nullptr;
+            return *this;
+        }
 
-        // Copyable
-        DeviceView(const DeviceView&)            = default;
-        DeviceView& operator=(const DeviceView&) = default;
+        // Move operations
+        Device(Device&&) noexcept            = default;
+        Device& operator=(Device&&) noexcept = default;
 
         // Validity check
         explicit operator bool() const
         {
-            return _object != nullptr;
+            return _pimpl != nullptr;
+        }
+
+        // Convenience pointer access
+        const Device* operator->() const
+        {
+            return this;
+        }
+        Device* operator->()
+        {
+            return this;
         }
 
         // Comparison
-        bool operator==(const DeviceView& other) const
+        bool operator==(const Device& other) const
         {
-            return _object == other._object;
+            if (!_pimpl && !other._pimpl)
+                return true;
+            return false;
         }
         bool operator==(std::nullptr_t) const
         {
-            return _object == nullptr;
+            return _pimpl == nullptr;
         }
 
-        // Pointer semantics
-        const DeviceView* operator->() const
-        {
-            return this;
-        }
-        DeviceView* operator->()
-        {
-            return this;
-        }
-
-        /*!
-         * @brief Check if device supports a specific capability.
-         */
+        // --- Capability Queries (Backward Compatibility) ---
         template <typename Capability>
         [[nodiscard]] bool supports() const
         {
-            if (!_object || !_vtable)
+            if (!_pimpl)
                 return false;
-            return _vtable->supports(_object, std::type_index(typeid(Capability)));
+            return _pimpl->supports(std::type_index(typeid(Capability)));
         }
 
-        /*!
-         * @brief Get a capability interface from the device.
-         */
         template <typename Capability>
-        [[nodiscard]] Capability capability() const
-        {
-            if (!_object || !_vtable)
-                throw std::bad_optional_access();
+        [[nodiscard]] Capability capability() const;
 
-            // Dispatch to specific getter based on type
-            if constexpr (std::is_same_v<Capability, capabilities::BufferOps>)
-                return _vtable->get_buffer_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::DrawOps>)
-                return _vtable->get_draw_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::ViewportOps>)
-                return _vtable->get_viewport_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::PresentOps>)
-                return _vtable->get_present_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::InstancingOps>)
-                return _vtable->get_instancing_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::OcclusionCullingOps>)
-                return _vtable->get_occlusion_culling_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::QueueOps>)
-                return _vtable->get_queue_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::CommandEncoderOps>)
-                return _vtable->get_command_encoder_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::ShaderOps>)
-                return _vtable->get_shader_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::RenderPipelineOps>)
-                return _vtable->get_render_pipeline_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::ComputePipelineOps>)
-                return _vtable->get_compute_pipeline_ops(_object).value();
-            else if constexpr (std::is_same_v<Capability, capabilities::BindGroupOps>)
-                return _vtable->get_bind_group_ops(_object).value();
-            else
-                static_assert(std::is_void_v<Capability>, "Unknown capability type");
-        }
-
-        // Convenience methods forwarding to capabilities
+        // --- Public Interface ---
 
         [[nodiscard]] std::expected<Buffer, std::error_code>
         create_vertex_buffer(std::span<const std::byte> data) const
         {
-            return capability<capabilities::BufferOps>().create_vertex_buffer(data);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_vertex_buffer(data);
         }
 
         [[nodiscard]] std::expected<Buffer, std::error_code>
         create_index_buffer(std::span<const std::byte> data) const
         {
-            return capability<capabilities::BufferOps>().create_index_buffer(data);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_index_buffer(data);
         }
 
         [[nodiscard]] std::expected<Buffer, std::error_code>
         create_uniform_buffer(size_t size) const
         {
-            return capability<capabilities::BufferOps>().create_uniform_buffer(size);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_uniform_buffer(size);
         }
 
         [[nodiscard]] std::expected<void, std::error_code>
         update_uniform_buffer(const Buffer& buffer, std::span<const std::byte> data) const
         {
-            return capability<capabilities::BufferOps>().update_uniform_buffer(buffer, data);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->update_uniform_buffer(buffer, data);
         }
 
         void set_uniform_buffer(const Buffer& buffer) const
         {
-            capability<capabilities::BufferOps>().set_uniform_buffer(buffer);
+            if (_pimpl)
+                _pimpl->set_uniform_buffer(buffer);
         }
 
         [[nodiscard]] std::expected<void, std::error_code>
-        draw_indexed(const Buffer& vertex_buffer, const Buffer& index_buffer, uint32_t index_count) const
+        draw_indexed(const Buffer& vb, const Buffer& ib, uint32_t count) const
         {
-            return capability<capabilities::DrawOps>().draw_indexed(vertex_buffer, index_buffer, index_count);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->draw_indexed(vb, ib, count);
         }
 
         void clear() const
         {
-            capability<capabilities::DrawOps>().clear();
-        }
-
-        void present() const
-        {
-            capability<capabilities::PresentOps>().present();
-        }
-
-        [[nodiscard]] Queue queue() const
-        {
-            return capability<capabilities::QueueOps>().queue();
-        }
-
-        [[nodiscard]] CommandEncoder create_command_encoder(std::string_view label = "") const
-        {
-            return capability<capabilities::CommandEncoderOps>().create_command_encoder(label);
-        }
-
-        [[nodiscard]] void* get_surface_view() const
-        {
-            return capability<capabilities::ViewportOps>().get_surface_view();
-        }
-
-        [[nodiscard]] void* get_depth_view() const
-        {
-            return capability<capabilities::ViewportOps>().get_depth_view();
+            if (_pimpl)
+                _pimpl->clear();
         }
 
         [[nodiscard]] std::expected<void, std::error_code>
-        resize(uint32_t width, uint32_t height) const
+        resize(uint32_t w, uint32_t h) const
         {
-            return capability<capabilities::ViewportOps>().resize(width, height);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->resize(w, h);
         }
 
-        void set_aspect_ratio(AspectRatio ratio, float custom_value = 1.0f) const
+        void set_aspect_ratio(AspectRatio ratio, float custom = 0.0f) const
         {
-            capability<capabilities::ViewportOps>().set_aspect_ratio(ratio, custom_value);
+            if (_pimpl)
+                _pimpl->set_aspect_ratio(ratio, custom);
         }
 
         [[nodiscard]] AspectRatio aspect_ratio() const
         {
-            return capability<capabilities::ViewportOps>().aspect_ratio();
+            return _pimpl ? _pimpl->aspect_ratio() : AspectRatio::Custom;
         }
 
         [[nodiscard]] const Viewport& viewport() const
         {
-            return capability<capabilities::ViewportOps>().viewport();
+            static const Viewport empty{};
+            return _pimpl ? _pimpl->viewport() : empty;
+        }
+
+        [[nodiscard]] void* get_surface_view() const
+        {
+            return _pimpl ? _pimpl->get_surface_view() : nullptr;
+        }
+
+        [[nodiscard]] void* get_depth_view() const
+        {
+            return _pimpl ? _pimpl->get_depth_view() : nullptr;
+        }
+
+        void present() const
+        {
+            if (_pimpl)
+                _pimpl->present();
+        }
+
+        [[nodiscard]] std::expected<Queue, std::error_code> queue() const
+        {
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->queue();
+        }
+
+        [[nodiscard]] std::expected<CommandEncoder, std::error_code> create_command_encoder(std::string_view label = "") const
+        {
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_command_encoder(label);
+        }
+
+        [[nodiscard]] std::expected<ShaderModule, std::error_code>
+        create_shader_module(const ShaderModuleDescriptor& desc) const
+        {
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_shader_module(desc);
+        }
+
+        [[nodiscard]] std::expected<RenderPipeline, std::error_code>
+        create_render_pipeline(const RenderPipelineDescriptor& desc) const
+        {
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_render_pipeline(desc);
+        }
+
+        [[nodiscard]] std::expected<ComputePipeline, std::error_code>
+        create_compute_pipeline(const ComputePipelineDescriptor& desc) const
+        {
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_compute_pipeline(desc);
+        }
+
+        [[nodiscard]] std::expected<BindGroupLayout, std::error_code>
+        create_bind_group_layout(const BindGroupLayoutDescriptor& desc) const
+        {
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_bind_group_layout(desc);
+        }
+
+        [[nodiscard]] std::expected<BindGroup, std::error_code>
+        create_bind_group(const BindGroupDescriptor& desc) const
+        {
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_bind_group(desc);
         }
 
         [[nodiscard]] std::expected<Buffer, std::error_code>
         create_instance_buffer(std::span<const std::byte> data) const
         {
-            return capability<capabilities::InstancingOps>().create_instance_buffer(data);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_instance_buffer(data);
         }
 
         [[nodiscard]] std::expected<void, std::error_code>
-        update_instance_buffer(const Buffer& buffer, std::span<const std::byte> data) const
+        update_instance_buffer(const Buffer& b, std::span<const std::byte> d) const
         {
-            return capability<capabilities::InstancingOps>().update_instance_buffer(buffer, data);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->update_instance_buffer(b, d);
         }
 
         [[nodiscard]] std::expected<void, std::error_code>
-        draw_indexed_instanced(const Buffer& vertex_buffer,
-                               const Buffer& index_buffer,
-                               const Buffer& instance_buffer,
-                               uint32_t      index_count,
-                               uint32_t      instance_count) const
+        draw_indexed_instanced(const Buffer& vb, const Buffer& ib, const Buffer& kb, uint32_t ic, uint32_t nc) const
         {
-            return capability<capabilities::InstancingOps>().draw_indexed_instanced(vertex_buffer, index_buffer, instance_buffer, index_count, instance_count);
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->draw_indexed_instanced(vb, ib, kb, ic, nc);
+        }
+
+        [[nodiscard]] std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>
+        create_hi_z_buffer(uint32_t w, uint32_t h) const
+        {
+            if (!_pimpl)
+                return std::unexpected(std::make_error_code(std::errc::invalid_argument));
+            return _pimpl->create_hi_z_buffer(w, h);
+        }
+
+        [[nodiscard]] RenderPass create_hi_z_pyramid_pass(occlusion::HiZBuffer* buffer, void* depth_texture) const
+        {
+            if (!_pimpl)
+                throw std::runtime_error("Device not initialized"); // Should match error handling strategy
+            return _pimpl->create_hi_z_pyramid_pass(buffer, depth_texture);
+        }
+
+        [[nodiscard]] RenderPass create_hi_z_occlusion_pass(occlusion::HiZBuffer*               buffer,
+                                                            const std::vector<occlusion::AABB>* aabbs,
+                                                            const glm::mat4&                    vp,
+                                                            std::vector<bool>*                  results) const
+        {
+            if (!_pimpl)
+                throw std::runtime_error("Device not initialized");
+            return _pimpl->create_hi_z_occlusion_pass(buffer, aabbs, vp, results);
+        }
+
+        [[nodiscard]] RenderPass create_instanced_geometry_pass(
+            Buffer vb, Buffer ib, Buffer instb, std::vector<InstanceData>* cpu_data, std::vector<bool>* visibility, uint32_t index_count) const
+        {
+            if (!_pimpl)
+                throw std::runtime_error("Device not initialized");
+            return _pimpl->create_instanced_geometry_pass(vb, ib, instb, cpu_data, visibility, index_count);
         }
 
         [[nodiscard]] void* get_depth_texture() const
         {
-            return capability<capabilities::OcclusionCullingOps>().get_depth_texture();
-        }
-
-        [[nodiscard]] std::expected<ShaderModule, std::error_code>
-        create_shader_module(const ShaderModuleDescriptor& descriptor) const
-        {
-            return capability<capabilities::ShaderOps>().create_shader_module(descriptor);
-        }
-
-        [[nodiscard]] std::expected<RenderPipeline, std::error_code>
-        create_render_pipeline(const RenderPipelineDescriptor& descriptor) const
-        {
-            return capability<capabilities::RenderPipelineOps>().create_render_pipeline(descriptor);
-        }
-
-        [[nodiscard]] std::expected<ComputePipeline, std::error_code>
-        create_compute_pipeline(const ComputePipelineDescriptor& descriptor) const
-        {
-            return capability<capabilities::ComputePipelineOps>().create_compute_pipeline(descriptor);
-        }
-
-        [[nodiscard]] std::expected<BindGroupLayout, std::error_code>
-        create_bind_group_layout(const BindGroupLayoutDescriptor& descriptor) const
-        {
-            return capability<capabilities::BindGroupOps>().create_bind_group_layout(descriptor);
-        }
-
-        [[nodiscard]] std::expected<BindGroup, std::error_code>
-        create_bind_group(const BindGroupDescriptor& descriptor) const
-        {
-            return capability<capabilities::BindGroupOps>().create_bind_group(descriptor);
+            return _pimpl ? _pimpl->get_depth_texture() : nullptr;
         }
 
     private:
-        struct VTable
+        class DeviceConcept
         {
-            bool (*supports)(const void*, std::type_index);
-            std::optional<capabilities::BufferOps> (*get_buffer_ops)(const void*);
-            std::optional<capabilities::DrawOps> (*get_draw_ops)(const void*);
-            std::optional<capabilities::ViewportOps> (*get_viewport_ops)(const void*);
-            std::optional<capabilities::PresentOps> (*get_present_ops)(const void*);
-            std::optional<capabilities::InstancingOps> (*get_instancing_ops)(const void*);
-            std::optional<capabilities::OcclusionCullingOps> (*get_occlusion_culling_ops)(const void*);
-            std::optional<capabilities::QueueOps> (*get_queue_ops)(const void*);
-            std::optional<capabilities::CommandEncoderOps> (*get_command_encoder_ops)(const void*);
-            std::optional<capabilities::ShaderOps> (*get_shader_ops)(const void*);
-            std::optional<capabilities::RenderPipelineOps> (*get_render_pipeline_ops)(const void*);
-            std::optional<capabilities::ComputePipelineOps> (*get_compute_pipeline_ops)(const void*);
-            std::optional<capabilities::BindGroupOps> (*get_bind_group_ops)(const void*);
-        };
+        public:
+            virtual ~DeviceConcept()                                                  = default;
+            virtual std::unique_ptr<DeviceConcept> clone() const                      = 0;
+            virtual bool                           supports(std::type_index ti) const = 0;
 
-        void*         _object = nullptr;
-        const VTable* _vtable = nullptr;
+            virtual std::expected<Buffer, std::error_code> create_vertex_buffer(std::span<const std::byte>) const                 = 0;
+            virtual std::expected<Buffer, std::error_code> create_index_buffer(std::span<const std::byte>) const                  = 0;
+            virtual std::expected<Buffer, std::error_code> create_uniform_buffer(size_t) const                                    = 0;
+            virtual std::expected<void, std::error_code>   update_uniform_buffer(const Buffer&, std::span<const std::byte>) const = 0;
+            virtual void                                   set_uniform_buffer(const Buffer&) const                                = 0;
+
+            virtual std::expected<void, std::error_code> draw_indexed(const Buffer&, const Buffer&, uint32_t) const = 0;
+            virtual void                                 clear() const                                              = 0;
+
+            virtual std::expected<void, std::error_code> resize(uint32_t, uint32_t) const           = 0;
+            virtual void                                 set_aspect_ratio(AspectRatio, float) const = 0;
+            virtual AspectRatio                          aspect_ratio() const                       = 0;
+            virtual const Viewport&                      viewport() const                           = 0;
+            virtual void*                                get_surface_view() const                   = 0;
+            virtual void*                                get_depth_view() const                     = 0;
+
+            virtual void                                           present() const                                = 0;
+            virtual std::expected<Queue, std::error_code>          queue() const                                  = 0;
+            virtual std::expected<CommandEncoder, std::error_code> create_command_encoder(std::string_view) const = 0;
+
+            virtual std::expected<ShaderModule, std::error_code>    create_shader_module(const ShaderModuleDescriptor&) const       = 0;
+            virtual std::expected<RenderPipeline, std::error_code>  create_render_pipeline(const RenderPipelineDescriptor&) const   = 0;
+            virtual std::expected<ComputePipeline, std::error_code> create_compute_pipeline(const ComputePipelineDescriptor&) const = 0;
+
+            virtual std::expected<BindGroupLayout, std::error_code> create_bind_group_layout(const BindGroupLayoutDescriptor&) const = 0;
+            virtual std::expected<BindGroup, std::error_code>       create_bind_group(const BindGroupDescriptor&) const              = 0;
+
+            virtual std::expected<Buffer, std::error_code> create_instance_buffer(std::span<const std::byte>) const                                      = 0;
+            virtual std::expected<void, std::error_code>   update_instance_buffer(const Buffer&, std::span<const std::byte>) const                       = 0;
+            virtual std::expected<void, std::error_code>   draw_indexed_instanced(const Buffer&, const Buffer&, const Buffer&, uint32_t, uint32_t) const = 0;
+
+            virtual std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code> create_hi_z_buffer(uint32_t, uint32_t) const                                                                                       = 0;
+            virtual RenderPass                                                            create_hi_z_pyramid_pass(occlusion::HiZBuffer*, void*) const                                                                       = 0;
+            virtual RenderPass                                                            create_hi_z_occlusion_pass(occlusion::HiZBuffer*, const std::vector<occlusion::AABB>*, const glm::mat4&, std::vector<bool>*) const = 0;
+            virtual RenderPass                                                            create_instanced_geometry_pass(Buffer, Buffer, Buffer, std::vector<InstanceData>*, std::vector<bool>*, uint32_t) const             = 0;
+
+            virtual void* get_depth_texture() const = 0;
+        };
 
         template <typename T>
-#pragma warning(push)
-#pragma warning(disable : 4268)
-        static constexpr VTable vtable_for = {
-            .supports = [](const void* /*ptr*/, std::type_index ti) -> bool
-            {
-                // Check compile-time constraints and map to capabilities
-                if (ti == std::type_index(typeid(capabilities::BufferOps)))
-                    return requires(T& d, std::span<const std::byte> data, size_t sz, const Buffer& buf) {
-                        { d.create_vertex_buffer(data) } -> std::same_as<std::expected<Buffer, std::error_code>>;
-                        { d.create_index_buffer(data) } -> std::same_as<std::expected<Buffer, std::error_code>>;
-                        { d.create_uniform_buffer(sz) } -> std::same_as<std::expected<Buffer, std::error_code>>;
-                        { d.update_uniform_buffer(buf, data) } -> std::same_as<std::expected<void, std::error_code>>;
-                        { d.set_uniform_buffer(buf) } -> std::same_as<void>;
-                    };
-                if (ti == std::type_index(typeid(capabilities::DrawOps)))
-                    return requires(T& d, const Buffer& vb, const Buffer& ib, uint32_t count) {
-                        { d.draw_indexed(vb, ib, count) } -> std::same_as<std::expected<void, std::error_code>>;
-                        { d.clear() } -> std::same_as<void>;
-                    };
-                if (ti == std::type_index(typeid(capabilities::ViewportOps)))
-                    return requires(T& d, uint32_t w, uint32_t h, AspectRatio ar, float custom) {
-                        { d.resize(w, h) } -> std::same_as<std::expected<void, std::error_code>>;
-                        { d.set_aspect_ratio(ar, custom) } -> std::same_as<void>;
-                        { d.aspect_ratio() } -> std::same_as<AspectRatio>;
-                        { d.viewport() } -> std::same_as<const Viewport&>;
-                    };
-                if (ti == std::type_index(typeid(capabilities::PresentOps)))
-                    return requires(T& d) { { d.present() } -> std::same_as<void>; };
-                if (ti == std::type_index(typeid(capabilities::QueueOps)))
-                    return requires(T& d) { { d.queue() } -> std::same_as<Queue>; };
-                if (ti == std::type_index(typeid(capabilities::CommandEncoderOps)))
-                    return requires(T& d, std::string_view l) { { d.create_command_encoder(l) } -> std::same_as<CommandEncoder>; };
-                if (ti == std::type_index(typeid(capabilities::ShaderOps)))
-                    return requires(T& d, const ShaderModuleDescriptor& desc) { { d.create_shader_module(desc) } -> std::same_as<std::expected<ShaderModule, std::error_code>>; };
-                if (ti == std::type_index(typeid(capabilities::RenderPipelineOps)))
-                    return requires(T& d, const RenderPipelineDescriptor& desc) { { d.create_render_pipeline(desc) } -> std::same_as<std::expected<RenderPipeline, std::error_code>>; };
-                if (ti == std::type_index(typeid(capabilities::ComputePipelineOps)))
-                    return requires(T& d, const ComputePipelineDescriptor& desc) { { d.create_compute_pipeline(desc) } -> std::same_as<std::expected<ComputePipeline, std::error_code>>; };
-                if (ti == std::type_index(typeid(capabilities::BindGroupOps)))
-                    return requires(T& d, const BindGroupLayoutDescriptor& l, const BindGroupDescriptor& b) {
-                        { d.create_bind_group_layout(l) } -> std::same_as<std::expected<BindGroupLayout, std::error_code>>;
-                        { d.create_bind_group(b) } -> std::same_as<std::expected<BindGroup, std::error_code>>;
-                    };
-                if (ti == std::type_index(typeid(capabilities::InstancingOps)))
-                    return requires(T& d, std::span<const std::byte> s, const Buffer& b, uint32_t c) {
-                        { d.create_instance_buffer(s) } -> std::same_as<std::expected<Buffer, std::error_code>>;
-                        { d.update_instance_buffer(b, s) } -> std::same_as<std::expected<void, std::error_code>>;
-                        { d.draw_indexed_instanced(b, b, b, c, c) } -> std::same_as<std::expected<void, std::error_code>>;
-                    };
-                if (ti == std::type_index(typeid(capabilities::OcclusionCullingOps)))
-                    return requires(T& d, uint32_t w, uint32_t h) {
-                        { d.create_hi_z_buffer(w, h) } -> std::same_as<std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code>>;
-                    };
-                return false;
-            },
-            .get_buffer_ops = [](const void* ptr) -> std::optional<capabilities::BufferOps>
-            {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev, std::span<const std::byte> dat, size_t sz, const Buffer& buf) {
-                                  { dev.create_vertex_buffer(dat) };
-                              }) // simplified check
-                {
-                    capabilities::BufferOps ops;
-                    ops.create_vertex_buffer = [d](std::span<const std::byte> da)
-                    {
-                        return d->create_vertex_buffer(da);
-                    };
-                    ops.create_index_buffer = [d](std::span<const std::byte> da)
-                    {
-                        return d->create_index_buffer(da);
-                    };
-                    ops.create_uniform_buffer = [d](size_t sz)
-                    {
-                        return d->create_uniform_buffer(sz);
-                    };
-                    ops.update_uniform_buffer = [d](const Buffer& b, std::span<const std::byte> da)
-                    {
-                        return d->update_uniform_buffer(b, da);
-                    };
-                    ops.set_uniform_buffer = [d](const Buffer& b)
-                    {
-                        d->set_uniform_buffer(b);
-                    };
-                    return ops;
-                }
-                return std::nullopt;
-            },
-            .get_draw_ops = [](const void* ptr) -> std::optional<capabilities::DrawOps>
-            {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev) { { dev.clear() }; })
-                {
-                    capabilities::DrawOps ops;
-                    ops.draw_indexed = [d](const Buffer& vb, const Buffer& ib, uint32_t c)
-                    {
-                        return d->draw_indexed(vb, ib, c);
-                    };
-                    ops.clear = [d]()
-                    {
-                        d->clear();
-                    };
-                    return ops;
-                }
-                return std::nullopt;
-            },
-            .get_viewport_ops = [](const void* ptr) -> std::optional<capabilities::ViewportOps>
-            {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev) { { dev.aspect_ratio() }; })
-                {
-                    capabilities::ViewportOps ops;
-                    ops.resize = [d](uint32_t w, uint32_t h)
-                    {
-                        return d->resize(w, h);
-                    };
-                    ops.set_aspect_ratio = [d](AspectRatio ar, float c)
-                    {
-                        d->set_aspect_ratio(ar, c);
-                    };
-                    ops.aspect_ratio = [d]()
-                    {
-                        return d->aspect_ratio();
-                    };
-                    ops.viewport = [d]() -> const Viewport&
-                    {
-                        return d->viewport();
-                    };
+        class DeviceModel final : public DeviceConcept
+        {
+            T _object;
 
-                    if constexpr (requires(T& dev) { { dev.get_surface_view() } -> std::convertible_to<void*>; })
-                        ops.get_surface_view = [d]()
-                        {
-                            return d->get_surface_view();
-                        };
-                    if constexpr (requires(T& dev) { { dev.get_depth_view() } -> std::convertible_to<void*>; })
-                        ops.get_depth_view = [d]()
-                        {
-                            return d->get_depth_view();
-                        };
-                    return ops;
-                }
-                return std::nullopt;
-            },
-            .get_present_ops = [](const void* ptr) -> std::optional<capabilities::PresentOps>
+        public:
+            DeviceModel(T obj) : _object(std::move(obj))
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev) { { dev.present() }; })
-                {
-                    return capabilities::PresentOps{ .present = [d]()
-                                                     {
-                                                         d->present();
-                                                     } };
-                }
-                return std::nullopt;
-            },
-            .get_instancing_ops = [](const void* ptr) -> std::optional<capabilities::InstancingOps>
+            }
+
+            std::unique_ptr<DeviceConcept> clone() const override
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev, std::span<const std::byte> s, const Buffer& b, uint32_t c) {
-                                  { dev.create_instance_buffer(s) };
-                              })
-                {
-                    capabilities::InstancingOps ops;
-                    ops.create_instance_buffer = [d](std::span<const std::byte> s)
-                    {
-                        return d->create_instance_buffer(s);
-                    };
-                    ops.update_instance_buffer = [d](const Buffer& b, std::span<const std::byte> s)
-                    {
-                        return d->update_instance_buffer(b, s);
-                    };
-                    ops.draw_indexed_instanced = [d](const Buffer& vb, const Buffer& ib, const Buffer& kb, uint32_t ic, uint32_t nc)
-                    {
-                        return d->draw_indexed_instanced(vb, ib, kb, ic, nc);
-                    };
-                    return ops;
-                }
-                return std::nullopt;
-            },
-            .get_occlusion_culling_ops = [](const void* ptr) -> std::optional<capabilities::OcclusionCullingOps>
+                return std::make_unique<DeviceModel<T>>(_object);
+            }
+
+            bool supports(std::type_index ti) const override
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev, uint32_t w, uint32_t h) { { dev.create_hi_z_buffer(w, h) }; })
+                if (ti == std::type_index(typeid(capabilities::BufferOps)))
                 {
-                    capabilities::OcclusionCullingOps ops;
-                    ops.create_hi_z_buffer = [d](uint32_t w, uint32_t h)
-                    {
-                        return d->create_hi_z_buffer(w, h);
-                    };
-                    if constexpr (requires(T& dev) { { dev.wgpu_depth_texture() }; })
-                        ops.get_depth_texture = [d]()
-                        {
-                            return d->wgpu_depth_texture();
-                        };
-                    return ops;
+                    if constexpr (requires { _object.create_vertex_buffer(std::span<const std::byte>{}); } || requires { _object->create_vertex_buffer(std::span<const std::byte>{}); })
+                        return true;
+                    return false;
                 }
-                return std::nullopt;
-            },
-            .get_queue_ops = [](const void* ptr) -> std::optional<capabilities::QueueOps>
+                return true;
+            }
+
+            std::expected<Buffer, std::error_code> create_vertex_buffer(std::span<const std::byte> d) const override
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev) { { dev.queue() }; })
-                {
-                    return capabilities::QueueOps{ .queue = [d]()
-                                                   {
-                                                       return d->queue();
-                                                   } };
-                }
-                return std::nullopt;
-            },
-            .get_command_encoder_ops = [](const void* ptr) -> std::optional<capabilities::CommandEncoderOps>
+                return raktr::render::create_vertex_buffer(_object, d);
+            }
+            std::expected<Buffer, std::error_code> create_index_buffer(std::span<const std::byte> d) const override
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev, std::string_view s) { { dev.create_command_encoder(s) }; })
-                {
-                    return capabilities::CommandEncoderOps{ .create_command_encoder = [d](std::string_view s)
-                                                            {
-                                                                return d->create_command_encoder(s);
-                                                            } };
-                }
-                return std::nullopt;
-            },
-            .get_shader_ops = [](const void* ptr) -> std::optional<capabilities::ShaderOps>
+                return raktr::render::create_index_buffer(_object, d);
+            }
+            std::expected<Buffer, std::error_code> create_uniform_buffer(size_t s) const override
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev, const ShaderModuleDescriptor& s) { { dev.create_shader_module(s) }; })
-                {
-                    return capabilities::ShaderOps{ .create_shader_module = [d](const ShaderModuleDescriptor& s)
-                                                    {
-                                                        return d->create_shader_module(s);
-                                                    } };
-                }
-                return std::nullopt;
-            },
-            .get_render_pipeline_ops = [](const void* ptr) -> std::optional<capabilities::RenderPipelineOps>
+                return raktr::render::create_uniform_buffer(_object, s);
+            }
+            std::expected<void, std::error_code> update_uniform_buffer(const Buffer& b, std::span<const std::byte> d) const override
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev, const RenderPipelineDescriptor& s) { { dev.create_render_pipeline(s) }; })
-                {
-                    return capabilities::RenderPipelineOps{ .create_render_pipeline = [d](const RenderPipelineDescriptor& s)
-                                                            {
-                                                                return d->create_render_pipeline(s);
-                                                            } };
-                }
-                return std::nullopt;
-            },
-            .get_compute_pipeline_ops = [](const void* ptr) -> std::optional<capabilities::ComputePipelineOps>
+                return raktr::render::update_uniform_buffer(_object, b, d);
+            }
+            void set_uniform_buffer(const Buffer& b) const override
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev, const ComputePipelineDescriptor& s) { { dev.create_compute_pipeline(s) }; })
-                {
-                    return capabilities::ComputePipelineOps{ .create_compute_pipeline = [d](const ComputePipelineDescriptor& s)
-                                                             {
-                                                                 return d->create_compute_pipeline(s);
-                                                             } };
-                }
-                return std::nullopt;
-            },
-            .get_bind_group_ops = [](const void* ptr) -> std::optional<capabilities::BindGroupOps>
+                raktr::render::set_uniform_buffer(_object, b);
+            }
+
+            std::expected<void, std::error_code> draw_indexed(const Buffer& vb, const Buffer& ib, uint32_t c) const override
             {
-                [[maybe_unused]] T* d = const_cast<T*>(static_cast<const T*>(ptr));
-                if constexpr (requires(T& dev, const BindGroupLayoutDescriptor& l) { { dev.create_bind_group_layout(l) }; })
-                {
-                    capabilities::BindGroupOps ops;
-                    ops.create_bind_group_layout = [d](const BindGroupLayoutDescriptor& l)
-                    {
-                        return d->create_bind_group_layout(l);
-                    };
-                    ops.create_bind_group = [d](const BindGroupDescriptor& b)
-                    {
-                        return d->create_bind_group(b);
-                    };
-                    return ops;
-                }
-                return std::nullopt;
-            },
+                return raktr::render::draw_indexed(_object, vb, ib, c);
+            }
+            void clear() const override
+            {
+                raktr::render::clear(_object);
+            }
+
+            std::expected<void, std::error_code> resize(uint32_t w, uint32_t h) const override
+            {
+                return raktr::render::resize(_object, w, h);
+            }
+            void set_aspect_ratio(AspectRatio r, float c) const override
+            {
+                raktr::render::set_aspect_ratio(_object, r, c);
+            }
+            AspectRatio aspect_ratio() const override
+            {
+                return raktr::render::aspect_ratio(_object);
+            }
+            const Viewport& viewport() const override
+            {
+                return raktr::render::viewport(_object);
+            }
+            void* get_surface_view() const override
+            {
+                return raktr::render::get_surface_view(_object);
+            }
+            void* get_depth_view() const override
+            {
+                return raktr::render::get_depth_view(_object);
+            }
+
+            void present() const override
+            {
+                raktr::render::present(_object);
+            }
+            std::expected<Queue, std::error_code> queue() const override
+            {
+                return raktr::render::queue(_object);
+            }
+            std::expected<CommandEncoder, std::error_code> create_command_encoder(std::string_view l) const override
+            {
+                return raktr::render::create_command_encoder(_object, l);
+            }
+
+            std::expected<ShaderModule, std::error_code> create_shader_module(const ShaderModuleDescriptor& d) const override
+            {
+                return raktr::render::create_shader_module(_object, d);
+            }
+            std::expected<RenderPipeline, std::error_code> create_render_pipeline(const RenderPipelineDescriptor& d) const override
+            {
+                return raktr::render::create_render_pipeline(_object, d);
+            }
+            std::expected<ComputePipeline, std::error_code> create_compute_pipeline(const ComputePipelineDescriptor& d) const override
+            {
+                return raktr::render::create_compute_pipeline(_object, d);
+            }
+
+            std::expected<BindGroupLayout, std::error_code> create_bind_group_layout(const BindGroupLayoutDescriptor& d) const override
+            {
+                return raktr::render::create_bind_group_layout(_object, d);
+            }
+            std::expected<BindGroup, std::error_code> create_bind_group(const BindGroupDescriptor& d) const override
+            {
+                return raktr::render::create_bind_group(_object, d);
+            }
+
+            std::expected<Buffer, std::error_code> create_instance_buffer(std::span<const std::byte> d) const override
+            {
+                return raktr::render::create_instance_buffer(_object, d);
+            }
+            std::expected<void, std::error_code> update_instance_buffer(const Buffer& b, std::span<const std::byte> d) const override
+            {
+                return raktr::render::update_instance_buffer(_object, b, d);
+            }
+            std::expected<void, std::error_code> draw_indexed_instanced(const Buffer& vb, const Buffer& ib, const Buffer& kb, uint32_t ic, uint32_t nc) const override
+            {
+                return raktr::render::draw_indexed_instanced(_object, vb, ib, kb, ic, nc);
+            }
+
+            std::expected<std::unique_ptr<occlusion::HiZBuffer>, std::error_code> create_hi_z_buffer(uint32_t w, uint32_t h) const override
+            {
+                return raktr::render::create_hi_z_buffer(_object, w, h);
+            }
+            RenderPass create_hi_z_pyramid_pass(occlusion::HiZBuffer* buffer, void* depth) const override
+            {
+                return raktr::render::create_hi_z_pyramid_pass(_object, buffer, depth);
+            }
+            RenderPass create_hi_z_occlusion_pass(occlusion::HiZBuffer* buffer, const std::vector<occlusion::AABB>* aabbs, const glm::mat4& vp, std::vector<bool>* results) const override
+            {
+                return raktr::render::create_hi_z_occlusion_pass(_object, buffer, aabbs, vp, results);
+            }
+            RenderPass create_instanced_geometry_pass(Buffer vb, Buffer ib, Buffer instb, std::vector<InstanceData>* cpu_data, std::vector<bool>* visibility, uint32_t index_count) const override
+            {
+                return raktr::render::create_instanced_geometry_pass(_object, vb, ib, instb, cpu_data, visibility, index_count);
+            }
+
+            void* get_depth_texture() const override
+            {
+                return raktr::render::get_depth_texture(_object);
+            }
         };
-#pragma warning(pop)
+
+        std::unique_ptr<DeviceConcept> _pimpl;
     };
 
+    template <typename Capability>
+    Capability Device::capability() const
+    {
+        if constexpr (std::is_same_v<Capability, capabilities::BufferOps>)
+        {
+            return capabilities::BufferOps{
+                .create_vertex_buffer = [this](auto d)
+                {
+                    return this->create_vertex_buffer(d);
+                },
+                .create_index_buffer = [this](auto d)
+                {
+                    return this->create_index_buffer(d);
+                },
+                .create_uniform_buffer = [this](auto s)
+                {
+                    return this->create_uniform_buffer(s);
+                },
+                .update_uniform_buffer = [this](auto b, auto d)
+                {
+                    return this->update_uniform_buffer(b, d);
+                },
+                .set_uniform_buffer = [this](auto b)
+                {
+                    this->set_uniform_buffer(b);
+                }
+            };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::DrawOps>)
+        {
+            return capabilities::DrawOps{
+                .draw_indexed = [this](auto v, auto i, auto c)
+                {
+                    return this->draw_indexed(v, i, c);
+                },
+                .clear = [this]()
+                {
+                    this->clear();
+                }
+            };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::ViewportOps>)
+        {
+            return capabilities::ViewportOps{
+                .resize = [this](auto w, auto h)
+                {
+                    return this->resize(w, h);
+                },
+                .set_aspect_ratio = [this](auto r, auto c)
+                {
+                    this->set_aspect_ratio(r, c);
+                },
+                .aspect_ratio = [this]()
+                {
+                    return this->aspect_ratio();
+                },
+                .viewport = [this]()
+                {
+                    return this->viewport();
+                },
+                .get_surface_view = [this]()
+                {
+                    return this->get_surface_view();
+                },
+                .get_depth_view = [this]()
+                {
+                    return this->get_depth_view();
+                }
+            };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::PresentOps>)
+        {
+            return capabilities::PresentOps{
+                .present = [this]()
+                {
+                    this->present();
+                }
+            };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::QueueOps>)
+        {
+            return capabilities::QueueOps{ .queue = [this]()
+                                           {
+                                               return this->queue();
+                                           } };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::CommandEncoderOps>)
+        {
+            return capabilities::CommandEncoderOps{ .create_command_encoder = [this](auto l)
+                                                    {
+                                                        return this->create_command_encoder(l);
+                                                    } };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::ShaderOps>)
+        {
+            return capabilities::ShaderOps{ .create_shader_module = [this](auto d)
+                                            {
+                                                return this->create_shader_module(d);
+                                            } };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::RenderPipelineOps>)
+        {
+            return capabilities::RenderPipelineOps{ .create_render_pipeline = [this](auto d)
+                                                    {
+                                                        return this->create_render_pipeline(d);
+                                                    } };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::ComputePipelineOps>)
+        {
+            return capabilities::ComputePipelineOps{ .create_compute_pipeline = [this](auto d)
+                                                     {
+                                                         return this->create_compute_pipeline(d);
+                                                     } };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::BindGroupOps>)
+        {
+            return capabilities::BindGroupOps{
+                .create_bind_group_layout = [this](auto d)
+                {
+                    return this->create_bind_group_layout(d);
+                },
+                .create_bind_group = [this](auto d)
+                {
+                    return this->create_bind_group(d);
+                }
+            };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::InstancingOps>)
+        {
+            return capabilities::InstancingOps{
+                .create_instance_buffer = [this](auto d)
+                {
+                    return this->create_instance_buffer(d);
+                },
+                .update_instance_buffer = [this](auto b, auto d)
+                {
+                    return this->update_instance_buffer(b, d);
+                },
+                .draw_indexed_instanced = [this](auto v, auto i, auto k, auto ic, auto n)
+                {
+                    return this->draw_indexed_instanced(v, i, k, ic, n);
+                }
+            };
+        }
+        else if constexpr (std::is_same_v<Capability, capabilities::OcclusionCullingOps>)
+        {
+            return capabilities::OcclusionCullingOps{
+                .create_hi_z_buffer = [this](auto w, auto h)
+                {
+                    return this->create_hi_z_buffer(w, h);
+                },
+                .get_depth_texture = [this]()
+                {
+                    return this->get_depth_texture();
+                }
+            };
+        }
+
+        throw std::bad_optional_access();
+    }
+
+    using DeviceView = Device;
 } // namespace raktr::render
 
-#endif // RAKTR_RENDER_DEVICE_H
+#endif

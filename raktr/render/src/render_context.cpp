@@ -5,6 +5,7 @@
 
 #include "render_context.h"
 #include "backend/ibackend.h"
+#include "render_graph.h"
 #include <memory>
 
 namespace raktr::render
@@ -128,6 +129,14 @@ namespace raktr::render
             return _impl->backend->device();
         }
         return DeviceView();
+    }
+
+    void RenderContext::execute(RenderGraph& graph, bool present)
+    {
+        if (_impl->initialized && _impl->backend)
+        {
+            _impl->backend->execute(graph, present);
+        }
     }
 
     bool RenderContext::is_initialized() const

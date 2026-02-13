@@ -31,6 +31,7 @@ namespace raktr::render::backend
             Window*             window) override;
 
         void                     shutdown() override;
+        void                     execute(RenderGraph& graph, bool blocking) override;
         [[nodiscard]] DeviceView device() override;
         void*                    backend_device_ptr() override;
 
