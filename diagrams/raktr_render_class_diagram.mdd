@@ -1,0 +1,228 @@
+classDiagram
+    %% === Core API Entry Point ===
+    class RenderContext {
+        <<type-erased>>
+        +initialize(RenderConfig) expected
+        +initialize(RenderConfig, WindowConfig) expected
+        +initialize(RenderConfig, Window*) expected
+        +shutdown() void
+        +device() Device*
+        +is_initialized() bool
+    }
+
+    %% === Device Abstraction ===
+    class Device {
+        <<type-erased>>
+        +supports~Capability~() bool
+        +capability~Capability~() Capability
+        +create_vertex_buffer() expected~Buffer~
+        +create_index_buffer() expected~Buffer~
+        +create_uniform_buffer() expected~Buffer~
+        +create_instance_buffer() expected~Buffer~
+        +draw_indexed() expected
+        +draw_indexed_instanced() expected
+        +queue() Queue
+        +create_command_encoder() CommandEncoder
+        +create_shader_module() expected~ShaderModule~
+        +create_render_pipeline() expected~RenderPipeline~
+        +create_compute_pipeline() expected~ComputePipeline~
+        +create_bind_group_layout() expected~BindGroupLayout~
+        +create_bind_group() expected~BindGroup~
+    }
+
+    %% === GPU Resources (Value Types) ===
+    class Buffer {
+        <<handle>>
+        -uint64_t _id
+        -BufferType _type
+        +id() uint64_t
+        +type() BufferType
+        +is_valid() bool
+    }
+
+    class CommandBuffer {
+        <<handle>>
+        -uint64_t _id
+        +id() uint64_t
+        +is_valid() bool
+    }
+
+    %% === Command Recording ===
+    class Queue {
+        <<type-erased>>
+        +submit(span~CommandBuffer~) void
+        +write_buffer(Buffer, offset, data) void
+    }
+
+    class CommandEncoder {
+        <<type-erased>>
+        +begin_render_pass(RenderPassDescriptor) RenderPassEncoder
+        +begin_compute_pass(ComputePassDescriptor) ComputePassEncoder
+        +copy_buffer_to_buffer() void
+        +finish() CommandBuffer
+    }
+
+    class RenderPassEncoder {
+        <<type-erased>>
+        +set_pipeline(RenderPipeline) void
+        +set_vertex_buffer(slot, Buffer) void
+        +set_index_buffer(Buffer) void
+        +set_bind_group(index, BindGroup) void
+        +draw(vertices, instances) void
+        +draw_indexed(indices, instances) void
+        +end() void
+    }
+
+    class ComputePassEncoder {
+        <<type-erased>>
+        +set_pipeline(ComputePipeline) void
+        +set_bind_group(index, BindGroup) void
+        +dispatch(x, y, z) void
+        +end() void
+    }
+
+    %% === Shader and Pipeline ===
+    class ShaderModule {
+        <<type-erased>>
+        +native_handle() void*
+        +is_valid() bool
+    }
+
+    class RenderPipeline {
+        <<type-erased>>
+        +native_handle() void*
+        +is_valid() bool
+    }
+
+    class ComputePipeline {
+        <<type-erased>>
+        +native_handle() void*
+        +is_valid() bool
+    }
+
+    %% === Bind Groups ===
+    class BindGroupLayout {
+        <<type-erased>>
+        +native_handle() void*
+        +is_valid() bool
+    }
+
+    class BindGroup {
+        <<type-erased>>
+        +native_handle() void*
+        +is_valid() bool
+    }
+
+    %% === Descriptors (POD structs) ===
+    class ShaderModuleDescriptor {
+        <<struct>>
+        +string_view code
+        +string_view label
+    }
+
+    class RenderPipelineDescriptor {
+        <<struct>>
+        +vector~VertexBufferLayout~ vertex_buffers
+        +PrimitiveState primitive
+        +DepthStencilState depth_stencil
+        +MultisampleState multisample
+        +FragmentState fragment
+        +string_view label
+    }
+
+    class ComputePipelineDescriptor {
+        <<struct>>
+        +ShaderModule compute_shader
+        +string_view compute_entry_point
+        +string_view label
+    }
+
+    class BindGroupLayoutDescriptor {
+        <<struct>>
+        +vector~BindGroupLayoutEntry~ entries
+        +string_view label
+    }
+
+    class BindGroupDescriptor {
+        <<struct>>
+        +BindGroupLayout layout
+        +vector~BindGroupEntry~ entries
+        +string_view label
+    }
+
+    class RenderPassDescriptor {
+        <<struct>>
+        +array~RenderPassColorAttachment~ color_attachments
+        +optional~RenderPassDepthStencilAttachment~ depth_stencil
+    }
+
+    class ComputePassDescriptor {
+        <<struct>>
+    }
+
+    %% === Render Graph ===
+    class RenderGraph {
+        -Device* _device
+        -vector~RenderPass~ _passes
+        +add_pass~PassType~(PassType) RenderGraph&
+        +execute~PassContextType~(PassContextType&) void
+        +on_viewport_resize(width, height) void
+        +pass_count() size_t
+    }
+
+    class RenderPass {
+        <<type-erased>>
+        +name() string_view
+        +execute~ContextType~(ContextType&) void
+        +on_viewport_resize(width, height) void
+    }
+
+    %% === Relationships ===
+    
+    %% Core relationships
+    RenderContext --> Device : owns/creates
+    
+    %% Device creates resources
+    Device --> Buffer : creates
+    Device --> Queue : creates
+    Device --> CommandEncoder : creates
+    Device --> ShaderModule : creates
+    Device --> RenderPipeline : creates
+    Device --> ComputePipeline : creates
+    Device --> BindGroupLayout : creates
+    Device --> BindGroup : creates
+    
+    %% Command recording flow
+    CommandEncoder --> RenderPassEncoder : creates
+    CommandEncoder --> ComputePassEncoder : creates
+    CommandEncoder --> CommandBuffer : produces
+    Queue --> CommandBuffer : consumes
+    
+    %% Pass encoders use resources
+    RenderPassEncoder ..> RenderPipeline : uses
+    RenderPassEncoder ..> Buffer : uses
+    RenderPassEncoder ..> BindGroup : uses
+    ComputePassEncoder ..> ComputePipeline : uses
+    ComputePassEncoder ..> BindGroup : uses
+    
+    %% Descriptor relationships
+    Device ..> ShaderModuleDescriptor : uses
+    Device ..> RenderPipelineDescriptor : uses
+    Device ..> ComputePipelineDescriptor : uses
+    Device ..> BindGroupLayoutDescriptor : uses
+    Device ..> BindGroupDescriptor : uses
+    CommandEncoder ..> RenderPassDescriptor : uses
+    CommandEncoder ..> ComputePassDescriptor : uses
+    
+    %% Pipeline descriptors reference shaders
+    RenderPipelineDescriptor --> ShaderModule : references
+    ComputePipelineDescriptor --> ShaderModule : references
+    BindGroupDescriptor --> BindGroupLayout : references
+    
+    %% Render graph
+    RenderGraph --> Device : uses
+    RenderGraph *-- RenderPass : contains
+    
+    %% Notes on type erasure
+    note for Device "Type-erased wrapper using\nConcept-Model pattern.\nSee backend diagram for details."
+    note for RenderPass "Type-erased using external\npolymorphism (duck typing).\nNo inheritance required."

@@ -1,0 +1,287 @@
+classDiagram
+    %% === Core Configuration ===
+    class RenderConfig {
+        +BackendType backend
+        +bool enable_validation
+        +bool enable_vsync
+    }
+    
+    class WindowConfig {
+        +uint32_t width
+        +uint32_t height
+        +string title
+    }
+    
+    class Window {
+        +void* native_handle()
+    }
+
+    %% === Main API Entry Point ===
+    class RenderContext {
+        -unique_ptr~IBackend~ _backend
+        +initialize(RenderConfig) expected
+        +initialize(RenderConfig, WindowConfig) expected
+        +initialize(RenderConfig, Window*) expected
+        +shutdown() void
+        +device() Device*
+        +is_initialized() bool
+    }
+
+    %% === Backend Interface ===
+    class IBackend {
+        <<interface>>
+        +initialize(RenderConfig) expected*
+        +initialize(RenderConfig, WindowConfig) expected*
+        +initialize(RenderConfig, Window*) expected*
+        +shutdown() void*
+        +device() Device**
+        +backend_device_ptr() void**
+    }
+
+    %% === WebGPU Backend Implementation ===
+    class WgpuBackend {
+        -unique_ptr~Window~ _window
+        -unique_ptr~WgpuDevice~ _wgpu_device
+        -optional~Device~ _device
+        +initialize(RenderConfig) expected
+        +initialize(RenderConfig, WindowConfig) expected
+        +initialize(RenderConfig, Window*) expected
+        +shutdown() void
+        +device() Device*
+        +backend_device_ptr() void*
+        -initialize_device(RenderConfig, Window*) expected
+    }
+
+    %% === Concrete WebGPU Device ===
+    class WgpuDevice {
+        -WGPUDevice _device
+        -WGPUQueue _queue
+        -WGPUSwapChain _swapchain
+        -WGPUSurface _surface
+        +create(Window*, bool) expected~WgpuDevice~$
+        +create_vertex_buffer(span) expected~Buffer~
+        +create_index_buffer(span) expected~Buffer~
+        +create_uniform_buffer(size_t) expected~Buffer~
+        +create_instance_buffer(span) expected~Buffer~
+        +update_uniform_buffer(Buffer, span) expected
+        +update_instance_buffer(Buffer, span) expected
+        +set_uniform_buffer(Buffer) void
+        +draw_indexed(Buffer, Buffer, uint32_t) expected
+        +draw_indexed_instanced(Buffer, Buffer, Buffer, uint32_t, uint32_t) expected
+        +clear() void
+        +present() void
+        +queue() Queue
+        +create_command_encoder(string_view) CommandEncoder
+        +create_shader_module(ShaderModuleDescriptor) expected~ShaderModule~
+        +create_render_pipeline(RenderPipelineDescriptor) expected~RenderPipeline~
+        +create_compute_pipeline(ComputePipelineDescriptor) expected~ComputePipeline~
+        +create_bind_group_layout(BindGroupLayoutDescriptor) expected~BindGroupLayout~
+        +create_bind_group(BindGroupDescriptor) expected~BindGroup~
+        +resize(uint32_t, uint32_t) expected
+        +set_aspect_ratio(AspectRatio, float) void
+        +aspect_ratio() AspectRatio
+        +viewport() Viewport&
+        +get_surface_view() void*
+        +get_depth_view() void*
+        +wgpu_depth_texture() void*
+        +create_hi_z_buffer(uint32_t, uint32_t) expected~HiZBuffer~
+    }
+
+    %% === Type-Erased Device Wrapper ===
+    class Device {
+        -unique_ptr~Concept~ _impl
+        +Device(T device_impl)
+        +Device(T* device_ptr)
+        +supports~Capability~() bool
+        +capability~Capability~() Capability
+        +create_vertex_buffer(span) expected~Buffer~
+        +create_index_buffer(span) expected~Buffer~
+        +create_uniform_buffer(size_t) expected~Buffer~
+        +create_instance_buffer(span) expected~Buffer~
+        +update_uniform_buffer(Buffer, span) expected
+        +update_instance_buffer(Buffer, span) expected
+        +set_uniform_buffer(Buffer) void
+        +draw_indexed(Buffer, Buffer, uint32_t) expected
+        +draw_indexed_instanced(Buffer, Buffer, Buffer, uint32_t, uint32_t) expected
+        +clear() void
+        +present() void
+        +queue() Queue
+        +create_command_encoder(string_view) CommandEncoder
+        +create_shader_module(ShaderModuleDescriptor) expected~ShaderModule~
+        +create_render_pipeline(RenderPipelineDescriptor) expected~RenderPipeline~
+        +resize(uint32_t, uint32_t) expected
+        +set_aspect_ratio(AspectRatio, float) void
+        +aspect_ratio() AspectRatio
+        +viewport() Viewport&
+        +get_surface_view() void*
+        +get_depth_view() void*
+        +get_depth_texture() void*
+    }
+
+    %% === Device Type Erasure Pattern ===
+    class Concept {
+        <<interface>>
+        +supports(type_index) bool*
+        +capability~T~(type_index) optional~T~*
+        -do_capability_bufferops() optional~BufferOps~*
+        -do_capability_drawops() optional~DrawOps~*
+        -do_capability_viewportops() optional~ViewportOps~*
+        -do_capability_presentops() optional~PresentOps~*
+        -do_capability_instancingops() optional~InstancingOps~*
+        -do_capability_occlusioncullingops() optional~OcclusionCullingOps~*
+        -do_capability_queueops() optional~QueueOps~*
+        -do_capability_commandencoderops() optional~CommandEncoderOps~*
+        -do_capability_shaderops() optional~ShaderOps~*
+        -do_capability_renderpipelineops() optional~RenderPipelineOps~*
+        -do_capability_computepipelineops() optional~ComputePipelineOps~*
+        -do_capability_bindgroupops() optional~BindGroupOps~*
+    }
+
+    class Model~T~ {
+        -optional~T~ _device_storage
+        -T* _device_ptr
+        -bool _owns
+        -unordered_map~type_index, any~ _capabilities
+        +Model(T device_impl)
+        +Model(T* device_ptr)
+        +supports(type_index) bool
+        +capability_type(type_index) optional~type_index~
+        -get_device() T*
+        -build_capability_map() void
+    }
+
+    %% === Device Capabilities (Structs with std::function) ===
+    class BufferOps {
+        +function create_vertex_buffer
+        +function create_index_buffer
+        +function create_uniform_buffer
+        +function update_uniform_buffer
+        +function set_uniform_buffer
+    }
+
+    class DrawOps {
+        +function draw_indexed
+        +function clear
+    }
+
+    class ViewportOps {
+        +function resize
+        +function set_aspect_ratio
+        +function aspect_ratio
+        +function viewport
+        +function get_surface_view
+        +function get_depth_view
+    }
+
+    class PresentOps {
+        +function present
+    }
+
+    class InstancingOps {
+        +function create_instance_buffer
+        +function update_instance_buffer
+        +function draw_indexed_instanced
+    }
+
+    class QueueOps {
+        +function queue
+    }
+
+    class CommandEncoderOps {
+        +function create_command_encoder
+    }
+
+    class ShaderOps {
+        +function create_shader_module
+    }
+
+    class RenderPipelineOps {
+        +function create_render_pipeline
+    }
+
+    class OcclusionCullingOps {
+        +function create_hi_z_buffer
+        +function get_depth_texture
+    }
+
+    %% === GPU Resource Types ===
+    class Buffer {
+        -uint64_t _id
+        -BufferType _type
+        +id() uint64_t
+        +type() BufferType
+        +is_valid() bool
+    }
+
+    class Queue {
+        -unique_ptr~Concept~ _impl
+        +Queue(T queue_impl)
+        +submit(span~CommandBuffer~) void
+        +write_buffer(Buffer, uint64_t, span) void
+    }
+
+    class CommandEncoder {
+        -unique_ptr~Concept~ _impl
+        +begin_render_pass(RenderPassDescriptor) RenderPassEncoder
+        +begin_compute_pass(ComputePassDescriptor) ComputePassEncoder
+        +finish() CommandBuffer
+    }
+
+    class ShaderModule {
+        -unique_ptr~Concept~ _self
+        -Concept* _ptr
+        -bool _owns
+        +ShaderModule(T impl)
+        +native_handle() void*
+    }
+
+    class RenderPipeline {
+        -unique_ptr~Concept~ _self
+        -Concept* _ptr
+        -bool _owns
+        +RenderPipeline(T impl)
+        +native_handle() void*
+    }
+
+    %% === Relationships ===
+    RenderContext *-- IBackend
+    IBackend <|.. WgpuBackend
+    WgpuBackend o-- Window
+    WgpuBackend *-- WgpuDevice
+    WgpuBackend o-- Device
+    Device *-- Concept
+    Concept <|.. Model~T~
+    Model~T~ o-- WgpuDevice : wraps via pointer
+    
+    Device ..> BufferOps : uses
+    Device ..> DrawOps : uses
+    Device ..> ViewportOps : uses
+    Device ..> PresentOps : uses
+    Device ..> InstancingOps : uses
+    Device ..> QueueOps : uses
+    Device ..> CommandEncoderOps : uses
+    Device ..> ShaderOps : uses
+    Device ..> RenderPipelineOps : uses
+    Device ..> OcclusionCullingOps : uses
+    
+    Concept ..> BufferOps : returns
+    Concept ..> DrawOps : returns
+    Concept ..> ViewportOps : returns
+    Concept ..> PresentOps : returns
+    Concept ..> InstancingOps : returns
+    Concept ..> QueueOps : returns
+    Concept ..> CommandEncoderOps : returns
+    Concept ..> ShaderOps : returns
+    Concept ..> RenderPipelineOps : returns
+    Concept ..> OcclusionCullingOps : returns
+    
+    RenderContext ..> RenderConfig : uses
+    RenderContext ..> WindowConfig : uses
+    WgpuBackend ..> RenderConfig : uses
+    WgpuBackend ..> WindowConfig : uses
+    
+    Device --> Buffer : creates
+    Device --> Queue : creates
+    Device --> CommandEncoder : creates
+    Device --> ShaderModule : creates
+    Device --> RenderPipeline : creates
