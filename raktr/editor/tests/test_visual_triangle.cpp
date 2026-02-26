@@ -22,6 +22,7 @@
 #include <glm/gtc/constants.hpp>
 #include <gtest/gtest.h>
 #include <spdlog/spdlog.h>
+#include <spdlog/sinks/stdout_color_sinks.h>
 #include <thread>
 #include <unordered_set>
 
@@ -669,6 +670,13 @@ TEST(VisualTest, DISABLED_FrustumCullingDemo)
 TEST(VisualTest, DISABLED_OcclusionCullingDemo)
 {
     // Create window
+    auto console_sink = std::make_shared<spdlog::sinks::stdout_color_sink_mt>();
+    console_sink->set_level(spdlog::level::debug);
+    auto logger = std::make_shared<spdlog::logger>("console", console_sink);
+    logger->set_level(spdlog::level::debug);
+    spdlog::set_default_logger(logger);
+
+    spdlog::set_level(spdlog::level::debug);
     WindowConfig window_config;
     window_config.width      = 1920;
     window_config.height     = 1080;
@@ -683,7 +691,7 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
     // Create render context
     RenderConfig render_config;
     render_config.backend           = BackendType::WebGPU;
-    render_config.enable_validation = false;
+    render_config.enable_validation = true;
 
     auto render_context = create_render_context();
     ASSERT_NE(render_context, nullptr);
@@ -972,6 +980,7 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
         // Pass 1: Hi-Z Occlusion Pass - Test visibility using previous frame's pyramid
         if (occlusion_culling_enabled && hi_z_buffer)
         {
+            spdlog::debug("Pass 1: Executing Hi-Z Occlusion Pass for frame {}", frame_index);
             RenderGraph frame_graph(device);
             frame_graph.add_pass(device->create_hi_z_occlusion_pass(
                 hi_z_buffer.get(),
@@ -1015,6 +1024,7 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
         }
 
         // Pass 2: WgpuInstancedGeometryPass - Render visible objects using GPU instancing
+        spdlog::debug("Pass 2: Executing Instanced Geometry Pass for frame {}", frame_index);
         // Create new render graph for geometry pass
         RenderGraph geometry_graph(device);
         geometry_graph.add_pass(device->create_instanced_geometry_pass(
@@ -1041,11 +1051,12 @@ TEST(VisualTest, DISABLED_OcclusionCullingDemo)
                 hi_z_buffer.get(),
                 device->get_depth_texture()));
 
+            spdlog::debug("Pass 3: Executing Hi-Z Pyramid Pass for frame {}", frame_index);
             render_context->execute(pyramid_graph, true);
         }
 
         // Present (if rendering to swapchain) - handled by execute
-        // device->present();
+        device->present();
 
         frame_index++;
     }
