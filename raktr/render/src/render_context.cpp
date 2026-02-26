@@ -7,6 +7,7 @@
 #include "backend/ibackend.h"
 #include "render_graph.h"
 #include <memory>
+#include <spdlog/spdlog.h>
 
 namespace raktr::render
 {
@@ -133,6 +134,7 @@ namespace raktr::render
 
     void RenderContext::execute(RenderGraph& graph, bool present)
     {
+        spdlog::trace("Executing render graph with {} passes", graph.pass_count());
         if (_impl->initialized && _impl->backend)
         {
             _impl->backend->execute(graph, present);
