@@ -32,6 +32,8 @@ namespace raktr::render::backend::wgpu
 
     void WgpuInstancedGeometryPass::execute(WgpuPassContext& ctx)
     {
+        spdlog::info("WgpuInstancedGeometryPass::execute - Start");
+
         // Build instance data for visible objects only
         std::vector<InstanceData> visible_instances;
         visible_instances.reserve(_all_instances->size());
@@ -49,20 +51,23 @@ namespace raktr::render::backend::wgpu
 
         _last_drawn_count = static_cast<uint32_t>(visible_instances.size());
 
-        // Update instance buffer with visible instances
-        if (visible_instances.empty())
+        // Update instance buffer with visible instances if any
+        if (!_last_drawn_count)
         {
-            return; // Nothing to draw
+            // If nothing to draw, we still need to clear execute the render pass to clear the screen
+            // but we can skip buffer update
         }
-
-        auto update_result = _device->update_instance_buffer(
-            _instance_buffer,
-            std::as_bytes(std::span(visible_instances)));
-
-        if (!update_result.has_value())
+        else
         {
-            spdlog::error("WgpuInstancedGeometryPass: Failed to update instance buffer");
-            return;
+            auto update_result = _device->update_instance_buffer(
+                _instance_buffer,
+                std::as_bytes(std::span(visible_instances)));
+
+            if (!update_result.has_value())
+            {
+                spdlog::error("WgpuInstancedGeometryPass: Failed to update instance buffer");
+                return;
+            }
         }
 
         // Build render pass using PassContext's command encoder and targets
@@ -74,6 +79,14 @@ namespace raktr::render::backend::wgpu
         WGPURenderPassEncoder pass = builder.begin(ctx.command_encoder);
 
         // Set pipeline and bind group (get from device)
+        if (!_device->wgpu_render_pipeline())
+        {
+            spdlog::error("WgpuInstancedGeometryPass: Render pipeline is NULL!");
+        }
+        if (!_device->wgpu_current_bind_group())
+        {
+            spdlog::error("WgpuInstancedGeometryPass: Current bind group is NULL!");
+        }
         wgpuRenderPassEncoderSetPipeline(pass, _device->wgpu_render_pipeline());
         wgpuRenderPassEncoderSetBindGroup(pass, 0, _device->wgpu_current_bind_group(), 0, nullptr);
 
@@ -89,24 +102,27 @@ namespace raktr::render::backend::wgpu
         // Set scissor rect
         wgpuRenderPassEncoderSetScissorRect(pass, 0, 0, ctx.viewport_width, ctx.viewport_height);
 
-        // Bind vertex, index, and instance buffers
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 0, reinterpret_cast<WGPUBuffer>(_vertex_buffer.id()), 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderSetVertexBuffer(pass, 1, reinterpret_cast<WGPUBuffer>(_instance_buffer.id()), 0, WGPU_WHOLE_SIZE);
-        wgpuRenderPassEncoderSetIndexBuffer(pass,
-                                            reinterpret_cast<WGPUBuffer>(_index_buffer.id()),
-                                            WGPUIndexFormat_Uint32,
-                                            0,
-                                            WGPU_WHOLE_SIZE);
+        if (_last_drawn_count > 0)
+        {
+            // Bind vertex, index, and instance buffers
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 0, reinterpret_cast<WGPUBuffer>(_vertex_buffer.id()), 0, WGPU_WHOLE_SIZE);
+            wgpuRenderPassEncoderSetVertexBuffer(pass, 1, reinterpret_cast<WGPUBuffer>(_instance_buffer.id()), 0, WGPU_WHOLE_SIZE);
+            wgpuRenderPassEncoderSetIndexBuffer(pass,
+                                                reinterpret_cast<WGPUBuffer>(_index_buffer.id()),
+                                                WGPUIndexFormat_Uint32,
+                                                0,
+                                                WGPU_WHOLE_SIZE);
 
-        // Draw all visible instances in one call (they're already filtered in the instance buffer)
-        wgpuRenderPassEncoderDrawIndexed(
-            pass,
-            _index_count,      // indexCount
-            _last_drawn_count, // instanceCount (number of visible instances)
-            0,                 // firstIndex
-            0,                 // baseVertex
-            0                  // firstInstance
-        );
+            // Draw all visible instances in one call (they're already filtered in the instance buffer)
+            wgpuRenderPassEncoderDrawIndexed(
+                pass,
+                _index_count,      // indexCount
+                _last_drawn_count, // instanceCount (number of visible instances)
+                0,                 // firstIndex
+                0,                 // baseVertex
+                0                  // firstInstance
+            );
+        }
 
         wgpuRenderPassEncoderEnd(pass);
         wgpuRenderPassEncoderRelease(pass);
