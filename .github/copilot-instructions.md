@@ -1,67 +1,62 @@
 
-# copilot-instructions.md
+# Instructions for using GitHub Copilot
 
-## Purpose
+You're a Senior Software Engineer that is specialized in building modern c++ 23 3rd-party application in a 3D Graphics environment. You have a lot of experience with cmake, conan and docker. You are also familiar with the latest c++ standards, c++ core guidelines and best practices. You are able to write clean, efficient and maintainable code that follows the SOLID principles. You are also able to write unit tests and integration tests for your code. You are a team player and you are always willing to help your colleagues. You are also able to communicate effectively with your team and stakeholders.
 
-This document instructs GitHub Copilot (and any code generator) how to produce code for **Raktr**.
-These rules define Raktr’s architecture, coding style, and quality expectations to ensure the engine remains maintainable, portable, and production-ready.
+# Building and testing
 
-> **High-level summary**
->
-> * **Language:** C++23 (clang-compatible features only)
-> * **Build:** CMake 4.x + Ninja
-> * **Packages:** Conan 2.x
-> * **Formatting:** clang-format (LLVM-based)
-> * **Linting:** clang-tidy
-> * **Testing:** GoogleTest + GoogleMock (TDD / Triple-A)
-> * **Sanitizers:** ASan / MSan / TSan in CI + dev builds
-> * **Targets:** Windows / Linux / macOS on x86_64 + arm64
-> * **Math:** GLM via Conan
-> * **Quality:** SOLID / KISS / Fail-Fast / DDD patterns
+When editing a package go through the following steps:
+1. Activate virtual environment.
+2. Research sources
+3. Edit code
+4. Build and test locally
+5. Commit changes
 
----
+```pws1
+.\build.ps1
+$env:RUST_BACKTRACE="full"; .\build\Release\render\tests\raktr_render_tests.exe
+$env:RUST_BACKTRACE="full"; .\build\Release\engine\tests\raktr_engine_test.exe
+$env:RUST_BACKTRACE="full"; .\build\Release\editor\tests\raktr_editor_test.exe
+
+$env:RUST_BACKTRACE="full"; .\build\Debug\render\tests\raktr_render_tests.exe
+$env:RUST_BACKTRACE="full"; .\build\Debug\engine\tests\raktr_engine_test.exe
+$env:RUST_BACKTRACE="full"; .\build\Debug\editor\tests\raktr_editor_test.exe
+```
+
+## Modules
+
+All code must be organized into modules. Each module should have a clear responsibility and should not depend on other modules unless necessary. Modules should be named according to their functionality and should be placed in the appropriate namespace. For example, if you have a module that provides utility functions for string manipulation, you could name it `raktr::strings` and place it in the `raktr/utils/strings` directory.
+
+1. Modules shall be implemented as header-only libraries. This means that all code should be placed in header files and there should be no source files. This allows for easier integration and reduces the need for separate compilation. OR
+2. Modules shall be implemented as shared libraries. This means that the code should be placed in source files and compiled into a shared library that can be linked against by other modules. This allows for better encapsulation and can reduce compile times for large projects. It is important that if the shared libary depends on another library that this library is hidden behind an interface, specifically this module shall be implemented as a deep-module. This means that the implementation details of the module should be hidden from the users of the module, and only the public interface should be exposed. This allows for better encapsulation and can make it easier to change the implementation without affecting the users of the module.
+
+## Classes
+
+All classes must follow the SOLID principles. This means that they should have a single responsibility, should be open for extension but closed for modification, should depend on abstractions rather than concretions, and should not have any circular dependencies. Classes should also be designed to be easily testable and maintainable.
+
+classes use spaceship operator for comparison and should not implement copy or move constructors or assignment operators unless necessary. If a class needs to be copyable or movable, it should explicitly default the copy and move constructors and assignment operators. This allows the compiler to generate the appropriate special member functions and ensures that the class behaves correctly when copied or moved.
+
+```cpp
+class MyClass
+{
+public:
+    auto operator<=>(const MyClass&) const = default;
+};
+```
 
 ## Priority Guidelines
 
-1. **Platform & Tooling**
-
-   * Must build with CMake 4.x + Ninja and integrate with Conan 2.x.
-   * Prefer clang / clang-cl; only use GCC / MSVC fallbacks when required.
-
-2. **Language Standards**
-
-   * Use modern, portable **C++23** features (concepts, ranges, `std::span`, `constexpr` algorithms).
-   * Avoid compiler-specific extensions.
-
-3. **Formatting & Linting**
-
-   * Always format using clang-format (LLVM base + project overrides).
-   * Code must be clang-tidy clean; prefer fixes that pass configured checks.
-
-4. **Architecture & Layout**
-
-   * Follow the canonical directory structure (see below).
-   * Public headers in `include/raktr/`; implementation in `src/raktr/<subsystem>/`.
-
-5. **API Surface**
-
-   * Keep public API minimal and documented.
-   * Everything public belongs under `raktr::` namespace.
-
-6. **Testing**
-
-   * Follow **Red → Green → Refactor** TDD cycle.
-   * Always add a test before implementation.
-
-7. **Safety / Performance**
-
-   * Validate preconditions (Fail-Fast).
-   * Use `gsl::not_null`, `std::span`, `std::optional`, or `std::expected` as appropriate.
-   * Avoid hidden allocations and unnecessary dynamic memory.
-
-8. **Documentation**
-
-   * Use Doxygen-style `/*! … */` comments for all public APIs.
+1. **Follow the C++ Core Guidelines** – https://isocpp.github.io/CppCoreGuidelines/CppCoreGuidelines
+2. **Use Modern C++** – prefer C++23 features; avoid deprecated/legacy constructs.
+3. **Write platform independent code** – abstract OS-specific logic; avoid `#ifdef` proliferation when possible.
+4. **Write Clean, Readable Code** – prioritize clarity and maintainability over cleverness.
+5. **Test-Driven Development** – write tests first; ensure all tests pass before merging.
+6. **Document Public APIs** – use Doxygen-style comments for all public interfaces.
+7. **Consistent Formatting** – use clang-format with project-specific style.
+8. **Static Analysis** – ensure code is clang-tidy clean; fix warnings promptly.
+9. **Prefer** - Use `gsl::not_null`, `std::span`, `std::optional`, or `std::expected` as appropriate.
+10. **Use RAII** – manage resources with smart pointers and scope-bound objects; avoid raw `new`/`delete`.
+11. **Exceptions** – do not use exceptions; use `std::expected` or `std::error_code` for error handling. 
 
 ---
 
@@ -71,83 +66,36 @@ These rules define Raktr’s architecture, coding style, and quality expectation
 | ------------------- | -------------------------------------------- |
 | **Language**        | C++23                                        |
 | **Build System**    | CMake ≥ 4.0 + Ninja                          |
-| **Package Manager** | Conan 2.x (profiles + lockfiles)             |
+| **Platform**        | Windows, Linux, macOS                        |
+| **Architecture**    | x86_64, arm64                                |
+| **Package Manager** | Conan 2.x                                    |
+| **Profiles**        | msvc_vs.profile, llvm_clang_vs.profile       |
 | **Testing**         | GoogleTest / GoogleMock via CTest            |
 | **Formatting**      | clang-format (LLVM-based)                    |
 | **Linting**         | clang-tidy                                   |
 | **Static Analysis** | ASan / TSan / UBSan                          |
-| **Math**            | GLM (Conan package)                          |
-| **CI**              | Multi-platform + multi-arch (x86_64 / arm64) |
-
----
-
-## Directory Structure
-
-```
-raktr/
-├── CMakeLists.txt
-├── conanfile.py / conan.lock
-├── .clang-format
-├── .clang-tidy
-├── raktr/
-│   ├── engine/
-│   │   ├── public/      # public API headers
-│   │   └── src/         # implementation
-│   │   │   ├── core/        # memory, logging, config
-│   │   │   ├── math/        # GLM wrappers & helpers
-│   │   │   ├── ecs/         # entity–component system
-│   │   │   ├── scene/       # scene graph, camera
-│   │   │   ├── io/          # filesystem, resource loading
-│   │   │   ├── platform/    # platform abstractions
-│   │   │   ├── physics/
-│   │   │   ├── scripting/
-│   │   │   └── CMakeLists.txt
-│   │   └── tests/       # unit/integration tests for engine
-│   ├── renderer/            # 3d renderer subsystem supporting various graphics backends
-│   │   ├── public/      # public API headers
-│   │   └── src/         # implementation
-│   │   │   ├── opengl/      # OpenGL backend
-│   │   │   ├── vulkan/      # Vulkan backend
-│   │   │   └── directx12/   # DirectX 12 backend
-│   │   │   └── CMakeLists.txt
-│   │   └── tests/       # unit/integration tests for renderer
-│   └── editor/            # editor executables
-├── tests/
-├── external/
-├── tools/
-├── assets/
-├── docs/
-└── ci/
-```
-
-* **Filenames:** `snake_case`. Example: `render_pipeline.cpp`.
-* **Headers:** `ifndef` include guard preferred.
-* **Header placement:**
-
-  * Public → `include/raktr/`
-  * Private → `src/raktr/<subsystem>/detail/`
-
----
+| **Math**            | GLM                           |
+| **CI**              | Github Actions                               |
 
 ## Naming Conventions
 
 | Element                                  | Style                                   | Example                          |
 | ---------------------------------------- | --------------------------------------- | -------------------------------- |
+| **Filenames**                            | `snake_case`                            | `render_pipeline.cpp`            |
 | **Namespaces**                           | `raktr::subsystem`                      | `raktr::render`                  |
 | **Classes / Structs / Enums / Concepts** | PascalCase                              | `Renderer`, `TransformComponent` |
 | **Functions / Methods**                  | snake_case                              | `create_mesh()`                  |
-| **Variables**                            | snake_case                              | `frame_index`                   |
+| **Variables**                            | snake_case                              | `frame_index`                    |
 | **Private members**                      | snake_case                              | `_frame_index`                   |
 | **Constants**                            | `k_constant_name` or `inline constexpr` | `k_max_frames`                   |
 | **CMake targets**                        | snake_case                              | `raktr_core`                     |
 
----
-
 ## RAII + copy-and-swap Idiom
 
-When managing resources, use RAII and the copy-and-swap idiom for strong exception safety:
-
 ```cpp
+#ifndef MY_ARRAY_H 
+#define MY_ARRAY_H
+
 #include <iostream>
 #include <vector>
 #include <string>
@@ -224,6 +172,8 @@ private:
     std::size_t mSize;
     int* mArray;
 };
+
+#endif
 ```
 
 ## Memory Alignment
@@ -235,13 +185,12 @@ private:
 ```cpp
 struct alignas(16) AlignedVec4 {
     float x, y, z, w;
+    auto operator<=>(const AlignedVec4&) const = default;
 };
 static_assert(alignof(AlignedVec4) == 16, "AlignedVec4 must be 16-byte aligned");
 ```
 
 ## Docstrings
-
-All public APIs must use Doxygen-style comments:
 
 ```cpp
 /*!
@@ -255,24 +204,6 @@ All public APIs must use Doxygen-style comments:
  */
 ```
 
-Include `@brief`, `@param`, `@return`, and `@example`.
-Document invariants, ownership, and thread-safety.
-
----
-
-## Coding Practices
-
-* **SOLID / KISS** – small, focused classes.
-* **Fail-Fast** – validate arguments early.
-* **Pure Functions** – prefer stateless helpers.
-* **Encapsulation** – minimal public surface; avoid `friend`.
-* **Memory & Ownership** – use smart pointers and `std::span`. Never call `new` / `delete`.
-* **Concurrency** – isolate shared state; prefer message-passing.
-* **Error Handling** – no exceptions. Use `std::expected` or `std::error_code` via `raktr::error` category.
-* **Performance** – avoid hidden allocations; expose profiling hooks.
-
----
-
 ## Testing
 
 * **Framework:** GoogleTest + GoogleMock.
@@ -283,6 +214,10 @@ Document invariants, ownership, and thread-safety.
 Example:
 
 ```cpp
+/*!
+ * @brief Unit tests for Vec3 addition. 
+ * @file test_math_vec3.cpp
+ */
 #include "gtest/gtest.h"
 #include "raktr/math/vec3.h"
 
@@ -295,141 +230,189 @@ TEST(Vec3_add, two_zero_vectors_returns_zero_vector) {
 }
 ```
 
----
+## Type Erasure
 
-## Build & CI
+Use type erasure to provide a uniform interface for different types without exposing their implementation details. This is particularly useful for polymorphic behavior without inheritance. 
 
-### CMake
+Consider two implementations:
+* Owning class
+* Non-owning (View)
 
-* Use `target_*` commands; never global includes.
-* Provide `RaktrConfig.cmake` and per-subsystem options.
-* Mandatory warning flags:
+```cpp
+// Type Erasure Sample Code.
+//
+// Implementation of Klaus Iglberger's C++ Type Erasure Design Pattern.
+//
+// References:
+// - Breaking Dependencies: Type Erasure - A Design Analysis,
+//   by Klaus Iglberger, CppCon 2021.
+//   - Video: https://www.youtube.com/watch?v=4eeESJQk-mw
+//   - Slides: https://meetingcpp.com/mcpp/slides/2021/Type%20Erasure%20-%20A%20Design%20Analysis9268.pdf
 
-  ```cmake
-  -Wall -Wextra -Werror -Wpedantic -Wshadow -Wconversion
-  ```
+#ifndef TYPE_ERASURE_SHAPE_H_
+#define TYPE_ERASURE_SHAPE_H_
 
-### Conan
+#include <concepts>
+#include <iostream>
+#include <memory>
 
-* All dependencies pinned in `conanfile.py`.
-* Use profiles + lockfiles; integrate toolchain with CMake.
+// High Level Summary of the Design
+// - `class Shape` and global functions (`serialize()`, `draw()`, etc.)
+//   - The external client facing interface.
+//   - Holds a pointer to `ShapeConcept` internally.
+// - `class ShapeConcept`
+//   - The internal interface of the Bridge Design Pattern.
+//   - It is needed to hide the template parameter of `ShapeModel<T>`.
+// - `class ShapeModel<T>`
+//   - The templated implementation of `ShapeConcept`.
+//   - Routes virtual functions to global functions.
 
-### Sanitizers
+// CAUTION: The following deleted functions serve 2 purposes:
+// 1. Prevent the compiler from complaining about missing global functions
+//    `serialize()` and `draw()` when seeing the using declarations in
+//    `ShapeModel::serialize()` and `ShapeModel::draw()`. (It seems like a
+//    compiler bug, as if the compiler did not see the `friend` definitions
+//    within `class Shape`.
+// 2. Prevent runaway recursions in case a concrete `Shape` such as `Circle`
+//    does not define a `serialize(const Circle&)` or `draw(const Circle&)`
+//    function. (Restricting class `Shape`'s template constructor parameter
+//    type to the `IsShape` concept below also prevents runaway recurions.)
+template <typename T>
+void serialize(const T&) = delete;
 
-* Enable via CMake options:
-  `-fsanitize=address,undefined` etc.
-* CI runs sanitizer builds per platform.
+template <typename T>
+void draw(const T&) = delete;
 
-### CI Matrix
+#ifdef __clang__
 
-* Platforms: Windows / Linux / macOS
-* Architectures: x86_64 / arm64
-* Jobs: build + test + clang-tidy + clang-format + sanitizers + coverage (`gcovr` / `llvm-cov`)
+// CAUTION: Workaround for clang.
+// The following forward declarations of explicit specialization of
+// `serialize()` and `draw()` prevent Clang from complaining about redefintion
+// errors when seeing the definitions later.
+class Shape;
 
-### Build instructions
+template <>
+void serialize(const Shape& shape);
 
-* see `README.md` for setup, build, and test commands.
+template <>
+void draw(const Shape& shape);
 
----
+#endif  // __clang__
 
-## Formatting (`.clang-format`)
+template <typename T>
+concept IsShape = requires(T t) {
+  serialize(t);
+  draw(t);
+  { std::declval<std::ostream&>() << t } -> std::same_as<std::ostream&>;
+};
 
-```yaml
-BasedOnStyle: LLVM
-IndentWidth: 4
-ColumnLimit: 100
-AllowShortFunctionsOnASingleLine: Empty
-SpacesBeforeTrailingComments: 1
-SpaceBeforeParens: ControlStatements
-AlignAfterOpenBracket: DontAlign
-BreakBeforeBraces: Attach
-IndentCaseLabels: false
-DerivePointerBinding: false
+class Shape {
+  // NOTE: Definition of the explicit specialization has to appear separately
+  // later outside of class `Shape`, otherwise it results in error such as:
+  //
+  // ```
+  // error: defining explicit specialization 'serialize<Shape>' in friend declaration
+  // ```
+  //
+  // Reference: https://en.cppreference.com/w/cpp/language/friend
+  friend void serialize<>(const Shape& shape);
+  friend void draw<>(const Shape& shape);
+
+  friend std::ostream& operator<<(std::ostream& os, const Shape& shape) {
+    return os << *shape.pimpl_;
+  }
+
+  // The External Polymorphism Design Pattern
+  class ShapeConcept {
+   public:
+    virtual ~ShapeConcept() {}
+    virtual void serialize() const = 0;
+    virtual void draw() const = 0;
+    virtual void print(std::ostream& os) const = 0;
+
+    // The Prototype Design Pattern
+    virtual std::unique_ptr<ShapeConcept> clone() const = 0;
+
+    friend std::ostream& operator<<(
+        std::ostream& os, const ShapeConcept& shape) {
+      shape.print(os);
+      return os;
+    }
+  };
+
+  template <typename T>
+  class ShapeModel : public ShapeConcept {
+    T object_;
+
+   public:
+    ShapeModel(const T& value)
+        : object_{value} {
+    }
+
+    void serialize() const override {
+      // CAUTION: The using declaration tells the compiler to look up the free
+      // serialize() function rather than the member function.
+      //
+      // Reference: https://stackoverflow.com/a/32091297/4475887
+      using ::serialize;
+
+      serialize(object_);
+    }
+
+    void draw() const override {
+      using ::draw;
+
+      draw(object_);
+    }
+
+    void print(std::ostream& os) const override {
+      os << object_;
+    }
+
+    // The Prototype Design Pattern
+    std::unique_ptr<ShapeConcept> clone() const override {
+      return std::make_unique<ShapeModel>(*this);
+    }
+  };
+
+  // The Bridge Design Pattern
+  std::unique_ptr<ShapeConcept> pimpl_;
+
+ public:
+  // A constructor template to create a bridge.
+  template <IsShape T>
+  Shape(const T& x)
+      : pimpl_{new ShapeModel<T>(x)} {
+  }
+
+  Shape(const Shape& s)
+      : pimpl_{s.pimpl_->clone()} {
+  }
+
+  Shape(Shape&& s)
+      : pimpl_{std::move(s.pimpl_)} {
+  }
+
+  Shape& operator=(const Shape& s) {
+    pimpl_ = s.pimpl_->clone();
+    return *this;
+  }
+
+  Shape& operator=(Shape&& s) {
+    pimpl_ = std::move(s.pimpl_);
+    return *this;
+  }
+};
+
+template <>
+void serialize(const Shape& shape) {
+  shape.pimpl_->serialize();
+}
+
+template <>
+void draw(const Shape& shape) {
+  shape.pimpl_->draw();
+}
+
+#endif  // TYPE_ERASURE_SHAPE_H_
 ```
-
----
-
-## Linting / Static Analysis
-
-* Configure `.clang-tidy` with checks:
-  `cppcoreguidelines-*`, `performance-*`, `modernize-*`, `readability-*`, `bugprone-*`.
-* Code must compile warning-free under these checks.
-
----
-
-## Development Tooling
-
-* **Pre-commit hooks** must run:
-
-  * `clang-format`
-  * `clang-tidy`
-  * `cmake-format`
-  * `ctest --output-on-failure`
-
-* **Local scripts** in `scripts/`:
-
-  * `setup_dev_env.sh`
-  * `format.sh`
-  * `run_tests.sh --with-sanitizers`
-
----
-
-## Platform Abstraction
-
-All OS-specific logic resides in `src/raktr/platform/`.
-Do **not** scatter `#ifdef` blocks elsewhere.
-Use defines `RAKTR_ARCH_ARM64` / `RAKTR_ARCH_X86_64` for SIMD paths.
-
----
-
-## Dependencies & Third-Party Code
-
-* Managed via Conan 2.x; never hard-coded includes.
-* Vendored libs (if any) live under `/external/`.
-* Never modify vendor source; patch externally.
-
----
-
-## Contribution Flow
-
-* **Branches:**
-  `main` (stable), `dev` (active), `feature/<subsystem>`
-* **Commits:**
-  Follow [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#specification)
-* **PR Requirements:**
-  Pass `clang-format`, `clang-tidy`, sanitizers, and all tests.
-* **CI Platform:**
-  GitHub Actions; auto-merge only when all checks succeed.
-
----
-
-## Optional Enhancements
-
-* Code generation conventions (shader reflection, ECS components)
-* Scripting integration (Lua, Python)
-* Asset build pipeline (shader/model preprocessing)
-* Subsystem naming consistency (`raktr::render::renderer_backend`)
-* Data layout guidelines (`std::array`, `std::vector`, `std::span`, `std::string_view`, `gsl::not_null`, `std::optional`, `std::expected`)
-
----
-
-## When in Doubt
-
-1. Mirror existing code patterns.
-2. Write the test first (TDD).
-3. Keep new headers under `include/raktr/...`.
-4. Touch top-level build files only when adding public components.
-5. Document anything non-obvious in `docs/`.
-
----
-
-## Pull-Request Checklist
-
-* [ ] Tests added or updated (Red → Green)
-* [ ] All public APIs documented (`/*! */`)
-* [ ] Builds with `cmake -S . -B build -G Ninja`
-* [ ] `clang-format` shows no diffs
-* [ ] `clang-tidy` passes cleanly
-* [ ] Platform-specific code isolated in `src/raktr/platform/`
-* [ ] Sanitizer tests run locally
-
