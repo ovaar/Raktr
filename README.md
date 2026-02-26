@@ -2,51 +2,27 @@
 
 The next generation modern c++ 3D game engine — Where Worlds Take Shape.
 
-## Setup
-
-* Install [LLVM](https://releases.llvm.org/)
-* Install [uv](https://docs.astral.sh/uv/) `pip install uv`
-
-### Activate venv
-
-```sh
-source .venv/bin/activate
-```
-
-```ps1
-.\.venv\Scripts\Activate.ps1
-```
-
 ## Build
 
 ### Windows 
 
+* Install [LLVM](https://releases.llvm.org/)
+* Install [uv](https://docs.astral.sh/uv/) `pip install uv`
+
 ```ps1
 git clone https://github.com/ovaar/Raktr.git
-
 pip install uv
-uv sync
-.\.venv\Scripts\Activate.ps1
 
-# Create 3rd-party deps
-conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Release
-conan export-pkg external/wgpu-native --version=27.0.2.0 -s:a build_type=Debug
+.\build.ps1
 
+# Run tests
+$env:RUST_BACKTRACE="full"; .\build\Release\render\tests\raktr_render_tests.exe; .\build\Release\engine\tests\raktr_engine_test.exe; .\build\Release\editor\tests\raktr_editor_test.exe
+```
 
-pushd raktr
-# Install
-conan install . --output-folder=../ -pr:a=../profiles/llvm_clang_cl.profile -o:a='&:with_tests=True' --build=missing
-# Configure
-cmake --preset conan-release
-# Build
-cmake --build --preset conan-release
-# Clean 
-cmake --build --preset conan-release --clean
-popd
-
+```ps1
 # Build tests
 cmake --build build\Release --target raktr_engine_test;
-.\build\Release\render\tests\render_tests.exe; .\build\Release\engine\tests\raktr_engine_test.exe; .\build\Release\editor\tests\raktr_editor_test.exe
+$env:RUST_BACKTRACE="full"; .\build\Release\render\tests\raktr_render_tests.exe; .\build\Release\engine\tests\raktr_engine_test.exe; .\build\Release\editor\tests\raktr_editor_test.exe
 
 # Run disabled test
 .\build\Release\editor\tests\raktr_editor_test.exe --gtest_filter="VisualTest.DISABLED_OcclusionCullingDemo" --gtest_also_run_disabled_tests
